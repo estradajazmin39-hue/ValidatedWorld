@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ValidatedWorld.Cli/ValidatedWorld.Cli.csproj" />
+    <Project Path="src/ValidatedWorld.Core/ValidatedWorld.Core.csproj" />
+    <Project Path="src/ValidatedWorld.Export/ValidatedWorld.Export.csproj" />
+    <Project Path="src/ValidatedWorld.Generation/ValidatedWorld.Generation.csproj" />
+    <Project Path="src/ValidatedWorld.Serialization/ValidatedWorld.Serialization.csproj" />
+    <Project Path="src/ValidatedWorld.Validation/ValidatedWorld.Validation.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ValidatedWorld.Core.Tests/ValidatedWorld.Core.Tests.csproj" />
+    <Project Path="tests/ValidatedWorld.Serialization.Tests/ValidatedWorld.Serialization.Tests.csproj" />
+    <Project Path="tests/ValidatedWorld.Validation.Tests/ValidatedWorld.Validation.Tests.csproj" />
+  </Folder>
+</Solution>
