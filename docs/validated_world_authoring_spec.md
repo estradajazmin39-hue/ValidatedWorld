@@ -1,1308 +1,696 @@
-# Validated World Authoring System
-## Complete Concept and Coding-Agent Handoff
+# ValidatedWorld Product and Architecture Specification
 
-**Working title:** Validated World Authoring System  
-**Primary implementation target:** .NET / C#  
-**Primary storage/interchange format:** JSON  
-**Primary users:** AI coding/authoring agents, game developers, writers, tabletop campaign creators, narrative designers  
-**Core idea:** AI-generated additions to a fictional world should be treated as proposed transactions against a canonical world model. The system validates those changes for structural and semantic consistency, optionally performs scoped AI sanity review, and only then commits them to canon. The accepted canon can be exported into runtime JSON, human-readable reference documents, campaign material, story-oriented outputs, QA checklists, and other target formats.
+**Status:** Authoritative product specification
 
----
+**Specification version:** 2.0
 
-# 1. Product Thesis
+**Last reviewed:** 2026-08-10
 
-The system exists to solve one central problem:
+**Primary implementation:** .NET 10 / C#
+**Canonical interchange format:** JSON
 
-> AI can generate fictional content much faster than humans can manually verify that the content remains consistent with a large existing world.
+This document defines what ValidatedWorld is and the architectural boundaries
+that implementations must preserve. Detailed types, algorithms, work packages,
+and acceptance tests are in [implementation_blueprint.md](implementation_blueprint.md).
+The honest guarantee boundary is in [feasibility.md](feasibility.md).
 
-As worlds grow, ordinary prompting becomes unreliable. Characters contradict their biographies. NPCs know things they could not know. Quest branches depend on dead characters. Timelines stop making sense. Mysteries accidentally reveal answers too early. Locations, factions, relationships, possessions, motivations, and consequences drift apart.
-
-The goal is not to make AI "remember harder." The goal is to represent important world information in a structured, inspectable, machine-validatable form and require proposed changes to pass consistency checks before becoming canonical.
-
-This should work for:
-
-- Large RPGs and systemic video games.
-- D&D / tabletop campaign worlds.
-- Mystery novels and other continuity-heavy fiction.
-- Interactive fiction.
-- Modding ecosystems.
-- Long-running fictional universes maintained by AI agents.
-
-The same canonical world can be published differently depending on the target medium.
+Human direction overrides this document. When a product decision changes, update
+this specification and the blueprint in the same change.
 
 ---
 
-# 2. The Mental Model
+## 1. Product thesis
 
-The application is best understood as a combination of:
+ValidatedWorld is a **consistency-validation and context-assembly system for
+long-form authored worlds**. It helps humans and AI agents create novels, games,
+quests, campaigns, and other continuity-heavy works without relying on a model's
+context window as the source of truth.
 
-- A **canonical world database**.
-- A **transaction system** for proposed changes.
-- A **deterministic validator**.
-- An optional **AI-assisted semantic reviewer**.
-- A **query and dependency-analysis toolset** optimized for AI agents.
-- An **export/publishing system**.
-
-The system is not primarily a game engine, dialogue engine, prose generator, or visual editor.
-
-It is a **consistency-validated AI-generation and world-authoring system**.
-
-The canonical workflow is:
+The central workflow is:
 
 ```text
-Load or create world
-    ↓
-Begin transaction
-    ↓
-Add / edit / remove world content
-    ↓
-Automatically compute impacted entities and dependencies
-    ↓
-Run deterministic validation
-    ↓
-Run targeted simulations where applicable
-    ↓
-Run optional targeted AI sanity reviews
-    ↓
-Repair or acknowledge findings
-    ↓
-Commit entire transaction atomically
-    ↓
-Canon advances to a new version
-    ↓
-Export derived artifacts
+load a canonical snapshot
+→ begin an isolated transaction
+→ query relevant canon
+→ propose semantic changes
+→ build the projected snapshot
+→ compute impact
+→ validate and analyze
+→ repair, acknowledge, or reject findings
+→ commit atomically
+→ export audience-specific artifacts
 ```
 
-Nothing should become canon simply because a JSON file was edited successfully.
+The product does not make an AI remember a whole novel. It gives the AI a small,
+precise context packet for the task, then checks the proposed result against
+structured canon before accepting it.
 
----
+The initial target is fiction—especially a mystery outline—because mysteries
+stress time, knowledge, evidence, motive, disclosure, and causality at once. The
+core must remain medium- and engine-independent.
 
-# 3. Source of Truth vs. Generated Output
+## 2. Product promise and coverage
 
-The canonical world project is the source of truth.
+ValidatedWorld guarantees only what is represented in its semantic model.
 
-Everything exported from it should be treated as a derived artifact, analogous to generated code, compiled output, or a `.min` build artifact.
+Every validation report must distinguish:
 
-Examples of derived outputs:
+- **Proven:** deterministic rules completed and the property holds in the
+  declared model.
+- **Disproven:** deterministic rules found a violation, ideally with a minimal
+  counterexample.
+- **Inconclusive:** a configured analysis bound, unsupported construct, missing
+  annotation, or internal failure prevented a conclusion.
+- **Concern:** a heuristic or AI reviewer identified a possible issue.
 
-- Runtime JSON for a game.
-- Optimized or flattened JSON.
-- A Unity-oriented data package.
-- A D&D campaign manual.
-- A player guide.
-- A developer lore bible.
-- A mystery-novel story packet.
-- A quest walkthrough.
-- A QA checklist.
-- A glossary of characters, factions, places, facts, and items.
-- A human-readable narrative summary.
+An incomplete or bounded-out check is never reported as a pass.
 
-Users may technically edit exported files, but the product should clearly discourage it. Changes should be made in the world-authoring project and then re-exported.
+Important details become enforceable when they are modeled as entities,
+propositions, assertions, perspectives, events, state, constraints, or narrative
+annotations. Freeform prose is allowed, but details present only in prose remain
+outside deterministic coverage. The system should report coverage so users know
+which parts are protected.
 
-Generated outputs should include metadata such as:
+## 3. Mental model
 
-```json
-{
-  "_generated": true,
-  "_sourceWorldVersion": "1.18.3",
-  "_sourceTransaction": "tx_harbor_0042",
-  "_warning": "Generated artifact. Edit the source world and export again."
-}
-```
+ValidatedWorld combines:
 
----
+- An immutable-at-a-revision canonical world snapshot.
+- An optimistic, atomic transaction system.
+- A typed semantic graph derived from canon.
+- Deterministic validators and explainable diagnostics.
+- Bounded traversal of finite narrative state models.
+- Queries and context packets designed for AI agents.
+- Optional, auditable AI-assisted review.
+- Profile-driven exports.
 
-# 4. Engine and Medium Independence
+It is not primarily a graph editor, database server, game engine, dialogue
+runtime, prose generator, or general theorem prover. Those systems may consume
+or integrate with it.
 
-The core .NET libraries must not depend on Unity, Unreal, Godot, D&D rules, Ink, Yarn, or any one publishing target.
+## 4. Foundational distinctions
 
-The world model should describe semantic concepts such as:
+Several concepts must remain separate. Collapsing them creates subtle but fatal
+design errors.
 
-- Characters.
-- Locations.
-- Factions.
-- Facts.
-- Knowledge.
-- Beliefs.
-- Rumors.
-- Relationships.
-- Ownership.
-- Events.
-- Timelines.
-- Goals and motivations.
-- Quests / plots / story arcs.
-- Preconditions.
-- Consequences.
-- Dialogue semantics.
-- Mysteries and clue disclosure.
-- Canon constraints.
+### 4.1 Canon definition, world state, and narrative order
 
-Target-specific adapters can interpret those concepts differently.
+The canonical project defines possible or authored reality. A **world state** is
+a derived snapshot at a point in a timeline or after a sequence of story
+transitions. **Narrative order** is the order in which an audience experiences
+scenes or disclosures. These orders are related but not identical: a flashback
+may depict an earlier event in a later chapter.
 
-For example:
+The application must never treat the entire story as one timeless bag of facts.
+
+### 4.2 Proposition, truth, and perspective
+
+A proposition is content such as `killed(mayor, merchant)`. It is not true merely
+because it exists. Canon assertions state whether the proposition is true or
+false in a declared scope. Perspective records state whether an actor knows,
+believes, suspects, doubts, denies, or claims that proposition.
+
+Canonical truth never automatically becomes character knowledge.
+
+### 4.3 Absence and negation
+
+The default semantic policy is **open world**. The absence of a positive
+assertion means unknown or unmodeled, not false. Negative canon and perspective
+claims must be explicit when they matter.
+
+Individual predicates may opt into a documented closed-world policy, but the
+choice is schema data and validation output must disclose it.
+
+### 4.4 World time and authoring revision
+
+World time describes fictional chronology. A canonical revision describes the
+history of edits to the project. They are unrelated axes. Editing an ancient
+event today advances the project revision but does not move the event in world
+time.
+
+### 4.5 Canon and derived artifacts
+
+Canonical source data, committed through ValidatedWorld, is authoritative.
+Runtime JSON, lore books, prose drafts, checklists, indexes, diagrams, and AI
+context packets are generated views. Generated artifacts must identify their
+source revision and must not be edited as authoritative data.
+
+## 5. Canonical semantic model
+
+All addressable records have a stable, opaque ID. IDs do not change when display
+names change. References use IDs, never duplicated names.
+
+### 5.1 World snapshot
+
+A world snapshot contains at least:
+
+- World identity and schema version.
+- Canonical revision and content hash.
+- Project policy and analysis limits.
+- Entity and predicate definitions.
+- Propositions and scoped canon assertions.
+- Perspective and provenance records.
+- Timelines, time points, and events.
+- Narrative graphs and optional selected traces.
+- Constraints and disclosure policy.
+- Prose or document annotations when present.
+
+The first implementation may store the snapshot in one JSON file. Storage
+layout is not part of the semantic contract; normalized JSON export is.
+
+### 5.2 Entities
+
+An entity represents a thing with identity, for example:
+
+- Character, persona, or audience role.
+- Location or region.
+- Faction or organization.
+- Item, document, clue, or other object.
+- Mystery, quest, story arc, scene, or chapter.
+- Custom project-specific kinds.
+
+Every entity has a kind, display name, optional aliases, optional freeform
+description, tags, and explicit links. Medium-specific data belongs in extension
+payloads owned by adapters, not in hard-coded engine dependencies.
+
+### 5.3 Predicate definitions and propositions
+
+A predicate definition declares:
+
+- Stable predicate ID.
+- Ordered argument names and value types.
+- Which argument positions form a cardinality key, when applicable.
+- Maximum simultaneous positive values for that key, when applicable.
+- Optional symmetry or inverse metadata used only by declared validators.
+- Open- or closed-world policy.
+
+A proposition is a predicate plus typed arguments. It has its own stable ID so
+assertions, dialogue, deductions, and perspectives can refer to exactly the same
+content.
+
+The predicate catalog is a deliberately small, typed vocabulary. It is not a
+natural-language parser or an unrestricted ontology language. Projects may add
+custom predicates; custom semantics require custom constraints or validators.
+
+### 5.4 Canon assertions
+
+A canon assertion gives a proposition:
+
+- Positive or negative polarity.
+- A world-time validity interval, if temporal.
+- A timeline or scenario scope, if not globally true.
+- Evidence/source references for author-facing traceability, when useful.
+
+Two opposite assertions in overlapping scopes are contradictory. Two different
+positive values for a single-valued predicate key in overlapping scopes are
+also contradictory.
+
+Immutable background facts and changing state can share the proposition model,
+but frequently changed finite values should be represented as declared state
+variables and event effects so path analysis remains tractable.
+
+### 5.5 Perspective and information provenance
+
+A perspective record contains:
+
+- Holder: character, group, audience, narrator, or player role.
+- Proposition and polarity.
+- Attitude: knows, believes, suspects, doubts, denies, or claims.
+- World-time or narrative validity scope.
+- Provenance: witness event, speaker, document, clue, deduction, public
+  knowledge, author declaration, or another explicit source.
+- Confidence or certainty only when the project needs it.
+
+`knows` is factive in the deterministic model: the corresponding canon assertion
+must be true in scope. A false conviction is `believes`, not `knows`.
+
+Knowledge propagation is explicit. The engine must not assume that everyone at
+a location heard a statement, that every faction member shares all knowledge, or
+that truth is public.
+
+### 5.6 Time, events, and causality
+
+A timeline supplies an ordered set of time points. A time point has a stable ID
+and deterministic ordinal; optional calendar text is presentation data.
+
+An event has:
+
+- Stable ID and timeline position or interval.
+- Participants and location references.
+- Preconditions expressed in the safe condition AST.
+- Effects expressed in the safe effect AST.
+- Causal prerequisite event references.
+- Optional witness or disclosure annotations.
+
+Events capture durable changes relevant to continuity. ValidatedWorld is not
+required to event-source every moment of a game.
+
+### 5.7 Narrative graphs and traces
+
+A narrative graph models authored progression. Node kinds may include scenes,
+chapters, quest states, encounters, or beats. Every node may declare:
+
+- Entry conditions.
+- State and perspective effects.
+- Optional depicted fictional time, separate from narrative stage/order.
+- A presentation-only mode for flashbacks that may disclose information without
+  mutating current branch state.
+- Assertions, claims, clues, and disclosures presented there.
+- Referenced entities and prose artifacts.
+- Outgoing transitions with conditions and effects.
+
+The condition/effect language is a finite, typed data AST. It is not C#, a
+script string, or arbitrary user code.
+
+Different media use the graph differently:
+
+- A novel or screenplay normally supplies a selected linear trace. The validator
+  replays every node in order.
+- A game supplies a finite branching graph. The analyzer explores reachable
+  abstract states within explicit bounds.
+- A campaign may declare prepared branches and leave the rest open. Reports must
+  mark undeclared play as outside coverage.
+
+A quest is a narrative graph or subgraph with domain metadata. The core should
+not pretend that every novel arc is a quest state machine.
+
+### 5.8 Mysteries, clues, and deductions
+
+A mystery definition may declare:
+
+- One or more solution propositions.
+- Suspects and relevant motive/opportunity propositions.
+- Clues and acquisition nodes.
+- Red herrings as author annotations.
+- Explicit deduction rules from available evidence to conclusions.
+- Earliest allowed disclosure stages.
+- Stages or terminal states where the solution must be derivable.
+- Required clue-route redundancy.
+
+Deduction rules are explicit finite rules, not natural-language inference. This
+lets the system validate availability and author-declared fair-play structure.
+It does not prove that a human reader will notice a clue or find the solution
+satisfying.
+
+### 5.9 Prose and semantic annotations
+
+Freeform text is stored as an artifact or external source reference. A prose
+artifact may cite:
+
+- Entities and propositions it uses.
+- Claims it asserts or contradicts.
+- Information it reveals to an audience.
+- Narrative node and point-of-view context.
+
+These annotations create deterministic dependencies. A linter or AI review may
+suggest missing annotations, but extracted claims do not become canon without a
+transaction.
+
+Long generated prose should retain source references at scene or section
+granularity. When canon changes, impact analysis can then identify sections to
+regenerate or review instead of rereading hundreds of pages.
+
+## 6. Safe condition, effect, and constraint languages
+
+The initial condition AST supports a small closed set:
+
+- All, any, and not.
+- Proposition holds with polarity.
+- State variable equals a typed value.
+- Perspective has a declared attitude toward a proposition.
+- Narrative flag is present.
+
+Initial effects support:
+
+- Set a finite state variable.
+- Assert or retract a transient proposition in analyzed story state.
+- Add, replace, or remove a perspective attitude.
+- Add a narrative flag.
+
+Initial project constraints are typed records such as:
+
+- Required or forbidden reachability.
+- Forbidden disclosure before a boundary.
+- Required fallback when an actor is unavailable.
+- Minimum clue acquisition routes.
+- Mutual exclusion.
+- Required terminal outcome.
+
+The languages must be deterministic, serializable, type-checkable, and safe to
+evaluate without executing project code. Extension assemblies may add validators
+through a versioned interface, but loading untrusted extensions is an explicit
+host decision.
+
+## 7. Transactions and revisions
+
+All canonical authoring occurs in a transaction based on an exact snapshot
+revision and content hash.
+
+A transaction records:
+
+- Transaction ID, base revision/hash, intent, and author metadata.
+- Ordered semantic operations with optimistic preconditions.
+- The direct changed record set.
+- Derived impact set and validation results.
+- Acknowledgements for eligible non-blocking diagnostics.
+- Status and commit metadata.
+
+Operations target stable record IDs; they do not use fragile JSON array indexes.
+Add, replace, and remove operations are distinct. Replace and remove include the
+expected record revision or hash.
+
+Drafts may be temporarily incomplete. Draft validation provides fast feedback.
+Commit validation builds the complete projected snapshot and applies project
+policy.
+
+Commit is optimistic and atomic:
+
+1. Acquire the workspace commit lock.
+2. Re-read the canonical head.
+3. Reject a stale base revision rather than silently merge it.
+4. Apply operations and verify operation preconditions.
+5. Build indexes and validate the projected snapshot.
+6. Evaluate commit policy, acknowledgements, and analysis completeness.
+7. Serialize deterministically and compute the content hash.
+8. Atomically replace the canonical snapshot.
+9. Record auditable commit metadata.
+
+If any required step fails, canon remains byte-for-byte at the previous
+revision. Branching and merge are later features; a merge is always a new
+transaction validated against the target head.
+
+## 8. Dependency and impact graph
+
+The dependency graph is derived, not separately authored. Nodes correspond to
+addressable records. A record has a dependency edge to every record referenced
+by its typed fields, expressions, propositions, annotations, and constraints.
+
+For a change, the impact set is the changed nodes plus their reverse transitive
+dependents in the union of the base and projected graphs. Using both graphs is
+necessary to catch dependencies removed by the transaction.
+
+The graph supports:
+
+- `dependencies`: what a record relies on.
+- `dependents`: what relies on a record.
+- `affected-by`: likely review and validation surface for a change.
+- `why`: an edge-by-edge explanation path.
+- Deterministic context assembly for agents and AI reviewers.
+
+Impact means “must be checked,” not “must be edited.” Free-text relationships
+that have no reference or annotation are not guaranteed to appear in the graph.
+
+## 9. Deterministic validation
+
+Deterministic validation is the product backbone. Validators are pure with
+respect to a supplied snapshot and request. Results are stable-sorted and have
+stable codes.
+
+### 9.1 Validation phases
+
+Run in dependency order:
+
+1. Parse and schema compatibility.
+2. Identity, reference, and type integrity.
+3. Predicate, expression, and extension payload typing.
+4. Assertion scope, polarity, cardinality, and temporal consistency.
+5. Event chronology and causal prerequisites.
+6. Perspective truth/provenance rules.
+7. Narrative trace replay and graph structural checks.
+8. Bounded reachability and project constraints.
+9. Mystery and disclosure rules.
+10. Commit policy and coverage completeness.
+
+Later phases may stop when prerequisite phases make their results meaningless,
+but they must emit an explicit skipped/inconclusive status.
+
+### 9.2 Diagnostics
+
+Every diagnostic includes:
+
+- Stable code and rule version.
+- Severity and result class.
+- Concise message.
+- Primary and related record IDs.
+- Source span when available.
+- Evidence or a replayable counterexample.
+- Suggested repair categories when safe.
+- A deterministic fingerprint for acknowledgements.
+
+Severities are error, warning, information, concern, and internal failure.
+Acknowledgements apply only to policy-eligible warnings or concerns. They are
+bound to the diagnostic fingerprint and expire when relevant evidence changes.
+
+### 9.3 Bounded analysis
+
+Narrative exploration operates on a finite abstract state containing only state
+referenced by the analyzed graph and constraints. The engine traverses in stable
+order and memoizes canonical state keys.
+
+Every report includes limits such as maximum states, transitions, depth, and
+wall-clock budget. Reaching a limit produces an inconclusive diagnostic. Commit
+policy decides whether a required inconclusive analysis blocks commit; the
+recommended default is to block.
+
+### 9.4 Incremental validation policy
+
+The proof of concept performs full commit validation because the worlds are
+small and correctness is more valuable than optimization. Impact sets may scope
+draft checks and AI context.
+
+Incremental commit validation is permitted later only after tests show that its
+result is equivalent to full validation for every validator in scope.
+
+## 10. AI-assisted authoring and review
+
+AI is an adapter around the deterministic core, not an authority inside it.
+
+An AI review request is immutable and auditable. It records the snapshot hash,
+transaction hash, review profile, provider/model identifier, prompt/template
+version, context record IDs/hashes, truncation information, and output.
+
+Review context is assembled from explicit dependencies and constraints. Results
+are cached by complete request hash. An AI finding is a concern until a
+deterministic transaction adds or repairs canon.
+
+The core and validation projects have no OpenAI or other model-vendor
+dependency. Provider implementations live behind interfaces in the generation
+or host layer.
+
+Generated prose is derived output. It receives a disclosure-safe continuity
+packet and should return source citations or structured annotations. The system
+may review the prose, but must not claim the prose is proven consistent.
+
+## 11. Agent-first application interface
+
+The primary interface is semantic and structured. Agents should not need to
+rewrite canonical JSON directly or remember which validators a commit requires.
+
+Required use-case families include:
+
+- Initialize, inspect, and version a world.
+- Begin, inspect, apply, validate, commit, and abort transactions.
+- Get records and query by typed filters.
+- Trace dependencies, impact, truth, perspective provenance, and reachability.
+- Explain a diagnostic or counterexample.
+- Produce continuity/context packets.
+- Export canonical and human-readable views.
+
+The CLI is the first host and must support JSON output with a versioned envelope,
+stable exit codes, and no prompts in non-interactive mode. A natural-language
+query parser is not required. Semantic operations should map cleanly to later
+MCP tools.
+
+## 12. Storage, serialization, and migration
+
+The POC uses a single canonical JSON snapshot plus separate draft transaction
+files. This keeps atomic commit and deterministic hashing straightforward.
+
+Serialization requirements:
+
+- Strict schema version.
+- Deterministic property and record ordering for canonical output.
+- Culture-independent numbers and timestamps.
+- Rejection of duplicate JSON properties.
+- Preservation of unknown extension payloads only under declared namespaces.
+- Explicit migrations between supported schema versions.
+- No silent guessing or lossy downgrade.
+
+External or legacy JSON imports run through mapping adapters and create draft
+transactions. Import never silently becomes canon.
+
+Storage may later move to an immutable object store, SQLite, or service, but the
+domain and validation APIs operate on snapshots and must not depend on a storage
+engine.
+
+## 13. Export and disclosure
+
+Exports are profile-driven projections from a committed snapshot or an
+explicitly labeled draft preview.
+
+Initial profiles:
+
+- Canonical normalized JSON.
+- Human continuity reference.
+- Context packet for one scene, character, clue, or change.
+- Audience-safe story outline.
+- Mystery matrix and clue timeline.
+- QA checklist of relevant declared facts.
+
+Every artifact includes generation metadata: world ID, revision, content hash,
+profile/version, disclosure scope, timestamp, and a generated-file warning.
+
+Disclosure filtering is structural. Explicit disclosure rules select records
+before prose generation. Prompt instructions alone are not an acceptable
+secrecy boundary.
+
+## 14. Medium and engine independence
+
+The core describes semantic fiction concepts and finite narrative state. It has
+no dependency on Unity, Unreal, Godot, Ink, Yarn, a tabletop edition, a word
+processor, or an AI provider.
+
+Adapters may add:
+
+- Engine asset/schedule/animation grounding.
+- Runtime quest or dialogue export.
+- Tabletop stat blocks and campaign books.
+- Novel chapter and scene documents.
+- Mod packages represented as semantic transactions.
+
+Adapter-specific extension data is namespaced, schema-versioned, and validated
+by the adapter. It cannot weaken core invariants.
+
+## 15. Plugin and tool integration
+
+The long-term agent integration should expose a controlled MCP server backed by
+the application use cases, with a companion skill that teaches agents the safe
+authoring workflow. It should not expose an unrestricted shell or make the MCP
+layer the source of truth.
+
+As of 2026-08-10, OpenAI's plugin architecture packages skills, MCP servers, and
+optional UI, and uses `.codex-plugin/plugin.json` as the package manifest. The
+integration should therefore eventually be packaged as a plugin containing:
+
+- A ValidatedWorld authoring skill.
+- A local or remote MCP server exposing semantic query/transaction tools.
+- Optional UI only after headless workflows are complete.
+
+References:
+
+- [OpenAI plugin architecture](https://developers.openai.com/plugins/concepts/plugins)
+- [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins)
+
+This packaging is an adapter milestone, not a reason to couple the core to a
+current vendor format. Re-check the official documentation when implementation
+begins.
+
+## 16. Commit policy
+
+Project policy determines which findings block commit. The default POC policy:
+
+- All parse, structural, reference, type, contradiction, temporal, and selected
+  narrative errors block.
+- Required bounded analysis that is inconclusive blocks.
+- Warnings require no acknowledgement unless a specific project contract says
+  otherwise.
+- AI concerns never block by default.
+- Changing a declared mystery solution requires explicit human approval in
+  interactive hosts; non-interactive hosts fail with an approval-required
+  result.
+
+Policy cannot suppress internal failures, hash/revision conflicts, or invalid
+acknowledgement fingerprints.
+
+## 17. Initial solution boundaries
+
+The target project dependency direction is:
 
 ```text
-Canonical world
-├── Game runtime exporter
-├── Unity adapter
-├── Tabletop campaign exporter
-├── Novel/story exporter
-├── QA exporter
-└── Lore/reference exporter
+ValidatedWorld.Core                 (no project dependencies)
+├── ValidatedWorld.Serialization    (Core)
+├── ValidatedWorld.Validation       (Core)
+├── ValidatedWorld.Generation       (Core, Validation)
+└── ValidatedWorld.Export           (Core, Validation)
+
+ValidatedWorld.Application          (Core, Serialization, Validation)
+ValidatedWorld.Cli                  (Application, Export, Generation adapters)
+ValidatedWorld.Mcp                  (later; Application, Export, Generation)
 ```
 
----
-
-# 5. Core Architectural Principle: Proposed Changes Are Transactions
-
-All authoring should occur inside a transaction.
-
-A transaction can contain a logically connected set of changes:
-
-```text
-Add character Clarisse
-Add Clarisse's home
-Add three facts about Clarisse
-Add a quest involving Clarisse
-Add dialogue connected to the quest
-Modify Harbor Village
-```
-
-These changes may temporarily be incomplete while the transaction is in progress. Therefore the system should distinguish between:
-
-- **Draft validation:** fast syntax/schema/reference feedback while editing.
-- **Commit validation:** full validation against the complete proposed transaction.
-
-The canonical world remains unchanged until the entire transaction succeeds.
-
-A transaction should record at least:
-
-- Transaction ID.
-- Base world version.
-- Human-readable intent.
-- Added entities.
-- Modified entities.
-- Removed entities.
-- Automatically computed affected entities.
-- Diagnostics.
-- AI review findings.
-- Explicit acknowledgements or suppressions.
-- Final status.
-- Commit metadata.
-
-Conceptually:
-
-```json
-{
-  "transactionId": "tx_harbor_0042",
-  "baseWorldVersion": "1.18.3",
-  "intent": "Add Clarisse and the missing fisher quest",
-  "changes": [],
-  "affectedEntities": [],
-  "diagnostics": [],
-  "acknowledgements": [],
-  "status": "draft"
-}
-```
-
----
-
-# 6. Canonical World Concepts
-
-The exact JSON syntax is not the important part. The important part is that significant concepts have stable IDs and explicit semantic relationships.
-
-## 6.1 Entities
-
-All major things in the world should be addressable by stable identity.
-
-Examples:
-
-- Character.
-- Location.
-- Faction.
-- Organization.
-- Item.
-- Creature.
-- Settlement.
-- Building.
-- Quest.
-- Story arc.
-- Event.
-- Fact.
-- Clue.
-
-References should point to stable IDs rather than duplicate names in free text.
-
-## 6.2 Facts
-
-Facts represent propositions about the canonical world.
-
-Examples:
-
-- Clarisse is poor.
-- Clarisse lives in Harbor Village.
-- The mayor accepted a bribe.
-- The bridge was destroyed on Day 12.
-- The treaty is hidden in the monastery.
-
-Facts may be simple named facts initially. The architecture should not prevent future structured propositions, but the first implementation does not need a theorem prover or natural-language logic engine.
-
-A fact should be distinguishable from:
-
-- Someone knowing the fact.
-- Someone believing the fact.
-- Someone suspecting the fact.
-- Someone lying about the fact.
-- A rumor that resembles or distorts the fact.
-
-## 6.3 Knowledge, Belief, Suspicion, Rumor, Claims
-
-The system should explicitly distinguish objective truth from character perspective.
-
-Example:
-
-```text
-Truth: Mayor killed the merchant.
-Guard believes: Bandits killed the merchant.
-Innkeeper suspects: Mayor arranged it.
-Mayor claims: Merchant left town.
-Player knows: Depends on discovered evidence.
-```
-
-Knowledge should have provenance where useful:
-
-- Direct witness.
-- Told by another character.
-- Read in a document.
-- Inferred from evidence.
-- Public knowledge.
-- Rumor source.
-
-This enables validators to detect impossible information leaks.
-
-## 6.4 Characters
-
-Characters should support structured fields such as:
-
-- Stable ID.
-- Names / aliases.
-- Description.
-- Traits.
-- Background facts.
-- Goals.
-- Motivations.
-- Relationships.
-- Affiliations.
-- Home / location ties.
-- Possessions or important owned items.
-- Knowledge / beliefs / suspicions.
-- Availability / life state.
-- Optional game-oriented metadata.
-- Optional author-facing notes.
-
-The system should not require that every descriptive detail be formalized. Freeform prose fields are valid. The point is to formalize details that matter to continuity or downstream generation.
-
-## 6.5 Locations
-
-Locations should support:
-
-- Stable identity.
-- Parent region / containment relationships.
-- Description.
-- Ownership / faction control.
-- Residents.
-- Significant objects.
-- Accessibility conditions.
-- Events that occurred there.
-- Connections to other locations.
-- Relevant facts.
-
-## 6.6 Relationships
-
-Relationships may be qualitative, quantitative, or both.
-
-Examples:
-
-- Parent / child.
-- Employer / employee.
-- Rival.
-- Friend.
-- Enemy.
-- Debt.
-- Loyalty.
-- Trust.
-- Fear.
-- Affection.
-- Faction authority.
-
-Relationships should be queryable because they are important for impact analysis and AI context assembly.
-
-## 6.7 Events and Timeline
-
-Durable changes to the world should be represented as semantic events where appropriate.
-
-Examples:
-
-- Character died.
-- Bridge destroyed.
-- Election occurred.
-- Secret discovered.
-- Item transferred.
-- Faction leadership changed.
-- Crime committed.
-- Quest state transitioned.
-
-Important events should support timeline placement and causal links.
-
-This helps the system answer:
-
-- What happened before what?
-- Could this character have witnessed this?
-- Was this person alive yet?
-- Could this clue exist at this point?
-- Why does this state currently hold?
-
-The system does not need to event-source every minor runtime action. It should focus on durable world and story changes.
-
-## 6.8 Quests / Story Arcs
-
-Quests should be represented as explicit state machines or statecharts rather than arbitrary free-floating flags.
-
-A quest should be able to define:
-
-- Stable ID.
-- Initial state.
-- Legal states.
-- Legal transitions.
-- Preconditions.
-- Consequences.
-- Success states.
-- Failure states.
-- Cancellation/abandonment states.
-- Required characters or locations.
-- Relevant facts.
-- Dialogue references.
-- Branches and alternate resolutions.
-
-This representation should also be usable for:
-
-- D&D adventure structure.
-- Novel plot arcs.
-- Mystery progression.
-
-## 6.9 Dialogue Semantics
-
-The system does not need to replace a dedicated dialogue system.
-
-It should be able to store or import dialogue plus semantic annotations such as:
-
-- Speaker.
-- Required state.
-- Required knowledge.
-- Facts asserted.
-- Facts revealed.
-- Facts lied about.
-- Quest transition triggered.
-- Relationship change.
-- Item transfer.
-
-A game exporter may hand off actual presentation to another system.
-
-## 6.10 Mysteries and Clues
-
-Mystery fiction is an important test case.
-
-The system should be able to represent:
-
-- The canonical solution.
-- True and false suspects.
-- Clues.
-- Red herrings.
-- Who knows each clue.
-- When a clue becomes discoverable.
-- What facts a clue supports or contradicts.
-- Reveal timing constraints.
-- Whether the mystery remains solvable at each intended stage.
-
-A mystery-specific validator can ask questions such as:
-
-- Is the answer accidentally revealed before the intended reveal point?
-- Does a witness know something they could not know?
-- Is a required clue inaccessible?
-- Are two supposedly independent clues actually dependent on the same failure point?
-- Is the intended solution still inferable from available evidence?
-
-The system should constrain continuity, not judge literary quality with certainty.
-
----
-
-# 7. JSON Import
-
-The application must be able to create a world by importing JSON.
-
-There are two broad import cases:
-
-## 7.1 Import Native World Format
-
-This should load a previously exported or authored world project in the application's canonical schema.
-
-The importer should:
-
-- Validate schema version.
-- Resolve references.
-- Build indexes.
-- Produce diagnostics.
-- Support migrations where feasible.
-- Reject or quarantine malformed content rather than silently guessing.
-
-## 7.2 Import External / Legacy JSON
-
-The application should support adapters for non-native JSON formats.
-
-Examples:
-
-- Existing quest data.
-- Character databases.
-- Custom game data.
-- AI-produced JSON from a previous pipeline.
-
-External import should be mapping-driven rather than assuming all JSON has the same shape.
-
-The first implementation only needs a clean extension point for custom importers; it does not need universal auto-detection.
-
-## 7.3 Imported Content Should Become a Transaction
-
-Importing content should not automatically make it canon.
-
-Conceptually:
-
-```text
-world import legacy-world.json
-→ create transaction
-→ normalize
-→ validate
-→ show diagnostics
-→ repair or acknowledge
-→ commit
-```
-
-This protects existing worlds from malformed imports.
-
----
-
-# 8. Authoring New Content
-
-The application should support both humans and agents, but the primary design target is agent-friendly operation.
-
-The system should expose authoring operations at the semantic level:
-
-- Create character.
-- Modify character.
-- Add fact.
-- Add relationship.
-- Add location.
-- Add event.
-- Add quest.
-- Add quest state.
-- Add quest transition.
-- Add clue.
-- Add dialogue semantics.
-- Remove or replace content.
-
-The system should avoid requiring agents to manually manipulate low-level internal storage if a semantic operation can express the intent.
-
-A human-friendly UI may eventually exist, but a text interface is the priority.
-
----
-
-# 9. Text-First Agent Interface
-
-The tool should be excellent to operate without a GUI.
-
-The command-line interface should expose world questions and world operations, not merely CRUD file commands.
-
-Representative commands:
-
-```text
-world create
-world load
-world begin
-world status
-world show character clarisse
-world show quest missing-fisher
-world dependencies character clarisse
-world dependents fact harbor-corruption
-world trace knowledge clarisse harbor-corruption
-world trace quest missing-fisher
-world affected-by character clarisse --event killed
-world query "quests requiring a living harbor official"
-world validate
-world review
-world simulate
-world explain WS2041
-world commit
-world rollback
-world export json
-world export lorebook
-world export story
-```
-
-All important commands should support structured output suitable for agents:
-
-```text
---format text
---format json
---format jsonl
-```
-
-The CLI should be deterministic where possible and should use stable diagnostic codes.
-
----
-
-# 10. Dependency and Impact Analysis
-
-The system should maintain a dependency graph over world concepts.
-
-Examples:
-
-- Quest depends on character.
-- Dialogue depends on fact.
-- Character knows fact because of event.
-- Location contains item.
-- Story arc depends on quest outcome.
-- Clue references event.
-
-When a transaction changes something, the application should automatically compute the impact set.
-
-Example:
-
-```text
-Changed:
-- clarisse
-- missing-fisher
-
-Direct dependents:
-- clarisse-dialogue
-- harbor-fishermen-faction
-- harbor-rumor-03
-
-Transitive risk:
-- harbor-election-quest
-- north-coast-ending
-```
-
-This impact set determines which validators, simulations, and AI reviews need to run.
-
-The user or agent should not need to manually remember which checks apply.
-
----
-
-# 11. Deterministic Validation
-
-Deterministic validation should be the backbone of the system.
-
-It should be cheap enough to run frequently and reproducible enough that the same world state produces the same result.
-
-## 11.1 Structural Validation
-
-Examples:
-
-- Invalid JSON/schema.
-- Duplicate IDs.
-- Missing references.
-- Invalid enum values.
-- Unsupported schema versions.
-- Broken dialogue links.
-- Missing quest states.
-- Unknown transition targets.
-
-## 11.2 Semantic Validation
-
-Examples:
-
-- NPC reveals a fact they cannot know.
-- Quest transition is illegal from the source state.
-- Quest can be accepted after its objective has become impossible.
-- Required scene depends on a potentially unavailable character with no fallback.
-- Timeline places an event before its prerequisites.
-- Character is simultaneously in mutually exclusive states.
-- Item ownership becomes impossible or contradictory.
-- Mystery clue becomes available before it exists.
-- Major reveal occurs before an explicitly declared reveal boundary.
-- Circular prerequisites.
-
-## 11.3 Reachability / Graph Analysis
-
-Examples:
-
-- Unreachable quest state.
-- No reachable success or failure state.
-- Dead-end dialogue node.
-- Critical story branch cannot be entered.
-- Required clue cannot be acquired.
-
-## 11.4 Design Contracts
-
-The system should allow projects to declare explicit invariants that matter to them.
-
-Examples:
-
-- Main story always retains at least one continuation path.
-- Every critical clue has at least two acquisition routes.
-- A quest must fail or reroute if its giver dies.
-- No faction combination blocks every ending.
-- Mystery solution cannot be directly known by the protagonist before Act Three.
-
-The application should validate declared contracts rather than pretending it can infer every creative intention.
-
----
-
-# 12. Simulation
-
-Not every problem can be proven statically.
-
-The system should support bounded simulations of story/world transitions.
-
-Potential uses:
-
-- Explore quest paths.
-- Test combinations of character death and quest progression.
-- Test clue accessibility.
-- Find softlocks.
-- Verify alternate resolutions.
-- Exercise mystery reveal paths.
-
-Simulation findings should be reported as reproducible findings, ideally with a seed or event sequence.
-
-Simulation should not attempt to enumerate the entire combinatorial universe of all possible world states.
-
-The architecture should favor scoped analysis around affected entities and declared contracts.
-
----
-
-# 13. AI-Assisted Sanity Review
-
-The application itself may make AI calls for checks that are difficult to formalize deterministically.
-
-These calls should be:
-
-- Explicit.
-- Scoped.
-- Cacheable.
-- Auditable.
-- Relatively infrequent compared with deterministic checks.
-
-Examples of AI review profiles:
-
-```text
-character-coherence
-quest-quality
-plot-flow
-mystery-fairness
-motivation-consistency
-dialogue-naturalness
-lore-consistency
-description-consistency
-```
-
-A review should receive only the minimum relevant context assembled from the dependency graph.
-
-Example finding:
-
-```text
-AI CONCERN AI034:
-Clarisse is described as avoiding the harbor master,
-but the proposed schedule places her in his office every morning.
-
-Evidence:
-- character:clarisse
-- schedule:clarisse
-- relationship:clarisse-harbor-master
-```
-
-The AI should normally produce diagnostics and suggestions rather than silently rewriting canon.
-
-## 13.1 AI Findings Are Not Compiler Truth
-
-Diagnostics should distinguish:
-
-- **Error:** deterministic rule broken; commit blocked.
-- **Warning:** deterministic concern; commit policy decides.
-- **Simulation finding:** a reproducible path exposed a problem.
-- **AI concern:** qualitative or semantic concern from a model.
-- **Suggestion:** optional improvement.
-- **Human review:** subjective decision requested.
-
-A fictional world may intentionally contain unusual or contradictory-seeming situations. The system must allow explicit acknowledgement.
-
-Example:
-
-```text
-world acknowledge AI034 --reason "Clarisse cleans the office before the harbor master arrives."
-```
-
-That acknowledgement becomes part of the transaction history and may itself be useful context later.
-
----
-
-# 14. Commit Policy
-
-Each project should define what is required before a transaction can commit.
-
-Example conceptual policy:
-
-```json
-{
-  "requireStructuralValidation": true,
-  "requireSemanticValidation": true,
-  "requireSimulationForQuestChanges": true,
-  "requireAiReviewFor": ["character", "quest", "timeline"],
-  "allowWarnings": true,
-  "requireHumanApprovalForHighRiskChanges": true
-}
-```
-
-Routine AI-generated changes should be able to commit automatically if project policy permits.
-
-High-risk change categories may require human approval, such as:
-
-- Changing foundational world history.
-- Deleting major characters.
-- Rewriting the main plot.
-- Invalidating save compatibility.
-- Changing the solution to a mystery.
-- Rewriting core faction structure.
-
----
-
-# 15. Branching and Merge
-
-The canonical world should support branches or equivalent isolated workspaces.
-
-Example uses:
-
-- AI-generated regional expansion.
-- Alternate ending experiment.
-- Mod development.
-- Novel outline variant.
-
-A merge should be validated as a new transaction against the current target world, not merely accepted because the source branch was valid when created.
-
-This avoids stale assumptions.
-
----
-
-# 16. Export System
-
-Exports should be profile-driven views over validated canon.
-
-The exporter architecture should be extensible.
-
-## 16.1 Canonical / Runtime JSON Export
-
-Primary machine-readable export.
-
-Possible modes:
-
-- Full world JSON.
-- Selected region.
-- Selected characters.
-- Quest package.
-- Flattened runtime package.
-- Mod package.
-- Snapshot at a particular world/story state.
-
-This JSON may be optimized differently from the source project but must preserve semantic identity and version metadata.
-
-## 16.2 Human Reference Document Export
-
-Produce human-readable reference material from canon.
-
-Profiles may include:
-
-### Developer Lore Bible
-
-- Complete canonical history.
-- Characters.
-- Locations.
-- Factions.
-- Relationships.
-- Timeline.
-- Secrets.
-- Knowledge provenance.
-- Main and side plots.
-- Unresolved warnings.
-
-### QA Consistency Guide
-
-For a selected context, print the relevant canonical facts as a checklist.
-
-The system should not try to magically turn every fact into a bespoke QA test.
-
-Example:
-
-```text
-Clarisse — Home Review
-
-[ ] Clarisse is poor.
-[ ] Clarisse lives alone.
-[ ] Clarisse repairs fishing nets for income.
-[ ] Clarisse distrusts the town guard.
-[ ] Clarisse owns a hidden family heirloom.
-[ ] Clarisse does not know who killed her brother.
-```
-
-A human reviewer uses ordinary judgment to determine whether the implementation passes the smell test.
-
-The exporter should automatically choose relevant facts based on the selected character, location, quest state, scene, or world snapshot.
-
-### Player Guide
-
-Only information intended to be publicly known at the selected disclosure point.
-
-### Game Master / Campaign Manual
-
-- Full backstory.
-- Main quest.
-- Optional quests.
-- Characters.
-- Factions.
-- Secrets.
-- Encounters or story beats.
-- Consequences.
-- Glossary.
-
-## 16.3 Story Mode Export
-
-"Story mode" means converting the structured canon into a readable narrative-oriented representation without making that prose the source of truth.
-
-Possible story-mode targets:
-
-- Novel outline.
-- Chapter-by-chapter synopsis.
-- Narrative summary.
-- Character arc summary.
-- Mystery structure packet.
-- Main-story treatment.
-- Screenplay-style beat sheet.
-
-The export system may use AI to turn validated structured facts into readable prose.
-
-The AI must receive disclosure and canon constraints so that the resulting prose does not invent contradictions or reveal hidden information unintentionally.
-
-Generated prose should ideally retain source references internally so it can be regenerated when canon changes.
-
-## 16.4 D&D / Tabletop Export
-
-A campaign export may include:
-
-- Setting overview.
-- Starting situation.
-- Main plot line.
-- Optional quests.
-- NPC glossary.
-- Locations.
-- Factions.
-- Secrets for the GM.
-- Player-safe handouts.
-- Timeline.
-- Encounter notes.
-
-The core system should not hardcode a specific tabletop rules edition. Rules-specific adapters can be added separately.
-
-## 16.5 Mystery Author Export
-
-Possible outputs:
-
-- Canonical solution.
-- Suspect matrix.
-- Character motive summaries.
-- Clue timeline.
-- Who knows what and when.
-- Reveal order.
-- Red herrings.
-- Chapter/scene outline.
-- Fair-play mystery checklist.
-
-This demonstrates that the tool is not limited to RPG quests.
-
----
-
-# 17. Disclosure / Audience Scopes
-
-Every export should honor audience/disclosure rules.
-
-The same world may produce very different documents.
-
-Examples:
-
-- Public knowledge.
-- Player-safe knowledge.
-- GM-only knowledge.
-- Developer-only canon.
-- Character-specific knowledge.
-- Knowledge as of a particular chapter or quest state.
-
-A secret may be true and canonical while intentionally excluded from a player guide.
-
-The exporter must treat disclosure as first-class rather than relying on prose-generation prompts alone.
-
----
-
-# 18. AI Agent Integration
-
-The tool should be designed so an AI agent can operate it safely and effectively.
-
-A typical agent task:
-
-> Add a retired naval surgeon to Harbor Village who can introduce a quest about missing medical supplies.
-
-The intended workflow is:
-
-1. Begin transaction.
-2. Query Harbor Village canon.
-3. Query relevant factions, characters, facts, quests, and timeline.
-4. Add character.
-5. Add facts and relationships.
-6. Add quest and dialogue semantics.
-7. Let the system automatically compute affected dependencies.
-8. Run validation.
-9. Run required simulation/reviews.
-10. Repair failures.
-11. Commit if policy allows.
-12. Optionally export the affected world package or documents.
-
-The agent should not be expected to remember every validation command. The commit process should automatically run the required checks for the changed content.
-
----
-
-# 19. Tool / Plugin Interface
-
-The .NET application should expose a clean semantic API in addition to the CLI.
-
-It should be possible to wrap that API for:
-
-- MCP.
-- OpenAI Agent Plugins or similar agent ecosystems.
-- IDE integrations.
-- Custom autonomous agents.
-- Human-facing applications.
-
-The integration layer is not the source of truth. The C# core remains vendor-neutral.
-
-Representative semantic tools:
-
-```text
-begin_world_transaction
-get_character
-get_location
-query_world
-add_character
-modify_character
-add_fact
-add_quest
-analyze_impact
-validate_transaction
-review_transaction
-simulate_transaction
-explain_diagnostic
-commit_transaction
-rollback_transaction
-export_world
-export_document
-```
-
-These tools should be preferable to exposing an unrestricted shell command to an agent.
-
----
-
-# 20. Optional Asset / Game Grounding Layer
-
-The core system should not require game assets, but it should be extensible enough to support them.
-
-In a game project, semantic world facts may imply implementation requirements.
-
-Example:
-
-```text
-Fact: Clarisse repairs fishing nets.
-```
-
-A game-specific extension might associate that activity with:
-
-- A compatible animation.
-- A fishing-net prop.
-- A work location.
-- A schedule entry.
-
-Likewise, a character trait such as `missing_left_arm` might trigger a game-specific warning that:
-
-- The selected model must support the trait.
-- Certain animations may be incompatible.
-- The backstory has no explanation or explicit intentional non-explanation.
-
-These are valuable extensions, especially for AI-generated games, but they should remain optional adapters around the world-authoring core.
-
-The application should not evolve into a universal game engine before proving the world-consistency model.
-
----
-
-# 21. Modding
-
-The same architecture is naturally mod-friendly.
-
-A mod can be treated as a transaction/package applied to a base world.
-
-Potential mod capabilities:
-
-- Add characters.
-- Add quests.
-- Add dialogue.
-- Add facts.
-- Add locations.
-- Extend factions.
-- React to existing events.
-- Add alternate consequences.
-
-The system should prefer explicit semantic patch operations over unrestricted last-file-wins merging.
-
-A mod should be validated against the target world version before acceptance.
-
-Exports can distinguish between:
-
-- Base canon.
-- Official extensions.
-- Installed mods.
-- Mod-specific derived artifacts.
-
----
-
-# 22. Diagnostics and Explainability
-
-Diagnostics are a first-class product surface.
-
-Each diagnostic should include:
-
-- Stable code.
-- Severity.
-- Human-readable message.
-- Relevant entity IDs.
-- Source location if available.
-- Evidence.
-- Suggested repair categories where safe.
-
-Example:
-
-```text
-ERROR WS2041
-Quest `missing-fisher` requires Clarisse in state `alive`,
-but Clarisse may be dead before the quest becomes available.
-
-Affected:
-- quest:missing-fisher
-- character:clarisse
-- event:harbor-fire
-
-Possible repairs:
-- Add replacement quest giver.
-- Cancel quest when Clarisse dies.
-- Move quest availability earlier.
-```
-
-The system should be able to answer "why" questions:
-
-- Why does Clarisse know this fact?
-- What breaks if Clarisse dies?
-- Why is this quest unreachable?
-- Which changes caused this warning?
-- Which content depends on this location?
-
-This explainability is critical for both humans and AI repair loops.
-
----
-
-# 23. Non-Goals
-
-The initial product should explicitly avoid attempting to solve all of the following:
-
-- Automatically deciding whether a story is emotionally good.
-- Automatically deciding whether a game is fun.
-- Fully understanding arbitrary prose without annotations.
-- Proving every possible softlock in an unbounded state space.
-- Replacing Unity or other game engines.
-- Replacing Ink, Yarn, or dedicated dialogue presentation tools.
-- Replacing tabletop rules engines.
-- Generating perfect novels autonomously.
-- Modeling every trivial object or fact in a fictional world.
-- Requiring every world detail to be formalized.
-- Building a universal visual editor before the text/agent workflow works.
-
-The system's job is to make important world structure explicit enough that consistency can be checked and AI generation can scale safely.
-
----
-
-# 24. Recommended Initial .NET Solution Shape
-
-The coding agent may choose different names, but the conceptual boundaries should resemble:
-
-```text
-ValidatedWorld.sln
-
-src/
-  ValidatedWorld.Core/
-  ValidatedWorld.Serialization/
-  ValidatedWorld.Validation/
-  ValidatedWorld.Runtime/
-  ValidatedWorld.Simulation/
-  ValidatedWorld.AIReview/
-  ValidatedWorld.Export/
-  ValidatedWorld.Cli/
-
-optional/
-  ValidatedWorld.Mcp/
-  ValidatedWorld.Unity/
-  ValidatedWorld.Tabletop/
-  ValidatedWorld.Prose/
-
-tests/
-  Core.Tests/
-  Validation.Tests/
-  Simulation.Tests/
-  Export.Tests/
-
-samples/
-  HarborVillage/
-  MysterySample/
-```
-
-This is guidance, not a mandatory package map.
-
----
-
-# 25. Recommended Proof of Concept
-
-The POC should prove the central thesis, not build the full future platform.
-
-Create one small world containing:
-
-- 5–10 characters.
-- 2 factions.
-- 3 locations.
-- 20–40 facts.
-- Several relationships.
-- A short timeline.
-- 2–3 quests.
-- One secret.
-- One false belief or rumor.
-- One character who can die.
-- One alternate quest fallback.
-- One small mystery or information-provenance chain.
-
-The POC should support:
-
-1. Creating or importing the world from JSON.
-2. Beginning a transaction.
-3. Adding a character and quest.
-4. Automatic dependency/impact detection.
-5. Structural validation.
-6. Knowledge/reveal validation.
-7. Quest reachability validation.
-8. At least one bounded simulation.
-9. Optional targeted AI review.
-10. Atomic commit.
-11. Exporting canonical JSON.
-12. Exporting a human-readable lore/reference document.
-13. Exporting a "story mode" narrative summary.
-14. Exporting a QA checklist containing relevant facts for a chosen character/location/quest context.
-
-Intentional errors should demonstrate the value:
-
-- NPC reveals a secret without a knowledge path.
-- Quest depends on a character who may be dead.
-- A quest terminal state is unreachable.
-- A clue appears before the event that creates it.
-- A timeline contradiction exists.
-
-The system should detect these, explain them, and allow the authoring agent to repair them before commit.
-
----
-
-# 26. Success Criteria
-
-The POC is successful if an AI coding/authoring agent can be given a request such as:
-
-> Add a new resident of Harbor Village who knows a partial rumor about the missing fisher, has a reason to distrust the harbor master, and can start an optional investigation quest.
-
-The agent should be able to:
-
-- Inspect existing canon through the tool.
-- Add the requested content in a transaction.
-- Receive precise diagnostics.
-- Repair inconsistencies.
-- Commit the valid transaction.
-- Export updated JSON and documentation.
-
-The most important measure is not how much prose the system can generate. It is whether the system allows AI to add meaningful content to a growing world **without progressively destroying consistency**.
-
----
-
-# 27. Long-Term Vision
-
-The long-term vision is a fictional-world development environment where the world behaves like a large software project:
-
-- Canon is structured.
-- Changes are transactional.
-- Dependencies are inspectable.
-- Validation is automatic.
-- AI reviews are scoped and repeatable.
-- Simulations probe difficult flows.
-- Agents can query why things are true.
-- Content can be safely repaired and refactored.
-- The same source can publish into multiple formats.
-
-For games, this could become part of a pipeline for creating extremely large RPG worlds with AI agents performing the majority of content production while deterministic tooling protects continuity.
-
-For tabletop, it can produce campaign books and GM references.
-
-For fiction, especially mysteries, it can constrain an AI author so that motives, timelines, clues, knowledge, reveals, and character behavior remain compatible with established canon.
-
-The durable concept is:
-
-> **Create a canonical fictional world, require every proposed change to prove that it fits, then publish that validated world into whatever medium you need.**
-
----
-
-# 28. Final Direction to the Coding Agent
-
-Do not interpret this specification as a request to over-engineer a universal ontology before producing working software.
-
-Start with the smallest world model that can demonstrate:
-
-- Stable identities.
-- Facts.
-- Character knowledge.
-- Relationships.
-- Quest states and transitions.
-- Timeline/events.
-- Transactions.
-- Dependency analysis.
-- Validation.
-- JSON import/export.
-- Human-readable exports.
-
-Keep the architecture extensible, but favor a working end-to-end pipeline over theoretical completeness.
-
-The defining experience should be:
-
-```text
-Load world
-→ begin transaction
-→ author content
-→ automatic impact analysis
-→ validate/review
-→ repair
-→ commit
-→ export
-```
-
-If that workflow is solid, the system can grow naturally into game adapters, modding, campaign publishing, mystery tooling, story-generation workflows, asset grounding, and large-scale autonomous AI content production.
+`ValidatedWorld.Application` is the one planned addition to the current scaffold
+in blueprint work package 0. It owns use-case orchestration, workspace locking,
+transaction lifecycle, commit, and queries. Core stays independent of files,
+JSON, consoles, networks, model providers, and engines.
+
+The blueprint defines exact namespace and work-package guidance.
+
+## 18. Proof-of-concept scope
+
+The POC proves one end-to-end vertical slice with a small Harbor mystery:
+
+- 5–10 characters, 2 factions, 3 locations, and key items/documents.
+- 20–40 propositions with positive/negative and temporal assertions.
+- At least one false belief and one provenance chain.
+- Ordered events including one character availability change.
+- A small branching narrative graph and an authored linear trace.
+- One solution, several clues, explicit deduction rules, and a reveal boundary.
+- A fallback path when a required character is unavailable.
+
+The POC must:
+
+1. Load and strictly validate canonical JSON.
+2. Begin and persist a transaction.
+3. Apply semantic operations and build a projected snapshot.
+4. Derive base/projected dependency graphs and an explained impact set.
+5. Detect reference, contradiction, temporal, perspective, disclosure, and
+   reachability failures.
+6. Produce a replayable counterexample for a path failure.
+7. Reject a stale or invalid commit without modifying canon.
+8. Atomically commit a valid change.
+9. Export normalized JSON and a human continuity packet.
+10. Return deterministic JSON command results suitable for an agent.
+
+AI calls, a GUI, a plugin package, rich prose generation, universal import, and
+engine adapters are not required to prove the thesis.
+
+## 19. Success and stop criteria
+
+Success is not measured by prose volume. It is measured by whether an agent can
+make realistic structured changes without degrading declared continuity.
+
+The evaluation corpus must include intentional errors and expected diagnostics.
+Repeated deterministic validation of the same snapshot must produce equivalent
+ordered results. Failed commits must leave the canonical file unchanged.
+
+Do not expand scope until the POC evaluation described in
+[feasibility.md](feasibility.md) demonstrates useful defect detection at an
+acceptable annotation cost. If full narrative-state modeling is too expensive,
+retain the smaller useful product: typed canon, linear trace validation,
+dependency impact, and continuity packet generation.
+
+## 20. Non-goals
+
+The initial product does not:
+
+- Prove arbitrary prose consistent.
+- Generate a complete novel autonomously.
+- Judge literary quality, emotion, fun, or commercial value.
+- Build a universal ontology or unrestricted rules language.
+- Exhaust unbounded game or tabletop play.
+- Replace a game engine, dialogue runtime, version-control system, or document
+  editor.
+- Automatically accept AI-extracted statements as canon.
+- Require every descriptive detail to be formalized.
+- Build a visual graph editor before the agent-first workflow works.
+- Promise backward compatibility while the POC schema is still experimental.
+
+## 21. Durable direction
+
+The enduring concept is:
+
+> Model the continuity that matters, validate every proposed canonical change
+> against an explicit and bounded semantic world, report what was and was not
+> proven, and publish the resulting canon into any medium.
+
+Implement the smallest complete version of that loop before adding breadth.
