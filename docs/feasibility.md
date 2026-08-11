@@ -2,173 +2,280 @@
 
 **Status:** Accepted product boundary
 
-**Last reviewed:** 2026-08-10
+**Last reviewed:** 2026-08-11
 
 ## Verdict
 
-ValidatedWorld is feasible and potentially useful, but only if it is built as a
-**continuity compiler for explicitly modeled story information**. It is not
-feasible as a machine that reads arbitrary prose and proves that every sentence
-is compatible with every other sentence.
+ValidatedWorld is feasible and useful if it is built as a **claim, dependency,
+and review compiler for authored projects**.
 
-The viable product sits between a database, a static analyzer, and a bounded
-model checker:
+It is not feasible as a machine that reads unrestricted prose and proves every
+statement correct. That does not make natural-language review irrelevant. A
+heuristic reviewer can discover likely claims and implicit connections, focus on
+the sections affected by a change, and be required by commit policy. The system
+must distinguish “this review ran and its findings were resolved” from “this
+property was mathematically proven.”
 
-- Authors and agents identify continuity-critical information as typed canon.
-- Narrative artifacts reference the canon they rely on or reveal.
-- Proposed changes are applied to an isolated projected snapshot.
-- Deterministic validators check the projected snapshot.
-- Bounded analysis explores declared story transitions and produces replayable
-  counterexamples.
-- Optional AI review looks for likely omissions in prose and annotations, but
-  never upgrades a guess into a proof.
+The common product sits between:
 
-This narrower promise is still valuable. Software compilers do not prove that a
-program is useful; they prevent large classes of defects. ValidatedWorld should
-not claim to prove that a story is good; it should prevent large classes of
-continuity defects and make the remaining uncertainty visible.
+- A structured document model.
+- A dependency and traceability graph.
+- A transaction system.
+- A static analyzer.
+- A mandatory review workflow.
+- Optional profile-specific model checking.
+
+This applies to technical designs and papers as directly as it applies to
+fiction. The content differs; the common problem is the same: a sequential
+document hides a web of semantic dependencies that becomes difficult for a human
+or AI to maintain as it grows.
+
+## The shared abstraction
+
+Every supported project can contain:
+
+- **Content units:** sections, paragraphs, figures, tables, scenes, requirements,
+  design components, or other stable authored units.
+- **Subjects:** named concepts, terms, systems, people, locations, variables, or
+  objects.
+- **Claims:** facts, assumptions, hypotheses, requirements, observations,
+  conclusions, decisions, definitions, or recommendations.
+- **Evidence:** citations, measurements, datasets, calculations, documents,
+  tests, events, or clues.
+- **Semantic links:** depends on, supports, contradicts, refines, supersedes,
+  defines, uses, implements, verifies, reveals, and profile-specific relations.
+- **Constraints:** explicit rules that must remain true.
+
+The operational dependency graph is derived from those records. A change to a
+record walks the reverse graph and produces an explained impact set.
+
+That is the core product. Fictional chronology, character knowledge, and game
+state are additional semantics, not prerequisites for document impact analysis.
 
 ## What can be guaranteed
 
-The product must label every result according to the strength of its evidence.
+The product must label every result by evidence strength.
 
 ### Proven by deterministic validation
 
-Given a valid schema and complete annotations for a rule, the system can prove
-or disprove properties such as:
+Given complete explicit records for a rule, ValidatedWorld can prove or disprove
+properties such as:
 
 - IDs are unique and references resolve to compatible record types.
-- Two opposite canon assertions overlap in the same declared scope.
-- A single-valued relationship has two simultaneous values.
-- A timeline event precedes one of its prerequisites.
-- An authored linear story trace violates a scene precondition.
-- A quest or story state is unreachable in a finite declared state model.
-- A character reveals information without the required declared knowledge.
-- A player-facing export includes material above its disclosure level.
-- An atomic transaction is based on the current canonical revision.
+- A link connects allowed source and target kinds.
+- An accepted claim explicitly contradicts another accepted claim in the same
+  declared scope.
+- A derived claim has the support required by project policy.
+- A definition, requirement, or decision has required traceability links.
+- A derivation dependency contains a forbidden cycle.
+- An authored content unit's semantic review applies to its current text hash.
+- A proposed change's transitive impact set is complete with respect to all
+  explicit references and semantic links.
+- Every policy-selected impacted unit has an explicit review disposition.
+- A transaction is based on the current canonical revision and commits
+  atomically.
 
-### Proven within an explicit bound
+Narrative profiles can additionally prove declared chronology, knowledge,
+disclosure, and finite reachability properties.
 
-For a finite transition system, the system can exhaustively explore all states
-up to configured limits. It may prove a property within that model, or return a
-short event sequence that reproduces a failure. The report must include the
-model, limits, and explored-state count.
+### Proven within an explicit finite model
 
-If a limit is reached, the result is **inconclusive**, not successful.
+For a finite transition specification, the system can exhaustively explore
+reachable abstract states within configured limits. It may prove a declared
+property or produce a replayable counterexample. If a limit is reached, the
+result is **inconclusive**, not successful.
 
-### Heuristic evidence only
+This is principally needed for games and branching narratives, not for the first
+document/dependency product.
 
-AI-assisted or text-linting checks can flag likely problems such as:
+### Required but heuristic review
 
-- Prose appears to introduce an unmodeled claim.
-- A motivation seems psychologically inconsistent.
-- A scene summary may imply an impossible location or time.
-- A clue may be too obvious or too obscure for the intended audience.
+AI-assisted or text-linting review can be required to run and can block commit
+until its concerns are resolved or explicitly acknowledged. It can:
 
-These are review findings. They may be useful and cacheable, but they are not
-compiler truth and must not be presented as proof.
+- Propose claims implicit in a changed section.
+- Propose missing links to definitions, assumptions, evidence, or downstream
+  conclusions.
+- Compare changed text with structured annotations.
+- Flag likely contradictions, stale numbers, inconsistent terminology, missing
+  qualifications, unsupported conclusions, or accidental disclosures.
+- Rank impacted content for human or agent attention.
+
+These findings remain **concerns**. Requiring the review is a workflow guarantee;
+accepting the reviewer's semantic judgment as truth would not be.
 
 ## What cannot be guaranteed
 
 ValidatedWorld cannot generally:
 
-- Understand every implication in unrestricted natural language.
-- Know which descriptive details matter unless they are modeled or annotated.
-- Prove literary quality, fun, emotional realism, or originality.
-- Enumerate an unbounded game or tabletop campaign state space.
-- Decide arbitrary logical statements; sufficiently expressive rule languages
-  eventually encounter undecidability or unacceptable cost.
-- Guarantee that generated prose contains no contradiction merely because the
+- Recover every claim or implication from unrestricted natural language.
+- Know every implicit dependency an author failed to model and reviewers failed
+  to notice.
+- Prove that a scientific claim is true, a citation is reliable, a design will
+  work, or a paper is persuasive.
+- Prove patent novelty, enablement, legal sufficiency, or freedom to operate.
+- Judge literary quality, emotion, fun, originality, or commercial value.
+- Exhaust an unbounded game or tabletop campaign state space.
+- Decide arbitrary logic expressed in an unrestricted rules language.
+- Guarantee that generated prose is consistent merely because its structured
   outline was valid.
-- Detect a dependency that exists only in an author's mind and is absent from
-  structured data, annotations, references, and review text.
 
-The UI, CLI, and documentation must never imply otherwise.
+The UI, CLI, README, and reports must not imply otherwise.
 
-## The annotation bargain
+## The annotation and review bargain
 
-The system works only when continuity-critical details cross the **semantic
-boundary**: they become structured propositions, state variables, events,
-perspective records, narrative conditions/effects, constraints, or explicit
-references from prose.
+The system gains deterministic power when important meaning crosses the
+**semantic boundary**: content is bound to claims, and claims are connected by
+typed links or constraints.
 
-Not every adjective or object needs to cross that boundary. An author should
-model a detail when changing it could invalidate another scene, clue, decision,
-timeline step, relationship, or output. Freeform prose remains welcome, but
-unmodeled prose is outside the deterministic guarantee.
+Authors should not manually draw every low-level edge. Three sources contribute
+to the graph:
 
-Connections should normally be derived from stable references. Users and agents
-should not hand-maintain a separate edge for every relationship. The system
-builds dependency edges from fields, expressions, propositions, events, and
-annotations. It may lint free text for suspicious unlinked mentions.
+1. Typed references in canonical records generate edges automatically.
+2. Humans or authoring agents add intentional semantic links.
+3. Heuristic review proposes missing claims and links for confirmation.
 
-## Why transactions help—and what they do not do
+Only confirmed records become canonical. Candidate links retain provenance so
+the project can distinguish manual statements from AI suggestions.
 
-A transaction makes a group of edits atomic. It guarantees that canon advances
-from one valid snapshot to another or does not advance at all. It also gives the
-validator the whole intended change at once.
+Not every sentence needs a formal claim. A project policy selects which content
+requires semantic review—for example every requirement and conclusion, but not
+formatting prose. Coverage reports show which content is mapped, stale, or
+outside deterministic protection.
 
-It does not require rewriting every dependent record. For example, changing
-"X does not know Y exists" to "X knows Y exists" may only require a knowledge
-acquisition record. Existing scenes that remain valid need no edit. The impact
-graph finds dependent scenes and constraints, and validators identify which of
-them actually need repair. Prose-only dependents can be found only when they are
-linked, annotated, or detected heuristically.
+## The simplest useful change workflow
+
+Suppose a technical design contains:
+
+- A requirement that a sensor operate for 24 hours.
+- An assumption about average current draw.
+- A power-budget conclusion derived from that assumption.
+- A battery decision depending on the conclusion.
+- Architecture and verification sections bound to those claims.
+
+Changing the current-draw assumption should deterministically identify the
+derived conclusion, battery decision, architecture section, and verification
+plan as impacted. Before commit, each receives one disposition:
+
+- `updated` — it changed in the transaction;
+- `reviewed-no-change` — it remains valid, with a reason;
+- `not-applicable` — the dependency path does not require action, with a reason;
+- `pending` — commit remains blocked when policy requires disposition.
+
+An AI reviewer may notice that a number in the power-budget prose is now stale.
+Even if it does not, the explicit graph still forces the relevant section to be
+looked at. This is useful without a theorem prover, timeline, or game simulator.
+
+## Why transactions matter
+
+A transaction groups changes to content, claims, links, and review dispositions.
+Canon advances from one accepted snapshot to another or not at all.
+
+The transaction does not require every dependent record to be edited. It
+requires every policy-relevant dependent record to be considered. This is closer
+to a compiler plus a code-review checklist than to a database cascade.
+
+Review dispositions are bound to the projected content hashes and impact-path
+fingerprints. Changing the transaction invalidates stale dispositions.
+
+## How interactive game state fits
+
+The user's intuition that a game can remain a static graph is substantially
+correct. The canonical game project is static: it contains variables, possible
+values, conditions, effects, invariants, and transitions. A particular runtime
+state is a valuation of those variables after a path of player actions.
+
+The system should not author a separate node for every possible full state.
+Instead, it derives reachable states when checking a declared property. This is
+why game support is more complex than a linear document:
+
+- Untyped “more connections” cannot say which facts are mutually exclusive.
+- Edges need conditions, effects, and scopes.
+- Loops can create many paths.
+- State exploration can grow combinatorially.
+
+So the canonical model is still static, but validation sometimes needs bounded
+model checking. That complexity should not be imposed on the common document
+core or the first POC.
 
 ## Smallest useful product
 
-The first product should be an **annotated story-outline continuity checker**,
-not an autonomous novel writer or universal RPG simulator.
+The first product should be a **transactional document dependency and review
+checker**.
 
-It should handle one small mystery world with:
+It should support:
 
-- Stable entities and typed propositions.
-- Positive and negative canon assertions with time ranges.
-- Character knowledge, belief, and suspicion with provenance.
-- Ordered events.
-- A finite narrative graph plus one selected linear trace.
-- Scene preconditions, effects, disclosures, and canon references.
-- A mystery solution, clue acquisition points, and explicit deduction rules.
-- Transactional JSON changes, deterministic validation, and impact analysis.
-- A machine-readable report and a human continuity packet.
+- One ordered technical design document split into stable content units.
+- Subjects, claims, assertion roles/statuses, evidence, and typed semantic links.
+- Bindings from sections to the claims they assert, use, or discuss.
+- Strict JSON load and deterministic export.
+- Atomic transactions over content and semantic records.
+- Base-plus-projected dependency impact analysis.
+- Explained review obligations for impacted records.
+- Deterministic contradiction, support, cycle, traceability, and stale-annotation
+  checks.
+- A context/review packet for an external human or AI reviewer.
+- Structured submission and acknowledgement of heuristic concerns, without a
+  built-in paid model requirement.
 
-That slice directly tests the difficult parts of the idea. If it works, games
-and campaigns can add richer branching and exporters. If it does not, a large
-plugin, visual editor, prose generator, or game integration would not rescue the
-core thesis.
+This slice is simpler than a mystery and directly tests the original spider-web
+document idea. It can be useful on its own.
 
-## POC falsification plan
+## Staged proof plan
 
-The proof of concept should be evaluated, not merely demonstrated. Build an
-intentional-error corpus and run a small sequence of realistic authoring tasks.
-Record:
+### Gate A — Common document graph
 
-- Expected deterministic findings and missed findings.
-- False-positive diagnostics.
-- Time and annotation effort required per change.
-- Number of impacted records presented to the agent.
-- Whether an agent can repair each failure using only structured diagnostics.
-- Whether repeated runs produce byte-equivalent deterministic reports.
-- Whether a deliberately unmodeled prose contradiction is honestly reported as
-  outside coverage rather than silently treated as valid.
+Use a small technical design sample and realistic change transactions. Measure:
 
-Proceed beyond the POC only if it catches nontrivial continuity failures with an
-acceptable authoring burden. Scale the product down to a structured outline and
-continuity-reference generator if full narrative-state modeling proves too
-costly. Archive the project rather than broaden its claims if structured
-annotations provide no meaningful advantage over ordinary documents plus AI
-review.
+- Expected and actual impact sets.
+- Missed and irrelevant impacts.
+- Time needed to create/maintain links.
+- Whether required review dispositions prevent stale dependent sections.
+- Whether an agent can repair a transaction using structured explanations.
+- Determinism of reports and failed-commit atomicity.
+- Coverage of content units and semantic annotations.
+
+If Gate A succeeds, the project already has a useful release direction.
+
+### Gate B — Heuristic discovery/review
+
+Evaluate one or more AI reviewers on deliberately omitted links and stale prose.
+Measure proposal precision, recall against a hand-authored corpus, review cost,
+and whether scoped context materially outperforms reviewing the whole document.
+Do not make one provider mandatory in the core product.
+
+### Gate C — Linear narrative profile
+
+Add the Harbor mystery only after Gate A. First test linear chronology,
+perspective, and disclosure. Retain the profile only if its added authoring
+burden catches failures the common graph cannot.
+
+### Gate D — Interactive-state profile
+
+Only after Gate C, add a miniature branching scenario with typed variables,
+conditions, effects, invariants, and bounded exploration. Retain it only if
+replayable traces catch state-dependent failures that static impact and linear
+narrative rules cannot.
+
+## Stop and scale-down criteria
+
+Keep the common document tool even if narrative modeling proves too expensive.
+Scale down further to impact packets and review obligations if typed claims are
+too burdensome but section-level dependencies remain useful.
+
+Archive the experiment only if explicit dependencies plus forced review provide
+no meaningful advantage over ordinary documents and unscoped AI review.
 
 ## Product language
 
 Prefer:
 
-> ValidatedWorld validates declared continuity constraints and reports the
-> coverage and limits of each result.
+> ValidatedWorld maps the important claims and dependencies hidden inside large
+> documents, validates explicit rules, and forces affected material through a
+> reviewable transaction.
 
 Avoid:
 
-> ValidatedWorld guarantees that an entire novel or game is consistent.
+> ValidatedWorld guarantees that an entire paper, novel, or game is correct.
 
-That distinction is the difference between an achievable open-source tool and a
-pipe dream.
+That distinction preserves both the ambition and the credibility of the project.

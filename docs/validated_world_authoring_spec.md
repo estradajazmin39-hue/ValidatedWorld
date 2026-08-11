@@ -2,609 +2,665 @@
 
 **Status:** Authoritative product specification
 
-**Specification version:** 2.0
+**Specification version:** 3.0
 
-**Last reviewed:** 2026-08-10
+**Last reviewed:** 2026-08-11
 
 **Primary implementation:** .NET 10 / C#
+
 **Canonical interchange format:** JSON
 
-This document defines what ValidatedWorld is and the architectural boundaries
-that implementations must preserve. Detailed types, algorithms, work packages,
-and acceptance tests are in [implementation_blueprint.md](implementation_blueprint.md).
-The honest guarantee boundary is in [feasibility.md](feasibility.md).
+This document defines the product and its architectural boundaries. Detailed
+common-core records, algorithms, tests, and work packages are in
+[implementation_blueprint.md](implementation_blueprint.md). The guarantee
+boundary and staged proof plan are in [feasibility.md](feasibility.md).
 
 Human direction overrides this document. When a product decision changes, update
-this specification and the blueprint in the same change.
+the specification and blueprint together.
 
 ---
 
 ## 1. Product thesis
 
-ValidatedWorld is a **consistency-validation and context-assembly system for
-long-form authored worlds**. It helps humans and AI agents create novels, games,
-quests, campaigns, and other continuity-heavy works without relying on a model's
-context window as the source of truth.
+A long document is sequential in presentation but graph-shaped in meaning.
+
+- A conclusion depends on assumptions, evidence, and definitions.
+- A design decision depends on requirements and measurements.
+- A test verifies a requirement and may depend on implementation details.
+- A scene depends on prior events and what its characters know.
+- A game transition depends on current state and changes future possibilities.
+
+ValidatedWorld makes the continuity-critical part of that hidden graph explicit.
+It is a **consistency, impact-analysis, and review system for large authored
+projects**.
 
 The central workflow is:
 
 ```text
-load a canonical snapshot
+load a canonical project snapshot
 → begin an isolated transaction
-→ query relevant canon
-→ propose semantic changes
+→ change content, claims, or semantic links
 → build the projected snapshot
-→ compute impact
-→ validate and analyze
-→ repair, acknowledge, or reject findings
+→ compute transitive impact from base and projected graphs
+→ run deterministic validation
+→ create review obligations for affected material
+→ run optional required heuristic reviews
+→ update, justify, resolve, or acknowledge
 → commit atomically
-→ export audience-specific artifacts
+→ export documents, reports, and focused context packets
 ```
 
-The product does not make an AI remember a whole novel. It gives the AI a small,
-precise context packet for the task, then checks the proposed result against
-structured canon before accepting it.
+ValidatedWorld does not make an AI remember hundreds of pages. It gives the AI a
+small explained context packet and prevents it from committing a change without
+considering explicitly dependent material.
 
-The initial target is fiction—especially a mystery outline—because mysteries
-stress time, knowledge, evidence, motive, disclosure, and causality at once. The
-core must remain medium- and engine-independent.
+Despite the project name, a “world” is any versioned universe of connected
+claims and artifacts. Fictional worlds, technical designs, whitepapers, and
+interactive systems are product profiles over one common graph.
 
-## 2. Product promise and coverage
+## 2. Product promise and evidence levels
 
-ValidatedWorld guarantees only what is represented in its semantic model.
+ValidatedWorld guarantees only properties represented in its semantic model.
 
-Every validation report must distinguish:
+Every result is classified as:
 
-- **Proven:** deterministic rules completed and the property holds in the
-  declared model.
-- **Disproven:** deterministic rules found a violation, ideally with a minimal
-  counterexample.
-- **Inconclusive:** a configured analysis bound, unsupported construct, missing
-  annotation, or internal failure prevented a conclusion.
-- **Concern:** a heuristic or AI reviewer identified a possible issue.
+- **Proven:** deterministic checks completed and the declared property holds.
+- **Disproven:** deterministic checks found a violation, with evidence or a
+  replayable counterexample.
+- **Inconclusive:** missing annotations, an unsupported construct, an analysis
+  bound, cancellation, or internal failure prevented a conclusion.
+- **Concern:** a heuristic, linter, or AI reviewer identified a possible issue.
 
-An incomplete or bounded-out check is never reported as a pass.
+An incomplete check is never a pass.
 
-Important details become enforceable when they are modeled as entities,
-propositions, assertions, perspectives, events, state, constraints, or narrative
-annotations. Freeform prose is allowed, but details present only in prose remain
-outside deterministic coverage. The system should report coverage so users know
-which parts are protected.
+Project policy may require a heuristic review to run and require every concern
+to be resolved or acknowledged. That proves completion of a review workflow; it
+does not convert the reviewer's judgment into deterministic truth.
 
-## 3. Mental model
+Coverage is a first-class report: the system identifies content that is mapped,
+stale, unreviewed, extension-owned, or outside deterministic protection.
+
+## 3. The common mental model
 
 ValidatedWorld combines:
 
-- An immutable-at-a-revision canonical world snapshot.
-- An optimistic, atomic transaction system.
-- A typed semantic graph derived from canon.
-- Deterministic validators and explainable diagnostics.
-- Bounded traversal of finite narrative state models.
-- Queries and context packets designed for AI agents.
-- Optional, auditable AI-assisted review.
-- Profile-driven exports.
+- A canonical project containing authored content and its semantic map.
+- Immutable snapshots with revision and content hashes.
+- Atomic optimistic transactions.
+- A typed semantic-link graph.
+- A derived operational dependency and reverse-impact graph.
+- Deterministic validators and stable diagnostics.
+- Mandatory review obligations for policy-selected impacts.
+- Optional auditable human/AI review runs.
+- Profile-specific validators and, only where needed, bounded model checking.
+- Profile-driven exports and context packets.
 
-It is not primarily a graph editor, database server, game engine, dialogue
-runtime, prose generator, or general theorem prover. Those systems may consume
-or integrate with it.
+It is not primarily a graph drawing program, word processor, game engine,
+database server, natural-language theorem prover, scientific peer reviewer, or
+prose generator. It can integrate with those tools.
 
 ## 4. Foundational distinctions
 
-Several concepts must remain separate. Collapsing them creates subtle but fatal
-design errors.
+### 4.1 Content and semantics
 
-### 4.1 Canon definition, world state, and narrative order
+Authored text, figures, tables, or design material are **content**. Claims,
+definitions, assumptions, evidence relationships, and constraints are the
+**semantic map**.
 
-The canonical project defines possible or authored reality. A **world state** is
-a derived snapshot at a point in a timeline or after a sequence of story
-transitions. **Narrative order** is the order in which an audience experiences
-scenes or disclosures. These orders are related but not identical: a flashback
-may depict an earlier event in a later chapter.
+They are distinct so the system can detect a changed section whose annotations
+have not been reviewed. They are jointly canonical when committed in the
+project. A content change and the semantic repairs it requires can occur in the
+same transaction.
 
-The application must never treat the entire story as one timeless bag of facts.
+### 4.2 Semantic links and operational dependency edges
 
-### 4.2 Proposition, truth, and perspective
+A semantic link is canonical meaning, such as “calculation C is derived from
+assumption A” or “test T verifies requirement R.”
 
-A proposition is content such as `killed(mayor, merchant)`. It is not true merely
-because it exists. Canon assertions state whether the proposition is true or
-false in a declared scope. Perspective records state whether an actor knows,
-believes, suspects, doubts, denies, or claims that proposition.
+The operational dependency graph is a derived index. Link type determines impact
+direction. For example:
 
-Canonical truth never automatically becomes character knowledge.
+- `derived-from(C, A)` means C depends on A.
+- `supports(E, C)` means C depends on evidence E.
+- `implements(I, R)` means implementation I depends on requirement R.
+- `contradicts(A, B)` affects both directions.
 
-### 4.3 Absence and negation
+The graph is not separately edited or stored as another source of truth.
 
-The default semantic policy is **open world**. The absence of a positive
-assertion means unknown or unmodeled, not false. Negative canon and perspective
-claims must be explicit when they matter.
+### 4.3 Explicit truth, status, and perspective
 
-Individual predicates may opt into a documented closed-world policy, but the
-choice is schema data and validation output must disclose it.
+A proposition is content such as “average current draw is 20 mA.” An assertion
+states a polarity, role, and lifecycle status for that proposition.
 
-### 4.4 World time and authoring revision
+Roles include fact, assumption, hypothesis, requirement, observation, result,
+conclusion, decision, recommendation, and definition. Status includes proposed,
+accepted, rejected, deprecated, and superseded.
 
-World time describes fictional chronology. A canonical revision describes the
-history of edits to the project. They are unrelated axes. Editing an ancient
-event today advances the project revision but does not move the event in world
-time.
+These distinctions matter. An accepted assumption is not claimed as observed
+fact; a rejected hypothesis does not contradict an accepted conclusion merely by
+existing.
 
-### 4.5 Canon and derived artifacts
+Profiles may add perspective. In fiction, canon truth is separate from what a
+character believes. In a paper, an assertion may be attributed to an author or
+source. The common core does not equate every recorded statement with truth.
 
-Canonical source data, committed through ValidatedWorld, is authoritative.
-Runtime JSON, lore books, prose drafts, checklists, indexes, diagrams, and AI
-context packets are generated views. Generated artifacts must identify their
-source revision and must not be edited as authoritative data.
+### 4.4 Absence and negation
 
-## 5. Canonical semantic model
+The default is open-world semantics. Missing information means unknown or
+unmodeled, not false. Negative assertions are explicit.
 
-All addressable records have a stable, opaque ID. IDs do not change when display
-names change. References use IDs, never duplicated names.
+A profile may declare a closed finite domain for a specific rule, but reports
+must disclose that assumption.
 
-### 5.1 World snapshot
+### 4.5 Project revision and subject-matter time
 
-A world snapshot contains at least:
+Project revision is edit history. Subject-matter time—fictional chronology,
+measurement date, design version, or historical period—is domain content. They
+are separate axes.
 
-- World identity and schema version.
-- Canonical revision and content hash.
-- Project policy and analysis limits.
-- Entity and predicate definitions.
-- Propositions and scoped canon assertions.
-- Perspective and provenance records.
-- Timelines, time points, and events.
-- Narrative graphs and optional selected traces.
-- Constraints and disclosure policy.
-- Prose or document annotations when present.
+### 4.6 Canonical source and generated output
 
-The first implementation may store the snapshot in one JSON file. Storage
-layout is not part of the semantic contract; normalized JSON export is.
+The canonical project contains committed content units and semantic records.
+Generated Markdown, rendered papers, lore books, runtime JSON, diagrams, reports,
+and context packets are derived artifacts.
 
-### 5.2 Entities
+An external document may be imported into a transaction, but editing a generated
+export never silently edits canon. Later round-trip editors must preserve stable
+content-unit IDs and import changes transactionally.
 
-An entity represents a thing with identity, for example:
+## 5. Common canonical model
 
-- Character, persona, or audience role.
-- Location or region.
-- Faction or organization.
-- Item, document, clue, or other object.
-- Mystery, quest, story arc, scene, or chapter.
-- Custom project-specific kinds.
+Every addressable record has a stable opaque ID and per-record revision. Display
+names and headings may change without changing identity.
 
-Every entity has a kind, display name, optional aliases, optional freeform
-description, tags, and explicit links. Medium-specific data belongs in extension
-payloads owned by adapters, not in hard-coded engine dependencies.
+### 5.1 Project snapshot
 
-### 5.3 Predicate definitions and propositions
+A common snapshot contains at least:
 
-A predicate definition declares:
+- Project identity, schema version, revision, and content hash.
+- Commit and validation policy.
+- Artifacts and ordered content units.
+- Subjects and typed predicates.
+- Propositions and assertions.
+- Source/evidence records.
+- Semantic links governed by versioned built-in link semantics.
+- Bindings between content and semantic records.
+- Explicit constraints.
+- Review attestations and profile extension records.
 
-- Stable predicate ID.
-- Ordered argument names and value types.
-- Which argument positions form a cardinality key, when applicable.
-- Maximum simultaneous positive values for that key, when applicable.
-- Optional symmetry or inverse metadata used only by declared validators.
-- Open- or closed-world policy.
+The first implementation uses one canonical JSON file. The storage layout is not
+the semantic contract; normalized JSON is.
 
-A proposition is a predicate plus typed arguments. It has its own stable ID so
-assertions, dialogue, deductions, and perspectives can refer to exactly the same
-content.
+### 5.2 Artifacts and content units
 
-The predicate catalog is a deliberately small, typed vocabulary. It is not a
-natural-language parser or an unrestricted ontology language. Projects may add
-custom predicates; custom semantics require custom constraints or validators.
+An artifact represents an authored document or another project-controlled body
+of content. Examples include a technical design, whitepaper, chapter manuscript,
+requirements document, or campaign outline.
 
-### 5.4 Canon assertions
+A content unit is the smallest stable review target. It contains:
 
-A canon assertion gives a proposition:
+- Stable ID and artifact ID.
+- Kind: section, paragraph, figure, table, equation, scene, requirement block,
+  code/design excerpt, or custom kind.
+- Sequence/order key and optional parent unit.
+- Heading/label and canonical text or structured content.
+- Content hash.
+- Semantic-review attestation bound to a content hash, when present.
+
+The POC stores text content inside canonical JSON and exports Markdown. A later
+round-trip Markdown importer may preserve IDs with unobtrusive markers.
+
+Changing content invalidates semantic-review attestations bound to its old hash.
+
+### 5.3 Subjects
+
+A subject is a named thing or concept used by claims:
+
+- Technical term, variable, quantity, component, interface, requirement target,
+  method, dataset, or organization.
+- Character, location, faction, item, event, or clue.
+- Any project-defined concept with stable identity.
+
+Subjects have kind, name, aliases, description, tags, and optional extension
+payloads. Names are never foreign keys.
+
+### 5.4 Predicates, propositions, and assertions
+
+A predicate declares typed argument roles. A proposition is a predicate plus
+typed arguments and optional human-readable gloss.
+
+An assertion adds:
 
 - Positive or negative polarity.
-- A world-time validity interval, if temporal.
-- A timeline or scenario scope, if not globally true.
-- Evidence/source references for author-facing traceability, when useful.
+- Assertion role.
+- Lifecycle status.
+- Optional scope/profile qualifiers.
+- Evidence and source references.
+- Optional author/rationale notes.
 
-Two opposite assertions in overlapping scopes are contradictory. Two different
-positive values for a single-valued predicate key in overlapping scopes are
-also contradictory.
+Deterministic contradiction checks compare only assertions whose role/status and
+scope make them simultaneously authoritative under project policy.
 
-Immutable background facts and changing state can share the proposition model,
-but frequently changed finite values should be represented as declared state
-variables and event effects so path analysis remains tractable.
+The common POC supports global/static scope. Technical and narrative profiles
+may add version, temporal, scenario, or audience scopes later.
 
-### 5.5 Perspective and information provenance
+### 5.5 Sources and evidence
 
-A perspective record contains:
+A source record describes internal or external support:
 
-- Holder: character, group, audience, narrator, or player role.
-- Proposition and polarity.
-- Attitude: knows, believes, suspects, doubts, denies, or claims.
-- World-time or narrative validity scope.
-- Provenance: witness event, speaker, document, clue, deduction, public
-  knowledge, author declaration, or another explicit source.
-- Confidence or certainty only when the project needs it.
+- Citation or document reference.
+- Dataset, measurement, experiment, test result, calculation, code artifact, or
+  design artifact.
+- Stable locator, optional URI, content hash, version/date, and notes.
 
-`knows` is factive in the deterministic model: the corresponding canon assertion
-must be true in scope. A false conviction is `believes`, not `knows`.
+ValidatedWorld can prove that required support links exist and refer to a known
+version. It cannot prove that external evidence is honest or scientifically
+sound without a specialized trusted validator.
 
-Knowledge propagation is explicit. The engine must not assume that everyone at
-a location heard a statement, that every faction member shares all knowledge, or
-that truth is public.
+### 5.6 Content bindings
 
-### 5.6 Time, events, and causality
+A content binding connects a content unit to a semantic record with a role:
 
-A timeline supplies an ordered set of time points. A time point has a stable ID
-and deterministic ordinal; optional calendar text is presentation data.
+- `asserts`
+- `defines`
+- `uses`
+- `discusses`
+- `presents-evidence`
+- `implements`
+- `verifies`
+- profile-specific roles
 
-An event has:
+Bindings create deterministic dependency edges and coverage. They also let an
+impact report point to the exact sections that need review.
 
-- Stable ID and timeline position or interval.
-- Participants and location references.
-- Preconditions expressed in the safe condition AST.
-- Effects expressed in the safe effect AST.
-- Causal prerequisite event references.
-- Optional witness or disclosure annotations.
+### 5.7 Semantic links
 
-Events capture durable changes relevant to continuity. ValidatedWorld is not
-required to event-source every moment of a game.
+A semantic link contains:
 
-### 5.7 Narrative graphs and traces
+- Stable ID and revision.
+- Source and target record IDs.
+- Link kind.
+- Rationale.
+- Provenance: manual, imported, AI-proposed-and-confirmed, or derived by a named
+  deterministic rule.
+- Optional confidence for heuristic provenance; confidence never changes
+  deterministic meaning after confirmation.
 
-A narrative graph models authored progression. Node kinds may include scenes,
-chapters, quest states, encounters, or beats. Every node may declare:
+Initial link kinds and impact meaning:
 
-- Entry conditions.
-- State and perspective effects.
-- Optional depicted fictional time, separate from narrative stage/order.
-- A presentation-only mode for flashbacks that may disclose information without
-  mutating current branch state.
-- Assertions, claims, clues, and disclosures presented there.
-- Referenced entities and prose artifacts.
-- Outgoing transitions with conditions and effects.
+| Link kind | Meaning | Operational dependency |
+|---|---|---|
+| `depends-on` | Source requires target | source → target |
+| `derived-from` | Source conclusion derives from target | source → target |
+| `supports` | Source evidence supports target claim | target → source |
+| `contradicts` | Records conflict | bidirectional |
+| `refines` | Source specializes target | source → target |
+| `supersedes` | Source replaces target | bidirectional review |
+| `defines` | Source definition defines target subject | users of target also depend on source |
+| `uses` | Source content/claim uses target | source → target |
+| `implements` | Source implements target requirement | source → target |
+| `satisfies` | Source claim/decision satisfies target requirement | source → target |
+| `verifies` | Source test/evidence verifies target requirement | source → target |
+| `cites` | Source relies on target source | source → target |
+| `mentions` | Informational association | no transitive impact by default |
 
-The condition/effect language is a finite, typed data AST. It is not C#, a
-script string, or arbitrary user code.
+Common link kinds have fixed v1 semantics. Schema v1 does not accept arbitrary
+custom common-link kinds. A registered profile can derive typed profile edges
+from its own records; unknown profile relationships are informational/uncovered
+and cannot affect deterministic impact until a validator understands them.
 
-Different media use the graph differently:
+### 5.8 Constraints
 
-- A novel or screenplay normally supplies a selected linear trace. The validator
-  replays every node in order.
-- A game supplies a finite branching graph. The analyzer explores reachable
-  abstract states within explicit bounds.
-- A campaign may declare prepared branches and leave the rest open. Reports must
-  mark undeclared play as outside coverage.
+The POC uses a small typed set:
 
-A quest is a narrative graph or subgraph with domain metadata. The core should
-not pretend that every novel arc is a quest state machine.
+- Accepted assertions may not explicitly contradict in the same scope.
+- Selected claim roles require at least one support/derivation link.
+- `derived-from` chains may be required acyclic.
+- Definitions for a selected term/scope may be required unique.
+- Accepted requirements may require at least one implementation and verification
+  link.
+- Selected content kinds require current semantic-review attestation.
+- Policy-selected impact records require review dispositions before commit.
 
-### 5.8 Mysteries, clues, and deductions
+Do not add an unrestricted logic language. New constraint types need explicit
+evaluation, diagnostics, and tests.
 
-A mystery definition may declare:
+## 6. Transactions, impact, and mandatory review
 
-- One or more solution propositions.
-- Suspects and relevant motive/opportunity propositions.
-- Clues and acquisition nodes.
-- Red herrings as author annotations.
-- Explicit deduction rules from available evidence to conclusions.
-- Earliest allowed disclosure stages.
-- Stages or terminal states where the solution must be derivable.
-- Required clue-route redundancy.
-
-Deduction rules are explicit finite rules, not natural-language inference. This
-lets the system validate availability and author-declared fair-play structure.
-It does not prove that a human reader will notice a clue or find the solution
-satisfying.
-
-### 5.9 Prose and semantic annotations
-
-Freeform text is stored as an artifact or external source reference. A prose
-artifact may cite:
-
-- Entities and propositions it uses.
-- Claims it asserts or contradicts.
-- Information it reveals to an audience.
-- Narrative node and point-of-view context.
-
-These annotations create deterministic dependencies. A linter or AI review may
-suggest missing annotations, but extracted claims do not become canon without a
-transaction.
-
-Long generated prose should retain source references at scene or section
-granularity. When canon changes, impact analysis can then identify sections to
-regenerate or review instead of rereading hundreds of pages.
-
-## 6. Safe condition, effect, and constraint languages
-
-The initial condition AST supports a small closed set:
-
-- All, any, and not.
-- Proposition holds with polarity.
-- State variable equals a typed value.
-- Perspective has a declared attitude toward a proposition.
-- Narrative flag is present.
-
-Initial effects support:
-
-- Set a finite state variable.
-- Assert or retract a transient proposition in analyzed story state.
-- Add, replace, or remove a perspective attitude.
-- Add a narrative flag.
-
-Initial project constraints are typed records such as:
-
-- Required or forbidden reachability.
-- Forbidden disclosure before a boundary.
-- Required fallback when an actor is unavailable.
-- Minimum clue acquisition routes.
-- Mutual exclusion.
-- Required terminal outcome.
-
-The languages must be deterministic, serializable, type-checkable, and safe to
-evaluate without executing project code. Extension assemblies may add validators
-through a versioned interface, but loading untrusted extensions is an explicit
-host decision.
-
-## 7. Transactions and revisions
-
-All canonical authoring occurs in a transaction based on an exact snapshot
+All canonical authoring occurs in a transaction based on an exact project
 revision and content hash.
 
 A transaction records:
 
-- Transaction ID, base revision/hash, intent, and author metadata.
-- Ordered semantic operations with optimistic preconditions.
-- The direct changed record set.
-- Derived impact set and validation results.
-- Acknowledgements for eligible non-blocking diagnostics.
-- Status and commit metadata.
+- ID, base revision/hash, intent, author, and status.
+- Add, replace, and remove operations against stable record IDs.
+- Direct changed records.
+- Derived impact set with explanation paths.
+- Review obligations and dispositions.
+- Deterministic reports.
+- Heuristic review runs, concerns, resolutions, and acknowledgements.
+- Commit metadata.
 
-Operations target stable record IDs; they do not use fragile JSON array indexes.
-Add, replace, and remove operations are distinct. Replace and remove include the
-expected record revision or hash.
+### 6.1 Impact computation
 
-Drafts may be temporarily incomplete. Draft validation provides fast feedback.
-Commit validation builds the complete projected snapshot and applies project
-policy.
+Dependencies are extracted from typed fields, content bindings, semantic links,
+constraints, and profile records.
+
+The impact set is the changed records plus reverse transitive dependents in the
+union of the base and projected dependency graphs. Both graphs are required:
+
+- Base edges find material affected by a removed dependency.
+- Projected edges find material affected by a newly introduced dependency.
+
+Impact means “must be considered,” not “must be edited.”
+
+### 6.2 Review obligations
+
+Project policy selects which impacted records require disposition. Each
+obligation contains target ID, shortest impact path, evidence edges, projected
+record/content hashes, and status:
+
+- `pending`
+- `updated`
+- `reviewed-no-change`
+- `not-applicable`
+
+Changed records receive `updated` automatically. The other non-pending
+dispositions require reviewer identity and rationale. They are fingerprints over
+the projected record plus impact evidence; modifying the transaction invalidates
+stale dispositions.
+
+Commit policy may block while required obligations remain pending. This creates
+useful enforcement even when the underlying semantic question requires human or
+AI judgment.
+
+### 6.3 Heuristic review
+
+A review run records:
+
+- Base-project, change-set, and projected-state hashes.
+- Review profile and template versions.
+- Context packet manifest and truncation state.
+- Reviewer type/identity and, for AI, provider/model parameters.
+- Structured concerns with cited record IDs.
+- Completion/failure status.
+
+Policy may require a named review profile for selected change categories.
+Concerns remain heuristic. Policy may require each concern to be resolved by a
+semantic change, rejected with rationale, or acknowledged.
+
+AI-extracted claims and links are candidates. They become canonical only through
+explicit transaction operations, retaining provenance.
+
+### 6.4 Atomic commit
 
 Commit is optimistic and atomic:
 
 1. Acquire the workspace commit lock.
-2. Re-read the canonical head.
-3. Reject a stale base revision rather than silently merge it.
-4. Apply operations and verify operation preconditions.
-5. Build indexes and validate the projected snapshot.
-6. Evaluate commit policy, acknowledgements, and analysis completeness.
-7. Serialize deterministically and compute the content hash.
-8. Atomically replace the canonical snapshot.
-9. Record auditable commit metadata.
+2. Re-read and verify the canonical head.
+3. Reject a stale base or record precondition.
+4. Apply all operations to a projected snapshot.
+5. Build base and projected dependency graphs.
+6. Compute impact and current review-obligation fingerprints.
+7. Run required deterministic validators and review profiles.
+8. Apply commit policy to errors, inconclusive phases, pending obligations, and
+   unresolved concerns.
+9. Serialize deterministically, hash, and atomically replace canon.
+10. Record auditable commit metadata.
 
-If any required step fails, canon remains byte-for-byte at the previous
-revision. Branching and merge are later features; a merge is always a new
-transaction validated against the target head.
+Failure before replacement leaves canon byte-for-byte unchanged.
 
-## 8. Dependency and impact graph
+## 7. Deterministic validation
 
-The dependency graph is derived, not separately authored. Nodes correspond to
-addressable records. A record has a dependency edge to every record referenced
-by its typed fields, expressions, propositions, annotations, and constraints.
+Validators are pure with respect to a supplied snapshot/request. Results have
+stable codes, evidence, and ordering.
 
-For a change, the impact set is the changed nodes plus their reverse transitive
-dependents in the union of the base and projected graphs. Using both graphs is
-necessary to catch dependencies removed by the transaction.
+### 7.1 Common phases
 
-The graph supports:
+1. JSON/schema/integrity.
+2. IDs, record revisions, references, and types.
+3. Predicate/proposition/assertion typing.
+4. Semantic-link endpoint and impact-mode validation.
+5. Explicit contradiction and status checks.
+6. Support, definition, cycle, and traceability constraints.
+7. Content-binding and semantic-review freshness.
+8. Transaction impact and review obligations.
+9. Required review-run completion and concern disposition.
+10. Profile validators and commit policy.
 
-- `dependencies`: what a record relies on.
-- `dependents`: what relies on a record.
-- `affected-by`: likely review and validation surface for a change.
-- `why`: an edge-by-edge explanation path.
-- Deterministic context assembly for agents and AI reviewers.
+Later phases skipped because prerequisites failed are explicitly inconclusive.
 
-Impact means “must be checked,” not “must be edited.” Free-text relationships
-that have no reference or annotation are not guaranteed to appear in the graph.
-
-## 9. Deterministic validation
-
-Deterministic validation is the product backbone. Validators are pure with
-respect to a supplied snapshot and request. Results are stable-sorted and have
-stable codes.
-
-### 9.1 Validation phases
-
-Run in dependency order:
-
-1. Parse and schema compatibility.
-2. Identity, reference, and type integrity.
-3. Predicate, expression, and extension payload typing.
-4. Assertion scope, polarity, cardinality, and temporal consistency.
-5. Event chronology and causal prerequisites.
-6. Perspective truth/provenance rules.
-7. Narrative trace replay and graph structural checks.
-8. Bounded reachability and project constraints.
-9. Mystery and disclosure rules.
-10. Commit policy and coverage completeness.
-
-Later phases may stop when prerequisite phases make their results meaningless,
-but they must emit an explicit skipped/inconclusive status.
-
-### 9.2 Diagnostics
+### 7.2 Diagnostics
 
 Every diagnostic includes:
 
 - Stable code and rule version.
-- Severity and result class.
-- Concise message.
-- Primary and related record IDs.
-- Source span when available.
-- Evidence or a replayable counterexample.
+- Result class and severity.
+- Message, primary ID, related IDs, and source location.
+- Evidence or impact/counterexample path.
 - Suggested repair categories when safe.
-- A deterministic fingerprint for acknowledgements.
+- Deterministic fingerprint.
 
-Severities are error, warning, information, concern, and internal failure.
-Acknowledgements apply only to policy-eligible warnings or concerns. They are
-bound to the diagnostic fingerprint and expire when relevant evidence changes.
+Acknowledgements bind to fingerprints and expire when evidence changes.
 
-### 9.3 Bounded analysis
+### 7.3 Deterministic versus workflow enforcement
 
-Narrative exploration operates on a finite abstract state containing only state
-referenced by the analyzed graph and constraints. The engine traverses in stable
-order and memoizes canonical state keys.
+Examples:
 
-Every report includes limits such as maximum states, transitions, depth, and
-wall-clock budget. Reaching a limit produces an inconclusive diagnostic. Commit
-policy decides whether a required inconclusive analysis blocks commit; the
-recommended default is to block.
+- “Section A explicitly uses definition D” is deterministic.
+- “Changing D impacts A through this path” is deterministic.
+- “A was reviewed against the projected D by reviewer X” is an auditable
+  workflow fact.
+- “A remains logically persuasive” is not generally deterministic.
 
-### 9.4 Incremental validation policy
+The product should make all four visible without conflating them.
 
-The proof of concept performs full commit validation because the worlds are
-small and correctness is more valuable than optimization. Impact sets may scope
-draft checks and AI context.
+## 8. Document and technical profile
 
-Incremental commit validation is permitted later only after tests show that its
-result is equivalent to full validation for every validator in scope.
+The first profile applies the common model to technical designs, specifications,
+whitepapers, and research-oriented documents.
 
-## 10. AI-assisted authoring and review
+Profile vocabulary includes:
 
-AI is an adapter around the deterministic core, not an authority inside it.
+- Terms and definitions.
+- Requirements and constraints.
+- Assumptions and hypotheses.
+- Observations and measurements.
+- Calculations and derived claims.
+- Architecture/design decisions.
+- Implementations and interfaces.
+- Tests and verification evidence.
+- Conclusions and recommendations.
+- Citations and source versions.
 
-An AI review request is immutable and auditable. It records the snapshot hash,
-transaction hash, review profile, provider/model identifier, prompt/template
-version, context record IDs/hashes, truncation information, and output.
+Initial deterministic rules focus on traceability, not pretending to peer review
+the document:
 
-Review context is assembled from explicit dependencies and constraints. Results
-are cached by complete request hash. An AI finding is a concern until a
-deterministic transaction adds or repairs canon.
+- Definitions used by covered content resolve uniquely.
+- Accepted conclusions/decisions have policy-required support.
+- Derivation cycles are rejected when policy declares them invalid.
+- Requirements have required implementation and verification coverage.
+- Changed content has current semantic review.
+- Changed assumptions propagate review obligations to dependent claims and
+  sections.
 
-The core and validation projects have no OpenAI or other model-vendor
-dependency. Provider implementations live behind interfaces in the generation
-or host layer.
+Optional heuristic profiles may check terminology, stale values, missing
+qualifications, unsupported prose, or likely unmodeled dependencies.
 
-Generated prose is derived output. It receives a disclosure-safe continuity
-packet and should return source citations or structured annotations. The system
-may review the prose, but must not claim the prose is proven consistent.
+The profile does not certify scientific validity, engineering safety, citation
+quality, patentability, or legal compliance.
 
-## 11. Agent-first application interface
+## 9. Narrative profile
 
-The primary interface is semantic and structured. Agents should not need to
-rewrite canonical JSON directly or remember which validators a commit requires.
+Fiction extends the common graph rather than redefining it.
 
-Required use-case families include:
+Additional records include:
 
-- Initialize, inspect, and version a world.
-- Begin, inspect, apply, validate, commit, and abort transactions.
-- Get records and query by typed filters.
-- Trace dependencies, impact, truth, perspective provenance, and reachability.
-- Explain a diagnostic or counterexample.
-- Produce continuity/context packets.
-- Export canonical and human-readable views.
+- Timelines and ordered time points.
+- Temporally scoped assertions.
+- Events with causal prerequisites.
+- Perspective records for knowledge, belief, suspicion, denial, and
+  unawareness.
+- Narrative presentation order and disclosure.
+- Mystery clues and explicit deduction rules.
 
-The CLI is the first host and must support JSON output with a versioned envelope,
-stable exit codes, and no prompts in non-interactive mode. A natural-language
-query parser is not required. Semantic operations should map cleanly to later
-MCP tools.
+A linear novel is primarily an ordered content artifact plus temporal and
+perspective constraints. It does not require general game-state exploration.
 
-## 12. Storage, serialization, and migration
+Narrative claims and prose sections use the same common bindings, impact graph,
+transactions, review obligations, and context packets as technical documents.
 
-The POC uses a single canonical JSON snapshot plus separate draft transaction
-files. This keeps atomic commit and deterministic hashing straightforward.
+## 10. Interactive-state profile
 
-Serialization requirements:
+An interactive world is still a static canonical specification. It adds:
 
-- Strict schema version.
-- Deterministic property and record ordering for canonical output.
-- Culture-independent numbers and timestamps.
-- Rejection of duplicate JSON properties.
-- Preservation of unknown extension payloads only under declared namespaces.
-- Explicit migrations between supported schema versions.
-- No silent guessing or lossy downgrade.
+- Finite state-variable definitions.
+- Conditions over propositions and state values.
+- Effects that update them.
+- Transition graphs.
+- Invariants and reachability constraints.
 
-External or legacy JSON imports run through mapping adapters and create draft
-transactions. Import never silently becomes canon.
+A concrete runtime state is derived from initial values plus a path of actions.
+The canonical project does not store every possible complete state.
 
-Storage may later move to an immutable object store, SQLite, or service, but the
-domain and validation APIs operate on snapshots and must not depend on a storage
-engine.
+Bounded analysis explores `(node, relevant abstract state)` with deterministic
+ordering and memoization. It can prove reachability properties within a finite
+model or return a shortest counterexample. Limit exhaustion is inconclusive.
 
-## 13. Export and disclosure
+Typed conditions and effects are necessary. Merely adding more unlabelled graph
+connections cannot represent mutually exclusive branches or state changes.
 
-Exports are profile-driven projections from a committed snapshot or an
-explicitly labeled draft preview.
+This profile follows the linear document and narrative profiles; its complexity
+must not shape the common POC schema prematurely.
 
-Initial profiles:
+## 11. Context assembly
+
+For a task or change, context selection starts with seed records and includes, in
+deterministic priority order:
+
+1. Seeds.
+2. Applicable constraints and definitions.
+3. Forward dependencies needed to understand them.
+4. Direct and transitive impacted dependents.
+5. Relevant content units and profile records.
+
+Packets include exact project revision/hash, record IDs/hashes, selection paths,
+limits, omissions, and disclosure scope. Truncation is explicit.
+
+This is the main scaling mechanism for AI authors: provide the relevant semantic
+neighborhood rather than the whole document.
+
+## 12. Agent-first interface
+
+The primary API is semantic and structured. Required use-case families:
+
+- Initialize, inspect, and version a project.
+- Import or author content units.
+- Create/query subjects, claims, bindings, sources, links, and constraints.
+- Begin, apply, validate, review, commit, and abort transactions.
+- Compute impact and explain dependency paths.
+- List and disposition review obligations.
+- Submit review runs, concerns, resolutions, and acknowledgements.
+- Build context/review packets.
+- Export normalized JSON, Markdown, and reports.
+- Invoke profile analysis when installed.
+
+The CLI is the first host. It uses versioned JSON output, stable exit codes, and
+no prompts in non-interactive mode. Natural-language query parsing is not
+required.
+
+## 13. Storage and serialization
+
+The POC uses a single canonical JSON snapshot and separate draft transaction
+files. Content units are stored in the snapshot so atomicity is straightforward.
+
+Requirements:
+
+- Strict schema version and duplicate-property rejection.
+- Deterministic property/record ordering.
+- Culture-independent values and timestamps.
+- Explicit tagged values.
+- Namespaced extension payloads with coverage reporting.
+- Explicit migrations; no silent guessing or lossy downgrade.
+- Content hashes and project hash verification.
+
+A Markdown importer/exporter is derived tooling. Round-trip import must preserve
+stable unit IDs or propose an explicit mapping for confirmation.
+
+Storage may later move to an immutable directory/object store, SQLite, or a
+service. Domain and validation APIs operate on snapshots and remain storage
+independent.
+
+## 14. Export and disclosure
+
+Initial exports:
 
 - Canonical normalized JSON.
-- Human continuity reference.
-- Context packet for one scene, character, clue, or change.
-- Audience-safe story outline.
-- Mystery matrix and clue timeline.
-- QA checklist of relevant declared facts.
+- Reconstructed ordered Markdown document.
+- Dependency/impact report.
+- Review-obligation checklist.
+- Focused context/review packet.
+- Coverage report.
 
-Every artifact includes generation metadata: world ID, revision, content hash,
-profile/version, disclosure scope, timestamp, and a generated-file warning.
+Later profiles add technical traceability matrices, narrative continuity
+references, mystery matrices, and runtime packages.
 
-Disclosure filtering is structural. Explicit disclosure rules select records
-before prose generation. Prompt instructions alone are not an acceptable
-secrecy boundary.
+Every artifact includes project ID, revision, content hash, export profile/version,
+disclosure scope, generation time, and a generated-artifact warning.
 
-## 14. Medium and engine independence
+Disclosure filtering selects records structurally before formatting or AI use.
 
-The core describes semantic fiction concepts and finite narrative state. It has
-no dependency on Unity, Unreal, Godot, Ink, Yarn, a tabletop edition, a word
-processor, or an AI provider.
+## 15. AI-assisted authoring and review
 
-Adapters may add:
+AI is a reviewer and proposal source around the deterministic core.
 
-- Engine asset/schedule/animation grounding.
-- Runtime quest or dialogue export.
-- Tabletop stat blocks and campaign books.
-- Novel chapter and scene documents.
-- Mod packages represented as semantic transactions.
+An AI review may be mandatory under project policy, but:
 
-Adapter-specific extension data is namespaced, schema-versioned, and validated
-by the adapter. It cannot weaken core invariants.
+- It receives an auditable bounded context packet.
+- Its output follows a structured schema.
+- Every concern cites supplied record IDs.
+- Every candidate claim/link remains noncanonical until accepted in a
+  transaction.
+- Every cache entry includes snapshot, transaction, packet, prompt, provider,
+  model, and parameter hashes.
+- Provider failure is reported as failed/inconclusive review, not a content
+  validation error.
 
-## 15. Plugin and tool integration
+The core and validation projects have no provider dependency. The product can
+also accept review results from an external agent without making its own API
+call.
 
-The long-term agent integration should expose a controlled MCP server backed by
-the application use cases, with a companion skill that teaches agents the safe
-authoring workflow. It should not expose an unrestricted shell or make the MCP
-layer the source of truth.
+## 16. Medium and provider independence
 
-As of 2026-08-10, OpenAI's plugin architecture packages skills, MCP servers, and
-optional UI, and uses `.codex-plugin/plugin.json` as the package manifest. The
-integration should therefore eventually be packaged as a plugin containing:
+The common core has no dependency on a word processor, game engine, rules
+edition, database, UI, or model provider.
 
-- A ValidatedWorld authoring skill.
-- A local or remote MCP server exposing semantic query/transaction tools.
-- Optional UI only after headless workflows are complete.
+Profiles/adapters may add:
 
-References:
+- Markdown, DOCX, LaTeX, or publishing integration.
+- Requirements/test systems and citation managers.
+- Unity, Unreal, Godot, dialogue, or tabletop exports.
+- Technical, scientific, patent-drafting, or narrative review prompts.
+
+Adapters cannot weaken common transaction, integrity, evidence-level, or review
+provenance rules.
+
+## 17. Plugin and tool integration
+
+Long-term agent integration should expose a controlled MCP server backed by
+application use cases and a companion workflow skill. It must not expose an
+unrestricted shell or make the integration layer authoritative.
+
+As of 2026-08-10, OpenAI plugins may package skills, MCP servers, and optional UI
+with a `.codex-plugin/plugin.json` manifest:
 
 - [OpenAI plugin architecture](https://developers.openai.com/plugins/concepts/plugins)
 - [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins)
 
-This packaging is an adapter milestone, not a reason to couple the core to a
-current vendor format. Re-check the official documentation when implementation
-begins.
+Packaging is gated until the headless application API and common document POC
+are stable. Re-check current official documentation at implementation time.
 
-## 16. Commit policy
-
-Project policy determines which findings block commit. The default POC policy:
-
-- All parse, structural, reference, type, contradiction, temporal, and selected
-  narrative errors block.
-- Required bounded analysis that is inconclusive blocks.
-- Warnings require no acknowledgement unless a specific project contract says
-  otherwise.
-- AI concerns never block by default.
-- Changing a declared mystery solution requires explicit human approval in
-  interactive hosts; non-interactive hosts fail with an approval-required
-  result.
-
-Policy cannot suppress internal failures, hash/revision conflicts, or invalid
-acknowledgement fingerprints.
-
-## 17. Initial solution boundaries
-
-The target project dependency direction is:
+## 18. Project boundaries
 
 ```text
 ValidatedWorld.Core                 (no project dependencies)
@@ -614,83 +670,91 @@ ValidatedWorld.Core                 (no project dependencies)
 └── ValidatedWorld.Export           (Core, Validation)
 
 ValidatedWorld.Application          (Core, Serialization, Validation)
-ValidatedWorld.Cli                  (Application, Export, Generation adapters)
+ValidatedWorld.Cli                  (Application, Export, Generation)
 ValidatedWorld.Mcp                  (later; Application, Export, Generation)
 ```
 
-`ValidatedWorld.Application` is the one planned addition to the current scaffold
-in blueprint work package 0. It owns use-case orchestration, workspace locking,
-transaction lifecycle, commit, and queries. Core stays independent of files,
-JSON, consoles, networks, model providers, and engines.
+`ValidatedWorld.Application` is the one planned project addition in blueprint
+WP0. Profile records remain in Core only when they are provider/engine-neutral;
+profile validators belong in Validation or a later profile assembly when one is
+actually needed.
 
-The blueprint defines exact namespace and work-package guidance.
+## 19. Proof-of-concept gates
 
-## 18. Proof-of-concept scope
+### 19.1 Gate A — Technical document dependency POC
 
-The POC proves one end-to-end vertical slice with a small Harbor mystery:
+Use a small technical design containing:
 
-- 5–10 characters, 2 factions, 3 locations, and key items/documents.
-- 20–40 propositions with positive/negative and temporal assertions.
-- At least one false belief and one provenance chain.
-- Ordered events including one character availability change.
-- A small branching narrative graph and an authored linear trace.
-- One solution, several clues, explicit deduction rules, and a reveal boundary.
-- A fallback path when a required character is unavailable.
+- Ordered sections.
+- Requirements, assumptions, a derived estimate, decisions, and a verification
+  plan.
+- Content bindings and semantic links.
+- One transaction that changes an assumption.
+- Several legitimately impacted claims/sections and one unrelated section.
 
 The POC must:
 
-1. Load and strictly validate canonical JSON.
-2. Begin and persist a transaction.
-3. Apply semantic operations and build a projected snapshot.
-4. Derive base/projected dependency graphs and an explained impact set.
-5. Detect reference, contradiction, temporal, perspective, disclosure, and
-   reachability failures.
-6. Produce a replayable counterexample for a path failure.
-7. Reject a stale or invalid commit without modifying canon.
-8. Atomically commit a valid change.
-9. Export normalized JSON and a human continuity packet.
-10. Return deterministic JSON command results suitable for an agent.
+1. Strictly load and hash canonical JSON.
+2. Apply semantic operations in an isolated transaction.
+3. Build base/projected dependency graphs.
+4. Produce the exact transitive impact set with explained paths.
+5. Create policy-required review obligations.
+6. Invalidate dispositions when transaction evidence changes.
+7. Detect explicit contradictions, missing support, invalid derivation cycles,
+   traceability gaps, and stale content review.
+8. Reject invalid, pending-review, or stale commits without modifying canon.
+9. Atomically commit a valid fully reviewed change.
+10. Export Markdown, impact/review reports, and a focused context packet.
 
-AI calls, a GUI, a plugin package, rich prose generation, universal import, and
-engine adapters are not required to prove the thesis.
+No AI API, timeline, mystery, state exploration, GUI, or plugin is required.
 
-## 19. Success and stop criteria
+### 19.2 Gate B — Heuristic review evaluation
 
-Success is not measured by prose volume. It is measured by whether an agent can
-make realistic structured changes without degrading declared continuity.
+Use an external/fake review interface first, then evaluate an optional real
+provider on missing implicit links and stale prose. Measure usefulness and cost.
 
-The evaluation corpus must include intentional errors and expected diagnostics.
-Repeated deterministic validation of the same snapshot must produce equivalent
-ordered results. Failed commits must leave the canonical file unchanged.
+### 19.3 Gate C — Narrative profile
 
-Do not expand scope until the POC evaluation described in
-[feasibility.md](feasibility.md) demonstrates useful defect detection at an
-acceptable annotation cost. If full narrative-state modeling is too expensive,
-retain the smaller useful product: typed canon, linear trace validation,
-dependency impact, and continuity packet generation.
+Add a linear Harbor mystery for chronology, perspective, clue, and disclosure
+validation.
 
-## 20. Non-goals
+### 19.4 Gate D — Interactive-state profile
 
-The initial product does not:
+Add a miniature branching scenario with declared state variables, transitions,
+invariants, and deliberately bounded exploration only after the linear profile
+demonstrates value.
 
-- Prove arbitrary prose consistent.
-- Generate a complete novel autonomously.
-- Judge literary quality, emotion, fun, or commercial value.
+## 20. Success and stop criteria
+
+Gate A succeeds if realistic changes reliably surface the right dependent claims
+and sections, required review prevents silent staleness, annotation cost is
+acceptable, reports are deterministic, and agents can repair failures from
+structured evidence.
+
+If typed claims are too burdensome, retain section-level semantic links and
+review obligations. If narrative profiles fail, keep the technical/document
+product. Do not broaden claims merely because a demo is visually impressive.
+
+## 21. Non-goals
+
+The common POC does not:
+
+- Prove arbitrary prose, scientific truth, engineering safety, or legal validity.
+- Automatically accept extracted claims or links.
 - Build a universal ontology or unrestricted rules language.
-- Exhaust unbounded game or tabletop play.
-- Replace a game engine, dialogue runtime, version-control system, or document
-  editor.
-- Automatically accept AI-extracted statements as canon.
-- Require every descriptive detail to be formalized.
-- Build a visual graph editor before the agent-first workflow works.
-- Promise backward compatibility while the POC schema is still experimental.
+- Perform general mathematical proof or full citation fact-checking.
+- Generate a complete paper, novel, or game autonomously.
+- Explore interactive state before the common graph passes Gate A.
+- Replace source control, a word processor, peer review, a game engine, or a
+  requirements-management suite.
+- Build a GUI, natural-language query language, or public plugin first.
+- Promise schema backward compatibility during the POC.
 
-## 21. Durable direction
+## 22. Durable direction
 
-The enduring concept is:
+> Turn the implicit semantic web inside a large authored project into an
+> explicit, inspectable dependency graph; validate what can be proven, force
+> review where it cannot, and commit only a coherent acknowledged change.
 
-> Model the continuity that matters, validate every proposed canonical change
-> against an explicit and bounded semantic world, report what was and was not
-> proven, and publish the resulting canon into any medium.
-
-Implement the smallest complete version of that loop before adding breadth.
+Implement the smallest complete version of that loop before adding profile
+complexity.

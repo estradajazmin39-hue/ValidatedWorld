@@ -1,51 +1,73 @@
 # ValidatedWorld
 
-ValidatedWorld is an experimental continuity compiler for long-form fiction and
-narrative worlds.
+ValidatedWorld is an experimental **consistency compiler for large, connected
+documents and designed worlds**.
 
-It gives important story information stable identities and explicit semantics—
-truth, time, character knowledge, events, clues, and narrative conditions—then
-validates proposed changes in an isolated transaction before they become canon.
-The intended primary user is an AI authoring agent, with a deterministic .NET
-core that remains useful to human tools and independent of any model provider,
-game engine, or publishing medium.
+A long document looks sequential on the page, but its meaning is a graph:
+definitions are used by later sections, conclusions depend on assumptions and
+evidence, requirements drive design decisions and tests, fictional events affect
+characters and clues, and one changed statement can invalidate material far away
+from it.
 
-The project is deliberately honest about its limits: it can validate declared
-continuity, finite narrative models, and explicit constraints. It cannot prove
-that arbitrary unannotated prose is consistent or that a story is good.
+ValidatedWorld makes the important parts of that hidden graph explicit. It gives
+content units and claims stable identities, records typed relationships between
+them, computes the impact of a proposed change, and requires affected material
+to be updated or deliberately reviewed before the change becomes canonical.
+Optional AI review can propose missing claims and connections or flag likely
+semantic conflicts; deterministic validation reports exactly what was proven and
+what remains heuristic.
+
+## Intended uses
+
+- Technical designs: trace requirements, assumptions, decisions,
+  implementations, and verification plans.
+- Whitepapers and research-oriented documents: trace definitions, claims,
+  evidence, derivations, citations, and conclusions.
+- Novels and mysteries: track facts, chronology, character knowledge, clues, and
+  disclosure.
+- Games and campaigns: describe a static transition model whose possible runtime
+  states are derived from variables, conditions, effects, and player choices.
+
+Despite the name, a “world” is any versioned universe of connected claims and
+artifacts. Fiction is one profile, not the foundation of every project.
+
+ValidatedWorld cannot prove arbitrary prose correct or a paper scientifically
+sound. Its durable promise is narrower: preserve explicit constraints, expose
+change impact, force review where certainty ends, and assemble focused context
+for an authoring agent.
 
 ## Start here
 
-- [Feasibility and limits](docs/feasibility.md) — what can actually be
-  guaranteed and the smallest useful product.
+- [Feasibility and limits](docs/feasibility.md) — the guarantee boundary and the
+  smallest useful product.
 - [Product and architecture specification](docs/validated_world_authoring_spec.md)
-  — authoritative product behavior and boundaries.
+  — the common document/claim graph and specialized profiles.
 - [Implementation blueprint](docs/implementation_blueprint.md) — domain types,
-  JSON contract, algorithms, diagnostics, tests, and sequenced work packages for
-  coding agents.
+  algorithms, tests, and sequenced work packages for coding agents.
 
 ## Current status
 
 The repository is a .NET 10 scaffold plus an implementation-ready design. The
-production projects and tests are still placeholders. The next implementation
-step is work package 0 in the blueprint; a plugin, GUI, prose generator, and AI
-provider integration are intentionally deferred until the continuity model has
-passed its proof-of-concept evaluation.
+first proof of concept is a small technical design document: changing an
+assumption must identify every dependent claim and section and create review
+obligations. A mystery-world profile follows only after that simpler core proves
+useful.
 
-## Planned workflow
+## Core workflow
 
 ```text
-inspect canon
+inspect project and dependency graph
 → begin transaction
-→ apply semantic changes
-→ compute impact
-→ validate and analyze
-→ repair or reject
+→ change content, claims, or links
+→ compute transitive impact
+→ validate explicit rules
+→ review every affected unit
+→ resolve or acknowledge heuristic concerns
 → commit atomically
-→ export derived material
+→ export documents and focused context packets
 ```
 
-Build and test the scaffold with:
+Build and test with:
 
 ```powershell
 dotnet build ValidatedWorld.slnx
