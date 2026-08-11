@@ -47,7 +47,8 @@ load a canonical project snapshot
 → run optional required heuristic reviews
 → update, justify, resolve, or acknowledge
 → commit atomically
-→ export documents, reports, and focused context packets
+→ optionally compose missing content as a new transaction proposal
+→ render accepted content through a selected output profile
 ```
 
 ValidatedWorld does not make an AI remember hundreds of pages. It gives the AI a
@@ -93,7 +94,8 @@ ValidatedWorld combines:
 - Mandatory review obligations for policy-selected impacts.
 - Optional auditable human/AI review runs.
 - Profile-specific validators and, only where needed, bounded model checking.
-- Profile-driven exports and context packets.
+- Replaceable import, output-profile, and AI-composition contracts.
+- Profile-driven deterministic exports and context packets.
 
 It is not primarily a graph drawing program, word processor, game engine,
 database server, natural-language theorem prover, scientific peer reviewer, or
@@ -158,11 +160,22 @@ Project revision is edit history. Subject-matter time—fictional chronology,
 measurement date, design version, or historical period—is domain content. They
 are separate axes.
 
-### 4.6 Canonical source and generated output
+### 4.6 Persistence, projection, and authorship
 
 The canonical project contains committed content units and semantic records.
-Generated Markdown, rendered papers, lore books, runtime JSON, diagrams, reports,
-and context packets are derived artifacts.
+Canonical serialization is the lossless persistence/interchange representation
+of that project. It is not a publishing format.
+
+An output profile is a versioned implementation that projects accepted records
+into Markdown, a rendered paper, lore book, runtime JSON, diagram, report, or
+another artifact. It may reorder, select, aggregate, format, and emit declared
+deterministic boilerplate, but it cannot invent missing semantic claims or
+substantive creative prose and cannot mutate the snapshot.
+
+Generative composition is authorship, not export. If a patent application,
+manual, or novel section does not yet exist in canon, a human or AI may propose
+new content units, claims, links, and composition decisions through a
+transaction. Once accepted, an output profile can render them reproducibly.
 
 An external document may be imported into a transaction, but editing a generated
 export never silently edits canon. Later round-trip editors must preserve stable
@@ -562,7 +575,12 @@ The primary API is semantic and structured. Required use-case families:
 - List and disposition review obligations.
 - Submit review runs, concerns, resolutions, and acknowledgements.
 - Build context/review packets.
-- Export normalized JSON, Markdown, and reports.
+- Discover importer, output-profile, and composition-provider capabilities and
+  option schemas.
+- Import external material as mapped transaction proposals.
+- Render normalized JSON, Markdown, reports, or profile-specific artifacts with
+  a selected output profile/version.
+- Request AI composition proposals without committing them automatically.
 - Invoke profile analysis when installed.
 
 The CLI is the first host. It uses versioned JSON output, stable exit codes, and
@@ -584,16 +602,36 @@ Requirements:
 - Explicit migrations; no silent guessing or lossy downgrade.
 - Content hashes and project hash verification.
 
-A Markdown importer/exporter is derived tooling. Round-trip import must preserve
-stable unit IDs or propose an explicit mapping for confirmation.
+A marked-Markdown importer and Markdown output profile are derived tooling.
+Round-trip import must preserve stable unit IDs or propose an explicit mapping
+for confirmation.
 
 Storage may later move to an immutable directory/object store, SQLite, or a
 service. Domain and validation APIs operate on snapshots and remain storage
 independent.
 
-## 14. Export and disclosure
+## 14. Import, composition, output profiles, and disclosure
 
-Initial exports:
+These are separate extension contracts:
+
+- An **importer** parses an external representation and returns diagnostics,
+  stable-ID mappings, and proposed transaction operations. It never commits.
+- An **output profile** consumes an immutable validated snapshot and returns one
+  or more derived files plus a manifest. Built-in output profiles are
+  deterministic.
+- A **composition profile** deterministically plans the target-specific content
+  roles, task dependencies, context seeds, limits, and preferred output profile.
+- A **composition provider** supplies the replaceable thinking capacity for one
+  planned task at a time and returns proposed content/semantic operations. Its
+  results are generative and noncanonical.
+
+Each implementation declares a stable ID/version, supported project profiles,
+applicable media/artifact types, option-schema version, coverage limitations,
+and determinism class where applicable. The host selects implementations
+explicitly; there is no one-size-fits-all switch over artifact type and no
+composition profile is coupled to one AI provider.
+
+Initial built-in output profiles:
 
 - Canonical normalized JSON.
 - Reconstructed ordered Markdown document.
@@ -605,14 +643,20 @@ Initial exports:
 Later profiles add technical traceability matrices, narrative continuity
 references, mystery matrices, and runtime packages.
 
-Every artifact includes project ID, revision, content hash, export profile/version,
-disclosure scope, generation time, and a generated-artifact warning.
+Every export manifest includes project ID, revision, content hash,
+output-profile ID/version, canonical options hash, validation-report hash,
+disclosure scope, generated file paths/media types/hashes, determinism class,
+omissions, and a generated-artifact warning. Generation time is metadata outside
+reproducibility comparison.
 
 Disclosure filtering selects records structurally before formatting or AI use.
+An output profile must fail or report partial/inconclusive coverage when the
+snapshot lacks required semantic/content records; it may not silently fill gaps
+with invented claims.
 
 ## 15. AI-assisted authoring and review
 
-AI is a reviewer and proposal source around the deterministic core.
+AI is a reviewer and authoring-proposal source around the deterministic core.
 
 An AI review may be mandatory under project policy, but:
 
@@ -630,6 +674,13 @@ The core and validation projects have no provider dependency. The product can
 also accept review results from an external agent without making its own API
 call.
 
+For composition, a provider receives a target composition profile, audience,
+required artifact/section contract, bounded context packets, and explicit
+omissions. It returns a structured authoring proposal with provenance. Applying
+that proposal creates or updates a normal draft transaction, recomputes impact,
+and invokes all ordinary validation and review gates. Direct AI-to-final-file
+generation is permitted only as an explicitly noncanonical preview.
+
 ## 16. Medium and provider independence
 
 The common core has no dependency on a word processor, game engine, rules
@@ -641,6 +692,11 @@ Profiles/adapters may add:
 - Requirements/test systems and citation managers.
 - Unity, Unreal, Godot, dialogue, or tabletop exports.
 - Technical, scientific, patent-drafting, or narrative review prompts.
+
+Trusted in-process extensions implement registered C# contracts in Export,
+Generation, or Application—never Core. External tools can instead use versioned
+CLI/JSON contracts. The stable contract is more important than the eventual
+plugin container.
 
 Adapters cannot weaken common transaction, integrity, evidence-level, or review
 provenance rules.
@@ -660,14 +716,20 @@ with a `.codex-plugin/plugin.json` manifest:
 Packaging is gated until the headless application API and common document POC
 are stable. Re-check current official documentation at implementation time.
 
+The initial product still defines importer/output/composition interfaces so the
+architecture has an extensibility seam. It does not dynamically discover or
+execute arbitrary third-party assemblies. Later plugin packaging may register
+trusted implementations or communicate with isolated external adapters without
+changing the canonical model.
+
 ## 18. Project boundaries
 
 ```text
 ValidatedWorld.Core                 (no project dependencies)
 ├── ValidatedWorld.Serialization    (Core)
 ├── ValidatedWorld.Validation       (Core)
-├── ValidatedWorld.Generation       (Core, Validation)
-└── ValidatedWorld.Export           (Core, Validation)
+├── ValidatedWorld.Generation       (Core, Validation; review/composition proposals)
+└── ValidatedWorld.Export           (Core, Validation; output-profile contracts)
 
 ValidatedWorld.Application          (Core, Serialization, Validation)
 ValidatedWorld.Cli                  (Application, Export, Generation)
@@ -704,9 +766,13 @@ The POC must:
    traceability gaps, and stale content review.
 8. Reject invalid, pending-review, or stale commits without modifying canon.
 9. Atomically commit a valid fully reviewed change.
-10. Export Markdown, impact/review reports, and a focused context packet.
+10. Render Markdown, impact/review reports, and a focused context packet through
+    exact-version registered output profiles with reproducible manifests.
+11. Register a test output profile without adding an artifact-kind switch to the
+    CLI or Application.
 
-No AI API, timeline, mystery, state exploration, GUI, or plugin is required.
+No AI API, timeline, mystery, state exploration, GUI, dynamic assembly loading,
+or plugin packaging is required.
 
 ### 19.2 Gate B — Heuristic review evaluation
 
@@ -728,8 +794,8 @@ demonstrates value.
 
 Gate A succeeds if realistic changes reliably surface the right dependent claims
 and sections, required review prevents silent staleness, annotation cost is
-acceptable, reports are deterministic, and agents can repair failures from
-structured evidence.
+acceptable, selected outputs disclose completeness and reproduce as declared,
+and agents can repair failures from structured evidence.
 
 If typed claims are too burdensome, retain section-level semantic links and
 review obligations. If narrative profiles fail, keep the technical/document

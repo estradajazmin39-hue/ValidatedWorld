@@ -60,6 +60,10 @@ dotnet test ValidatedWorld.slnx
 16. Tests never require a network connection or paid model.
 17. Narrative time and perspective are not implemented before Gate A succeeds;
     state exploration is not implemented before Gate C succeeds.
+18. Canonical serialization, deterministic output projection, and generative
+    authorship are different operations and public contracts.
+19. An output implementation never mutates canon or invents missing semantic or
+    creative content; such content enters through a transaction proposal.
 
 ## 3. Solution architecture
 
@@ -82,10 +86,12 @@ ValidatedWorld.Application
 
 ValidatedWorld.Generation
   dependencies: Core, Validation
-  purpose: deterministic context packets and provider-neutral reviews
+  purpose: deterministic context packets plus provider-neutral review and
+           authoring-composition proposals
 
 ValidatedWorld.Export
   dependencies: Core, Validation
+  purpose: versioned output-profile contracts, manifests, and built-in renderers
 
 ValidatedWorld.Cli
   dependencies: Application, Generation, Export
@@ -123,12 +129,17 @@ ValidatedWorld.Validation.Reviews
 ValidatedWorld.Application.Transactions
 ValidatedWorld.Application.Commits
 ValidatedWorld.Application.Queries
+ValidatedWorld.Application.Import
 
 ValidatedWorld.Generation.Context
 ValidatedWorld.Generation.Review
+ValidatedWorld.Generation.Composition
 
+ValidatedWorld.Export.Contracts
+ValidatedWorld.Export.Manifests
 ValidatedWorld.Export.Documents
 ValidatedWorld.Export.Reports
+ValidatedWorld.Export.Runtime
 ```
 
 ### 3.3 Environmental abstractions
@@ -142,6 +153,8 @@ Inject:
 - `IWorkspaceLock`
 - `IAtomicFileWriter`
 - heuristic review providers
+- importer and output-profile registries
+- authoring-composition providers
 
 Tests use fixed clocks/IDs and in-memory or fault-injecting stores.
 
@@ -1395,6 +1408,11 @@ VW1802 operation precondition failed
 VW1803 approval required
 VW1804 atomic replacement unavailable/failed
 VW2001 incomplete semantic/profile coverage
+VW2002 output profile missing/unsupported input
+VW2003 invalid output path, collision, or size limit
+VW2101 import mapping incomplete/ambiguous
+VW2102 import input or proposal invalid
+VW2201 composition response invalid/incomplete
 VW9001 validator internal failure
 VW9002 unsupported construct
 ```
@@ -1426,10 +1444,14 @@ GetDependencies
 GetDependents
 ExplainDependencyPath
 ExplainDiagnostic
+ListImporters
+DescribeImporter
+BuildImportProposal
 ```
 
-Generation provides `BuildContextPacket`; Export provides document/report
-exports. Hosts compose them with Application.
+Generation provides context, review, and composition-proposal services. Export
+provides output-profile discovery/rendering and manifest services. Hosts compose
+them with Application; only Application may apply a proposal to a transaction.
 
 Expected invalid input returns typed `OperationResult<T>`, not exceptions. Every
 read includes project revision/hash. Every draft result includes transaction/base
@@ -1462,10 +1484,24 @@ vw dependents --workspace <path> --id <id> [--transitive]
 vw explain path --workspace <path> --from <id> --to <id>
 vw validate --workspace <path>
 vw context --workspace <path> --seed <id> [--tx <id>] --output <path>
-vw export --workspace <path> --profile <name> --output <path>
+
+vw importer list
+vw importer describe --id <id> --version <version>
+vw importer propose --workspace <path> --id <id> --version <version>
+                    --input <path> [--options <path>] --proposal <path>
+
+vw output list
+vw output describe --id <id> --version <version>
+vw output render --workspace <path> --id <id> --version <version>
+                 [--artifact <id>] [--options <path>] --output <directory>
+
+vw composition list
+vw composition request --workspace <path> --provider <id>
+                       --contract <path> --proposal <path>
 ```
 
-No natural-language query parser in the POC.
+Composition commands are introduced in WP9. No natural-language query parser is
+required.
 
 ### 11.3 Output envelope
 
@@ -1585,7 +1621,17 @@ A profile instructs a reviewer to:
 An AI review that ignores the schema fails; its prose is not parsed loosely into
 canonical findings.
 
-## 13. Source import and derived exports
+## 13. Import, composition, and output boundaries
+
+Do not use "serialization" as a synonym for all output. The system has four
+separate paths:
+
+```text
+canonical serialization  snapshot <-> lossless validatedworld/v1 JSON
+import                    external bytes -> proposed transaction operations
+composition               context + target contract -> proposed authored content
+output projection         accepted records -> derived files + manifest
+```
 
 ### 13.1 Canonical source boundary
 
@@ -1594,8 +1640,61 @@ contains the reviewed source text for that unit; it is not a pointer into a
 mutable Markdown file. This avoids pretending that arbitrary edits to prose can
 be mapped back to stable semantic records without ambiguity.
 
-The CLI may import a marked-up Markdown document into a new transaction. Each
-importable section must carry a stable unit marker such as:
+Generated files are never canonical merely because an output profile emitted
+them. Editing one has no effect until an importer maps it back into proposed
+operations and the normal transaction succeeds.
+
+### 13.2 Importer contract
+
+The initial contract belongs in `ValidatedWorld.Application.Import`; extract a
+separate assembly only after multiple adapters justify it.
+
+```csharp
+public sealed record ImporterDescriptor(
+    string ImporterId,
+    string Version,
+    ImmutableArray<string> MediaTypes,
+    string OptionSchemaId,
+    string OptionSchemaVersion,
+    bool Heuristic);
+
+public interface IProjectImporter
+{
+    ImporterDescriptor Descriptor { get; }
+    ValueTask<ImportProposal> ImportAsync(
+        ImportRequest request,
+        CancellationToken cancellationToken);
+}
+
+public sealed record ImportRequest(
+    ProjectSnapshot BaseSnapshot,
+    IImportSource Source,
+    NeutralMap Options,
+    ImmutableArray<IdentityMapping> ConfirmedMappings);
+
+public interface IImportSource
+{
+    string FileName { get; }
+    string MediaType { get; }
+    long Length { get; }
+    string ContentHash { get; }
+    ValueTask<Stream> OpenReadAsync(CancellationToken cancellationToken);
+}
+
+public sealed record ImportProposal(
+    ImportOutcome Outcome,
+    string InputHash,
+    ImmutableArray<ProjectOperation> ProposedOperations,
+    ImmutableArray<IdentityMapping> ProposedMappings,
+    ImmutableArray<Diagnostic> Diagnostics,
+    ImmutableArray<string> Omissions);
+```
+
+An importer never writes a workspace or commits a transaction. The host shows
+identity mappings and operations before applying them to a draft transaction.
+Heuristic importer results must retain provider/template provenance.
+
+The Gate A marked-Markdown importer recognizes stable unit markers:
 
 ```markdown
 <!-- vw:unit unit:power-budget -->
@@ -1603,34 +1702,328 @@ importable section must carry a stable unit marker such as:
 ...
 ```
 
-Import rules:
+Rules:
 
-1. Normalize line endings, but preserve all other text exactly.
-2. Reject duplicate, missing, or malformed unit markers.
-3. Match units by marker ID, never by heading text or ordinal position.
-4. Stage changed unit text and hashes in a transaction.
-5. Create normal impact obligations before commit.
-6. Never infer new canonical assertions merely because prose changed.
+1. Enforce media/input-size limits before parsing.
+2. Normalize line endings, but preserve all other text exactly.
+3. Reject duplicate, missing, or malformed unit markers.
+4. Match units by marker ID, never by heading text or ordinal position.
+5. Propose changed unit text/hashes; never mutate the snapshot.
+6. Create normal impact obligations when operations are applied.
+7. Never infer canonical assertions merely because prose changed.
 
-Unmarked Markdown may be offered to a heuristic extractor, but the result is a
-proposal file, not canon.
+Unmarked Markdown may be offered to a heuristic importer, but it produces an
+identity map and proposal requiring confirmation.
 
-### 13.2 Deterministic exports
+### 13.3 Output-profile contract
 
-Gate A exports are derived artifacts and include:
+`ValidatedWorld.Export` exposes a stable contract. An output profile is a
+renderer/projection, not an author:
 
-- a readable Markdown document ordered by artifact and content-unit order;
-- a semantic-link report grouped by source record;
-- a review-obligation report with evidence and disposition status;
-- a context packet for an agent or reviewer;
-- a Graphviz DOT dependency graph;
-- a JSON Lines inventory for machine processing.
+```csharp
+public enum OutputReproducibility
+{
+    Reproducible,
+    EnvironmentBound
+}
 
-Every export contains project revision, project content hash, exporter version,
-profile version, and generation time outside the hashed semantic payload. Sort
-all semantic collections by their specified deterministic key. Export output is
-never an authoritative input unless it is explicitly re-imported through a
-transaction.
+public sealed record OutputProfileDescriptor(
+    string ProfileId,
+    string Version,
+    ImmutableArray<string> SupportedProjectProfiles,
+    ImmutableArray<string> OutputMediaTypes,
+    string OptionSchemaId,
+    string OptionSchemaVersion,
+    OutputReproducibility Reproducibility,
+    bool AcceptsInvalidSnapshots,
+    bool AllowsUncoveredProjectProfiles);
+
+public interface IOutputProfile
+{
+    OutputProfileDescriptor Descriptor { get; }
+    ValueTask<OutputProfileResult> RenderAsync(
+        OutputRequest request,
+        IOutputSink output,
+        CancellationToken cancellationToken);
+}
+
+public sealed record OutputRequest(
+    DisclosureFilteredProjectView View,
+    ValidationReport ValidationReport,
+    ImmutableArray<CanonicalId> SelectedArtifactIds,
+    NeutralMap Options,
+    OutputLimits Limits);
+
+public sealed record OutputLimits(
+    int MaximumFiles,
+    long MaximumBytesPerFile,
+    long MaximumTotalBytes,
+    int MaximumRelativePathLength);
+
+public sealed record OutputFileRequest(
+    string RelativePath,
+    string MediaType);
+
+public interface IOutputSink
+{
+    ValueTask<Stream> CreateFileAsync(
+        OutputFileRequest request,
+        CancellationToken cancellationToken);
+}
+
+public sealed record OutputProfileResult(
+    OutputOutcome Outcome,
+    ImmutableArray<Diagnostic> Diagnostics,
+    ImmutableArray<CanonicalId> OmittedRecordIds,
+    string CoverageSummary);
+```
+
+`DisclosureFilteredProjectView` is an immutable structurally filtered view built
+by the Export host before invoking an output profile. It contains source project
+ID/revision/hash and typed record collections but cannot expose records outside
+the authorized disclosure selection.
+
+The registry resolves exact `(ProfileId, Version)` pairs. Duplicate registrations
+are startup errors. Do not select by display name, media type alone, or
+"latest" version. Gate A uses explicit dependency-injection registration; it
+does not scan or load arbitrary assemblies.
+
+Output profile rules:
+
+1. Never mutate a supplied view or canonical workspace.
+2. Never invent missing semantic facts, creative prose, or canonical IDs.
+   Declared deterministic boilerplate, labels, and formatting are allowed.
+3. Report unsupported/missing input as partial or inconclusive coverage.
+4. Return only normalized relative paths; reject rooted paths, `..`, duplicates,
+   reserved workspace names, and outputs over configured limits.
+5. Sort semantic input deterministically unless target order is explicitly
+   authored.
+6. A `Reproducible` profile must return identical paths, media types, and bytes
+   for the same source hash, profile/version, disclosure view, and options.
+7. An `EnvironmentBound` profile records its renderer/environment fingerprint
+   and cannot claim byte reproducibility across environments.
+
+The host-controlled sink validates each requested path, collision, and limit;
+provides a bounded hashing stream in a staging directory; and records the file
+manifest when the stream closes. Output implementations do not receive
+unrestricted workspace paths and do not hold an entire large artifact in
+memory. Tests use an in-memory sink.
+
+### 13.4 Export manifest and built-ins
+
+The host emits a manifest alongside every output set:
+
+```csharp
+public sealed record OutputManifest(
+    string ManifestSchemaVersion,
+    ProjectId ProjectId,
+    long ProjectRevision,
+    string ProjectContentHash,
+    string ValidationReportHash,
+    string OutputProfileId,
+    string OutputProfileVersion,
+    string OptionsHash,
+    string DisclosureViewHash,
+    OutputReproducibility Reproducibility,
+    string? EnvironmentFingerprint,
+    ImmutableArray<OutputFileManifest> Files,
+    ImmutableArray<CanonicalId> OmittedRecordIds,
+    OutputOutcome Outcome,
+    DateTimeOffset GeneratedAt);
+```
+
+`GeneratedAt` is excluded from semantic reproducibility comparison. File
+manifests contain normalized relative path, media type, length, and SHA-256.
+
+Host algorithm:
+
+```text
+RenderOutput(profileId, version, snapshot, validationReport,
+             disclosureSelection, selectedArtifacts, options, outputDirectory):
+    profile = registry.ResolveExact(profileId, version)
+    require profile exists; reject unsupported enabled project profiles unless
+            descriptor allows them and result reports their records uncovered
+    require validationReport evaluates snapshot hash and policy allows rendering
+    validate/canonicalize options against descriptor option schema
+    view = BuildDisclosureFilteredView(snapshot, disclosureSelection)
+
+    request = OutputRequest(view, validationReport, selectedArtifacts,
+                            options, configuredLimits)
+    create host-controlled bounded sink over a unique sibling staging directory
+    result = profile.RenderAsync(request, sink)
+    if canceled/failed: return without output-directory mutation
+
+    require all sink streams closed
+    validate result outcome, diagnostics, omissions, sink paths/media types,
+             per-file/total sizes, duplicate paths, and file count
+    sort sink manifest entries by normalized relative path
+    build manifest and semantic manifest hash
+
+    require outputDirectory does not already exist in Gate A
+    write manifest into the staging directory
+    atomically rename staging directory to outputDirectory where supported
+    on failure retain no partial published directory and report cleanup path
+```
+
+Rendering an invalid snapshot is rejected by default. An explicitly named
+diagnostic/report output profile may opt into invalid input and must declare that
+capability in its descriptor. No profile can downgrade the validation report.
+
+Gate A registers these built-in reproducible profiles:
+
+- `validatedworld.markdown-document/v1`;
+- `validatedworld.impact-report/v1`;
+- `validatedworld.review-checklist/v1`;
+- `validatedworld.context-packet/v1`;
+- `validatedworld.graphviz/v1`;
+- `validatedworld.jsonl-inventory/v1`.
+
+Each is an independent implementation or cohesive implementation class. The CLI
+never contains a central artifact-kind switch that attempts to generate all
+future products.
+
+### 13.5 Generative composition contract
+
+If required prose or organization is absent, rendering must stop. A composition
+profile first creates a target-specific plan; a provider may then author its
+tasks. This keeps patent/manual/novel knowledge separate from the selected AI:
+
+```csharp
+public sealed record CompositionProfileDescriptor(
+    string ProfileId,
+    string Version,
+    ImmutableArray<string> SupportedProjectProfiles,
+    ImmutableArray<string> TargetArtifactKinds,
+    string OptionSchemaId,
+    string OptionSchemaVersion);
+
+public interface ICompositionProfile
+{
+    CompositionProfileDescriptor Descriptor { get; }
+    CompositionPlan BuildPlan(CompositionPlanningRequest request);
+}
+
+public sealed record CompositionPlanningRequest(
+    ProjectSnapshot Snapshot,
+    ProjectIndex Index,
+    string TargetArtifactKind,
+    string Audience,
+    ImmutableArray<CanonicalId> ExistingArtifactIds,
+    NeutralMap Options);
+
+public sealed record CompositionContract(
+    string CompositionProfileId,
+    string CompositionProfileVersion,
+    string TargetArtifactKind,
+    string Audience,
+    ImmutableArray<RequiredContentRole> RequiredContent,
+    string PreferredOutputProfileId,
+    string PreferredOutputProfileVersion,
+    NeutralMap Options);
+
+public sealed record CompositionTask(
+    string TaskId,
+    string Purpose,
+    ImmutableArray<CanonicalId> SeedIds,
+    ImmutableArray<RequiredContentRole> RequiredContent,
+    ImmutableArray<string> DependsOnTaskIds,
+    int MaximumProposedOperations,
+    long MaximumProposedTextBytes);
+
+public sealed record CompositionPlan(
+    CompositionOutcome Outcome,
+    CompositionContract Contract,
+    ImmutableArray<CompositionTask> Tasks,
+    ImmutableArray<Diagnostic> Diagnostics,
+    ImmutableArray<string> Omissions,
+    string PlanHash);
+
+public sealed record CompositionRequest(
+    ProjectId ProjectId,
+    long BaseProjectRevision,
+    string BaseProjectHash,
+    CompositionContract Contract,
+    string PlanHash,
+    CompositionTask Task,
+    ImmutableArray<ContextPacket> ContextPackets,
+    ImmutableArray<CanonicalId> ExistingArtifactIds);
+
+public sealed record CompositionProviderDescriptor(
+    string ProviderId,
+    string Version,
+    string ResponseSchemaId,
+    string ResponseSchemaVersion);
+
+public interface IAuthoringCompositionProvider
+{
+    CompositionProviderDescriptor Descriptor { get; }
+    ValueTask<CompositionProposal> ComposeAsync(
+        CompositionRequest request,
+        CancellationToken cancellationToken);
+}
+
+public sealed record CompositionProposal(
+    CompositionOutcome Outcome,
+    string RequestHash,
+    CompositionProviderDescriptor Provider,
+    string ModelAndParameterHash,
+    ImmutableArray<ProjectOperation> ProposedOperations,
+    ImmutableArray<ReviewConcern> Concerns,
+    ImmutableArray<CanonicalId> CitedRecordIds,
+    ImmutableArray<string> Omissions,
+    bool Truncated);
+```
+
+Composition profiles and providers use separate exact-version registries. A
+composition profile is deterministic target knowledge: it defines the expected
+artifact roles, task ordering/dependencies, context seeds, limits, and preferred
+output profile. It may be a purpose-built C# implementation; a declarative
+template language is not required. Task IDs are unique, dependency references
+resolve, and the task graph is acyclic. Planning the same snapshot/intent/options
+must reproduce the same `PlanHash`.
+
+The provider is replaceable thinking capacity. It receives one plan task at a
+time and cannot change its limits or silently add tasks. Response validation
+checks the exact plan/task/request hashes before exposing proposed operations.
+
+The provider receives bounded disclosed context, not an unrestricted workspace.
+Its operations are untrusted drafts. Applying them uses normal transaction
+preconditions; validation, impact, obligations, and required review all rerun.
+The provider never writes a final export or marks its own work accepted.
+
+Large products should be composed in stable content-unit transactions, not one
+opaque model response. A composition profile may plan required sections and
+their dependencies first, then request one bounded proposal at a time.
+
+Examples:
+
+| Target | Appropriate path |
+|---|---|
+| Novel with accepted chapter text | deterministic manuscript/EPUB output profile |
+| Claims graph without patent prose | patent composition proposals → reviewed transactions → patent document output profile |
+| Game graph without player-facing explanations | manual composition proposals → reviewed transactions → manual output profile |
+| Unity runtime package | deterministic runtime output profile or external adapter over declared JSON |
+
+Composition profiles can enforce required section/role coverage, but they do
+not prove patent sufficiency, player comprehension, or literary quality.
+
+A project-specific Unity adapter that only validates raw state data is neither
+an output profile nor a composition provider. It is an input/profile-validator
+adapter: it binds diagnostics to an exact external content hash, returns stable
+evidence-bearing findings, and declares which external schema it covers. It may
+instead import selected typed facts as transaction proposals. It never silently
+makes mutable external data canonical.
+
+### 13.6 Extension loading and safety
+
+The C# interfaces and versioned CLI/JSON schemas are the durable seams. Gate A
+supports built-in and host-registered trusted implementations. Dynamic assembly
+discovery, dependency isolation, unloading, signing, capability permissions,
+and marketplace packaging are deferred to WP12.
+
+An in-process third-party implementation is trusted code. An untrusted adapter
+should run out of process and receive a filtered request package. Neither form
+may weaken canonical transaction or validation rules.
 
 ## 14. Gate A proof project: TechnicalDesign
 
@@ -1936,11 +2329,16 @@ Application integration tests
 CLI contract tests
   stdout envelope, stderr separation, exit codes, deterministic ordering
 
+Output/import contract tests
+  exact registry resolution, option schemas, reproducible bytes/manifests,
+  path/collision/size rejection, incomplete coverage, proposal-only import
+
 Sample/golden tests
   TechnicalDesign base project and intentional-error corpus
 
 Optional provider contract tests
-  schema enforcement, cache keys, inconclusive responses, no implicit canon edits
+  review/composition schema enforcement, cache keys, limits, inconclusive
+  responses, cited context, and no implicit canon edits
 ```
 
 ### 17.2 Required properties
@@ -1956,6 +2354,10 @@ Use generated inputs for these invariants:
 - replay of an accepted transaction reproduces its recorded hash;
 - all diagnostic evidence IDs exist in the evaluated snapshot;
 - any bounded-out analysis reports inconclusive, never success.
+- a Reproducible output profile returns identical semantic files/manifests for
+  the same view, exact profile version, and canonical options;
+- importer and composition results cannot alter canon until their operations are
+  explicitly applied and committed.
 
 ### 17.3 Mutation and fault injection
 
@@ -2013,10 +2415,14 @@ only by a later package.
 
 ### WP6 — agent-grade interface
 
-- Implement CLI envelopes, exit codes, context packets, Markdown import/export,
-  DOT/JSONL reports, and help text.
+- Implement CLI envelopes/exit codes, context packets, importer/output-profile
+  contracts and exact-version registries, the marked-Markdown importer,
+  built-in Markdown/DOT/JSONL/report profiles, safe output hosting, manifests,
+  and help text.
 - Acceptance: a scripted agent can inspect, stage, analyze, review, validate,
-  commit, and export without parsing human prose.
+  commit, discover capabilities, propose an import, and select/render an exact
+  output profile without parsing human prose. A registered test output profile
+  works without modifying CLI/Application switches.
 
 ### WP7 — Gate A evaluation
 
@@ -2032,21 +2438,31 @@ only by a later package.
 - Acceptance: malformed, partial, canceled, and contradictory reviewer outputs
   are auditable and cannot alter canon automatically.
 
-### WP9 — LinearNarrative profile
+### WP9 — optional authoring composition
+
+- Add exact-version composition-profile/provider registries, deterministic task
+  planning, external-result ingestion, a fake provider, bounded multi-unit
+  proposal handling, provenance, and CLI proposal output.
+- Acceptance: a new composition profile can plan and propose a new document
+  target without editing output/rendering or provider code; providers are
+  replaceable; malformed, stale, oversized, or uncited output cannot mutate
+  canon; and accepted operations still pass a normal transaction.
+
+### WP10 — LinearNarrative profile
 
 - Add fictional time, events, knowledge/belief, narrative order, validators, and
   a reduced Harbor mystery sample.
 - Acceptance: Gate C linear-story counterexamples are replayable and diagnostic
   coverage is stated precisely.
 
-### WP10 — InteractiveState profile
+### WP11 — InteractiveState profile
 
 - Add typed state variables, transition expressions/effects, invariants, traces,
   and bounded exploration.
 - Acceptance: Gate D known-good and known-bad miniature campaigns return proven,
   disproven, and inconclusive results correctly.
 
-### WP11 — integration packaging
+### WP12 — integration packaging
 
 - Stabilize the CLI/tool schema first, then evaluate MCP/Codex/plugin packaging
   against the current external standard.
@@ -2081,6 +2497,8 @@ Defer until evidence requires them:
 - collaborative multi-writer merge semantics;
 - a game-engine runtime;
 - arbitrary source-code or mathematical-proof verification;
+- a general publishing layout/template language;
+- reflection-based loading of arbitrary in-process extension assemblies;
 - plugin packaging tied to a currently fashionable format.
 
 The intended scaled-down product is still useful if heuristic extraction,

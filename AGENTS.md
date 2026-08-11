@@ -33,10 +33,10 @@ relevant documents and explain the change.
   hashing, migrations, and file workspace adapters.
 - `src/ValidatedWorld.Validation` — indexes, dependency/impact analysis,
   deterministic rules, review obligations, and optional bounded analysis.
-- `src/ValidatedWorld.Generation` — deterministic context packets and
-  provider-neutral heuristic-review abstractions.
-- `src/ValidatedWorld.Export` — deterministic document, report, and profile
-  exports.
+- `src/ValidatedWorld.Generation` — deterministic context packets plus
+  provider-neutral review and authoring-proposal abstractions.
+- `src/ValidatedWorld.Export` — versioned output-profile contracts, safe export
+  manifests, and deterministic built-in renderers.
 - `src/ValidatedWorld.Cli` — agent-grade command-line host.
 - `src/ValidatedWorld.Application` — planned in blueprint WP0; transaction,
   commit, query, and use-case orchestration.
@@ -62,6 +62,11 @@ relevant documents and explain the change.
   or text-review results as concerns, even when policy requires resolving them.
 - Keep AI review auditable and non-authoritative. Extracted claims and links do
   not become canon without a transaction.
+- Keep canonical serialization, deterministic output projection, and generative
+  authorship separate. AI-composed content is a transaction proposal, not an
+  export side effect.
+- Register importers, output profiles, and composition providers through public
+  contracts outside Core. Do not hardcode one graph-to-product conversion.
 - Use stable IDs, diagnostic codes, structured outputs, deterministic ordering,
   and explainable impact paths.
 - Keep UI, database, model-provider, game-engine, and current plugin-format
@@ -69,7 +74,8 @@ relevant documents and explain the change.
 - Model an interactive game as a static specification of variables,
   conditions, effects, and transitions; derive reachable runtime states rather
   than authoring every possible state as canon.
-- Do not edit generated exports as authoritative source data.
+- Do not edit generated exports as authoritative source data. Re-import changes
+  as transaction proposals with stable identity mapping.
 - Do not implement narrative state, plugin packaging, or other later profiles
   ahead of the blueprint gate that authorizes them.
 
@@ -99,6 +105,7 @@ Use `ValidatedWorld.slnx`, not `ValidatedWorld.sln`.
 
 Favor a small general claim/dependency core, explicit schemas and contracts,
 deterministic behavior, evidence-bearing diagnostics, mandatory impact review,
+replaceable exact-version output profiles, proposal-only AI composition,
 testability, short cohesive functions, agent-friendly interfaces, and aggressive
 POC changes without backward-compatibility constraints.
 

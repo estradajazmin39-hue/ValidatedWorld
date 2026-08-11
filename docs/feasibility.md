@@ -119,6 +119,8 @@ ValidatedWorld cannot generally:
 - Decide arbitrary logic expressed in an unrestricted rules language.
 - Guarantee that generated prose is consistent merely because its structured
   outline was valid.
+- Deterministically manufacture a complete audience-specific artifact from an
+  under-specified graph.
 
 The UI, CLI, README, and reports must not imply otherwise.
 
@@ -142,6 +144,40 @@ Not every sentence needs a formal claim. A project policy selects which content
 requires semantic review—for example every requirement and conclusion, but not
 formatting prose. Coverage reports show which content is mapped, stale, or
 outside deterministic protection.
+
+## From graph to finished artifact
+
+An arbitrary semantic graph does not uniquely determine a patent application,
+player manual, or novel. It may omit rhetoric, ordering, examples, transitions,
+audience choices, formatting, or entire passages. ValidatedWorld must therefore
+separate three output paths:
+
+1. **Deterministic projection:** a versioned output profile maps already
+   canonical content and semantic records into files. The same snapshot,
+   profile version, and options produce the same semantic bytes.
+2. **Generative composition:** a human or thinking AI authors missing content
+   from a composition plan and bounded context packets. Its result is a proposed
+   set of content/semantic transaction operations, not a trusted final export.
+3. **External adaptation:** another system consumes canonical JSON or a declared
+   projection and performs domain-specific work, such as importing a runtime
+   package into Unity.
+
+This creates a useful rule: **render what is already authored; transact what
+must be invented.**
+
+For example, a novel normally stores manuscript sections as canonical content,
+so EPUB or Markdown production can be deterministic. A claims-only technical
+graph may support a patent-drafting composition profile, but an AI must still
+make prose and organization choices. Those choices become reviewable content
+before a deterministic patent-document renderer formats them. ValidatedWorld
+does not certify the resulting application legally sufficient or patentable.
+
+Output extensibility is feasible as a C# contract and registry without choosing
+a plugin packaging standard yet. Dynamic third-party loading, process isolation,
+and marketplace packaging are later integration concerns. A target-specific
+composition profile should plan the artifact independently of the AI provider,
+so a patent/manual/novel workflow can change models without changing its output
+or validation contract.
 
 ## The simplest useful change workflow
 
@@ -208,7 +244,8 @@ It should support:
 - One ordered technical design document split into stable content units.
 - Subjects, claims, assertion roles/statuses, evidence, and typed semantic links.
 - Bindings from sections to the claims they assert, use, or discuss.
-- Strict JSON load and deterministic export.
+- Strict JSON load and a versioned output-profile contract with deterministic
+  Markdown/report implementations.
 - Atomic transactions over content and semantic records.
 - Base-plus-projected dependency impact analysis.
 - Explained review obligations for impacted records.
@@ -234,6 +271,7 @@ Use a small technical design sample and realistic change transactions. Measure:
 - Whether an agent can repair a transaction using structured explanations.
 - Determinism of reports and failed-commit atomicity.
 - Coverage of content units and semantic annotations.
+- Reproducibility and completeness disclosure of selected output profiles.
 
 If Gate A succeeds, the project already has a useful release direction.
 

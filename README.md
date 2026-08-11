@@ -36,6 +36,28 @@ sound. Its durable promise is narrower: preserve explicit constraints, expose
 change impact, force review where certainty ends, and assemble focused context
 for an authoring agent.
 
+## From project to deliverable
+
+ValidatedWorld does not assume one universal graph-to-document serializer.
+It separates four operations:
+
+- **Canonical serialization** losslessly stores the project snapshot.
+- **Output profiles** are versioned, replaceable renderers. Built-in profiles
+  reproducibly project accepted content into Markdown, reports, runtime
+  packages, or other target formats.
+- **AI composition** authors missing prose or structure as a proposed
+  transaction. It is reviewed and committed before publication; it is not
+  mislabeled as deterministic export.
+- **External adapters** may consume canonical JSON or a purpose-built projection
+  for Unity, publishing systems, patent tooling, or other applications.
+
+A novel project normally contains its reviewed manuscript as content units, so
+an output profile assembles and formats it. A claims-only graph usually does not
+contain enough information to determine a whole patent application or player
+manual. A specialized composition profile can plan the required sections and a
+thinking agent can draft them, but the resulting content must cross the same
+transaction, dependency, and review boundary as manually authored text.
+
 ## Start here
 
 - [Feasibility and limits](docs/feasibility.md) — the guarantee boundary and the
@@ -64,7 +86,8 @@ inspect project and dependency graph
 → review every affected unit
 → resolve or acknowledge heuristic concerns
 → commit atomically
-→ export documents and focused context packets
+→ compose missing content when needed, through another transaction
+→ render through a selected output profile
 ```
 
 Build and test with:
