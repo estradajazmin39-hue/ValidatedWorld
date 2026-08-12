@@ -47,6 +47,20 @@ CodeCoverage/
 # MSBuild Binary and Structured Log
 *.binlog
 
+# ValidatedWorld workspaces and SQLite sidecars
+#
+# A .vw.db file is authoritative user/project state, not repository source.
+# Samples are rebuilt from reviewed snapshots and transaction scripts. Binary
+# databases may be committed only as deliberate fixtures under tests/.
+*.vw.db
+*.vw.db-journal
+*.vw.db-wal
+*.vw.db-shm
+!tests/**/*.vw.db
+!tests/**/*.vw.db-journal
+!tests/**/*.vw.db-wal
+!tests/**/*.vw.db-shm
+
 # MSTest test Results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
