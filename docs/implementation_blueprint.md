@@ -1420,10 +1420,11 @@ source.
 
 ### 14.2 TechnicalProject fixture
 
-`samples/TechnicalProject/project.vw.db` is generated deterministically from a
-checked-in initialization/transaction script or logical snapshot; do not hand
-edit its binary bytes. Check in a canonical `project.snapshot.json` golden and
-fixture-building command alongside it.
+`samples/TechnicalProject/project.vw.db` is a disposable, ignored build artifact
+generated deterministically from a checked-in revision-zero snapshot and
+initialization/transaction scripts. Never commit or hand-edit its binary bytes.
+Check in the canonical `project.snapshot.json`, scripts, expected result goldens,
+and fixture-building command instead.
 
 The graph contains:
 
@@ -1495,7 +1496,8 @@ budgets; do not encode an unsupported universal performance claim.
 Gate A passes only if:
 
 1. Clean checkout restores, builds, and tests.
-2. The sample database integrity-checks and logical-hash-verifies.
+2. The locally generated sample database integrity-checks and
+   logical-hash-verifies.
 3. Database constraints reject structural corruption in supported write paths.
 4. Semantic validators catch cases foreign keys cannot.
 5. Current-change impact exactly matches the expected set and paths.
@@ -1574,6 +1576,12 @@ CLI contract tests
 Sample/golden/performance tests
   TechnicalProject and generated corpora
 ```
+
+Tests should create databases in per-test temporary directories whenever
+practical. A binary `.vw.db` may be checked in only under `tests/` when the test
+requires a deliberately malformed or byte-specific SQLite artifact that cannot
+reasonably be produced at test time. Such a fixture must document its purpose,
+provenance, expected application/schema version, and regeneration procedure.
 
 ### 16.2 Required properties
 

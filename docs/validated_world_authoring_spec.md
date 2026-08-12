@@ -306,6 +306,12 @@ and commit evidence. Temporary journal files may exist while SQLite writes.
 Safe copy/backup operations use SQLite's backup facilities or a closed database,
 not an arbitrary byte copy of an open workspace.
 
+A populated workspace is mutable user data, not a distributable project
+template. Source repositories should ignore `.vw.db` files and SQLite sidecars,
+commit reviewed revision-zero snapshots and transaction scripts, and generate
+sample databases locally. Deliberate binary database fixtures are confined to
+test directories and require documented provenance or a regeneration method.
+
 ### 6.2 Structural tables
 
 The normative table design is in the blueprint. Conceptually it contains:

@@ -21,6 +21,13 @@ The authoritative workspace is one portable SQLite application file:
 project.vw.db
 ```
 
+That file is a user's mutable project state, not a source-controlled project
+template. The repository ignores `.vw.db` files and their SQLite sidecars
+outside `tests/`. Samples commit reviewed logical snapshots, transaction scripts,
+and expected results, then generate disposable databases locally. A binary
+database belongs in `tests/` only when a deliberately constructed persistence or
+corruption fixture cannot reasonably be generated during the test.
+
 SQLite supplies durable transactions, foreign keys, indexes, and efficient
 queries. ValidatedWorld supplies the semantic behavior a database schema cannot:
 typed dependency direction, base-plus-projected impact, explainable review
