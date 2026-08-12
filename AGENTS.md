@@ -2,82 +2,102 @@
 
 ## Project purpose
 
-ValidatedWorld is a .NET 10 consistency compiler for large connected documents
-and designed worlds. Its common core models authored content, claims,
-definitions, assumptions, evidence, requirements, decisions, and typed
-dependencies. Technical documents, fiction, and interactive worlds are profiles
-over that core.
+ValidatedWorld is a .NET 10 semantic change-control engine for versioned project
+data. One embedded SQLite application file stores a small fixed relational
+metamodel: typed records, relationships, constraints, transactions, impact
+evidence, reviews, and commits. Technical projects, fiction, and interactive
+worlds are logical profiles over that common metamodel.
 
-It validates explicitly modeled relationships, computes change impact, and can
-force review of affected content. It does not claim to prove arbitrary prose,
-scientific truth, legal sufficiency, or literary quality.
+JSON is the deterministic agent/interchange protocol, not the authoritative
+physical store. The engine validates explicit semantics, computes change impact,
+and can require review of affected records. It does not ingest, generate, render,
+publish, or validate arbitrary finished prose or game assets.
 
 ## Required reading and authority
 
 Before making architectural, product, schema, persistence, or public API
 decisions, read these files in order:
 
-1. `docs/feasibility.md` — guarantee boundary and staged POC gates.
-2. `docs/validated_world_authoring_spec.md` — authoritative product specification.
-3. `docs/implementation_blueprint.md` — normative common-core implementation,
-   algorithms, tests, and work-package order.
+1. `docs/feasibility.md` — guarantee boundary, related-system risk, and proof
+   gates.
+2. `docs/validated_world_authoring_spec.md` — authoritative product
+   specification.
+3. `docs/implementation_blueprint.md` — normative SQL schema, algorithms,
+   tests, and work-package order.
+
+`docs/prior_art_and_positioning.md` records relevant existing systems and should
+be consulted before broadening the product.
 
 Human instructions override repository documents. If implementation evidence
-invalidates a design assumption, do not work around it silently: update the
-relevant documents and explain the change.
+invalidates a design assumption, update the controlling documents and explain
+the change instead of silently working around it.
 
 ## Repository structure
 
-- `src/ValidatedWorld.Core` — engine- and medium-independent immutable domain.
-- `src/ValidatedWorld.Serialization` — strict JSON, canonical serialization,
-  hashing, migrations, and file workspace adapters.
-- `src/ValidatedWorld.Validation` — indexes, dependency/impact analysis,
-  deterministic rules, review obligations, and optional bounded analysis.
-- `src/ValidatedWorld.Generation` — deterministic context packets plus
-  provider-neutral review and authoring-proposal abstractions.
-- `src/ValidatedWorld.Export` — versioned output-profile contracts, safe export
-  manifests, and deterministic built-in renderers.
-- `src/ValidatedWorld.Cli` — agent-grade command-line host.
-- `src/ValidatedWorld.Application` — planned in blueprint WP0; transaction,
-  commit, query, and use-case orchestration.
+- `src/ValidatedWorld.Core` — database- and medium-independent immutable logical
+  metamodel.
+- `src/ValidatedWorld.Serialization` — strict versioned JSON protocol and
+  deterministic logical snapshot serialization/hashing.
+- `src/ValidatedWorld.Validation` — type/index construction, dependency and
+  impact analysis, deterministic constraints, coverage, and review obligations.
+- `src/ValidatedWorld.Application` — transaction, commit, query, and use-case
+  orchestration plus persistence ports.
+- `src/ValidatedWorld.Persistence.Sqlite` — SQLite schema, migrations,
+  repositories, transactions, integrity checks, and logical snapshot mapping.
+- `src/ValidatedWorld.Cli` — agent-grade JSON command host and composition root.
 - `tests/` — automated tests mirroring production boundaries.
-- `samples/TechnicalDesign` — first document/dependency POC.
-- `samples/HarborMystery` — later narrative/state-profile POC.
+- `samples/TechnicalProject` — first SQLite-backed dependency POC.
+- `samples/HarborMystery` — later narrative-profile POC.
 
 ## Durable design rules
 
-- Treat a project as a versioned graph of canonical records. A fictional world
-  is one possible project profile.
-- Keep authored content, semantic claims, evidence, and their bindings distinct
-  but transactionally consistent.
+- Treat `project.vw.db` as the only authoritative workspace state.
+- Hash a deterministic logical JSON projection; never hash SQLite file bytes as
+  semantic identity.
+- Keep the physical relational schema fixed and implementation-owned. Project
+  authors and AIs define logical records through supported profiles; they do not
+  create arbitrary tables or mutate canonical rows directly.
+- Use a small opinionated metamodel: logical type definitions, stable-ID records,
+  typed relations/endpoints, typed references, constraints, transactions,
+  reviews, and commits.
+- Keep domain vocabulary profile-driven. Do not force technical claims,
+  fictional events, and game state into one domain ontology.
+- Make every graph-relevant reference explicit and typed. Foreign keys prove
+  existence; Validation proves supported endpoint semantics and impact meaning.
+- Derive the operational dependency graph from typed fields and relationships.
+  Do not maintain a second authored adjacency graph.
 - Treat missing claims or links as unknown unless a profile explicitly declares
-  a closed-world rule.
-- Author only through transactions. A failed or stale commit must leave canon
-  byte-for-byte unchanged.
-- Derive the operational dependency graph from typed references and semantic
-  links; do not maintain a second hand-authored adjacency structure.
-- For every impacted record, require a disposition such as updated,
-  reviewed-no-change, or not-applicable when project policy requests it.
-- Report deterministic results as proven, disproven, or inconclusive. Report AI
-  or text-review results as concerns, even when policy requires resolving them.
-- Keep AI review auditable and non-authoritative. Extracted claims and links do
-  not become canon without a transaction.
-- Keep canonical serialization, deterministic output projection, and generative
-  authorship separate. AI-composed content is a transaction proposal, not an
-  export side effect.
-- Register importers, output profiles, and composition providers through public
-  contracts outside Core. Do not hardcode one graph-to-product conversion.
-- Use stable IDs, diagnostic codes, structured outputs, deterministic ordering,
-  and explainable impact paths.
-- Keep UI, database, model-provider, game-engine, and current plugin-format
-  dependencies out of Core.
-- Model an interactive game as a static specification of variables,
-  conditions, effects, and transitions; derive reachable runtime states rather
-  than authoring every possible state as canon.
-- Do not edit generated exports as authoritative source data. Re-import changes
-  as transaction proposals with stable identity mapping.
-- Do not implement narrative state, plugin packaging, or other later profiles
-  ahead of the blueprint gate that authorizes them.
+  a finite closed-world rule.
+- Author only through transactions. A failed or stale commit must roll back every
+  relational write.
+- Treat accepted transaction operations as the direct change record; do not add
+  a separate semantic-diff source of truth.
+- Require every policy-selected impacted record to be updated or given a current
+  reviewed-no-change/not-applicable disposition before commit.
+- Report deterministic results as proven, disproven, or inconclusive.
+- Use stable IDs, diagnostic codes, structured JSON results, deterministic
+  ordering, and explainable impact paths.
+- Keep SQLite, JSON, UI, model-provider, and game-engine dependencies out of Core.
+- Keep the web host optional. Gate A is local/embedded; PostgreSQL or a service is
+  justified only by demonstrated multi-user requirements.
+- Do not substitute a graph database, RAG index, or arbitrary AI-generated SQL
+  for the semantic validation layer.
+- Do not claim an external novel/document is synchronized or consistent.
+- Do not implement narrative state, game-state exploration, or public integration
+  packaging before its blueprint gate.
+
+## SQLite requirements
+
+- Use `Microsoft.Data.Sqlite.Core` directly with an explicitly pinned, audited
+  SQLitePCLRaw native bundle; do not introduce an ORM in Gate A.
+- Enable and verify `PRAGMA foreign_keys = ON` on every connection.
+- Use `STRICT` tables where compatible, explicit constraints, parameterized SQL,
+  and schema migrations with checksums.
+- Use `ON DELETE RESTRICT`; application transactions perform explicit repairs.
+- Treat a supplied database file as untrusted input. Set conservative limits and
+  never load extensions or execute stored project text as SQL.
+- SQLite permits one writer. Keep write transactions short; never hold one open
+  while waiting for a human or AI review.
 
 ## Required workflow
 
@@ -86,7 +106,8 @@ Before completing any change:
 
 1. Add or update tests for changed behavior. Documentation-only changes do not
    require artificial tests.
-2. Update the applicable sample and golden reports/exports.
+2. Update applicable database fixtures, logical JSON snapshots, and golden
+   diagnostics/results.
 3. Build the full solution.
 4. Run all tests.
 5. State any unverified or inconclusive behavior in the handoff.
@@ -103,20 +124,20 @@ Use `ValidatedWorld.slnx`, not `ValidatedWorld.sln`.
 
 ## Engineering priorities
 
-Favor a small general claim/dependency core, explicit schemas and contracts,
-deterministic behavior, evidence-bearing diagnostics, mandatory impact review,
-replaceable exact-version output profiles, proposal-only AI composition,
-testability, short cohesive functions, agent-friendly interfaces, and aggressive
-POC changes without backward-compatibility constraints.
+Favor explicit relational integrity, a small logical metamodel, deterministic
+behavior, full validation before commit, evidence-bearing diagnostics, mandatory
+impact review, backend-neutral logical hashes, testability, short cohesive
+functions, and agent-friendly JSON/read-only SQL query surfaces.
 
-Avoid universal ontologies, unrestricted rules languages, natural-language query
-parsers, automatic acceptance of AI extraction, incremental validation, game
-state exploration, plugin packaging, and visual editors until their work-package
-gate authorizes them.
+Avoid arbitrary project DDL, direct canonical SQL mutation, universal ontologies,
+unrestricted rules languages, natural-language query parsers, automatic
+acceptance of AI suggestions, document generation, premature incremental
+validation, a graph database, a web platform, plugin packaging, and visual
+editors until an evidence gate authorizes them.
 
 ## Definition of done
 
 A change is complete when its documented acceptance criteria are met, the full
-solution builds, all tests pass, changed behavior is covered, applicable samples
-and docs are consistent, required impact dispositions are enforced, and
+solution builds, all tests pass, changed behavior is covered, SQLite fixtures and
+logical JSON goldens agree, required impact dispositions are enforced, and
 deterministic guarantees are not overstated.

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -15,11 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\ValidatedWorld.Persistence.Sqlite\ValidatedWorld.Persistence.Sqlite.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\ValidatedWorld.Serialization\ValidatedWorld.Serialization.csproj" />
+    <Using Include="Xunit" />
   </ItemGroup>
 
 </Project>

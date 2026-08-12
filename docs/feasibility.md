@@ -6,314 +6,297 @@
 
 ## Verdict
 
-ValidatedWorld is feasible and useful if it is built as a **claim, dependency,
-and review compiler for authored projects**.
+ValidatedWorld is feasible if it is built as a **semantic change-control engine
+over a small relational metamodel**, not as a monolithic JSON document, a generic
+database, or an exhortation for AIs to write careful SQL.
 
-It is not feasible as a machine that reads unrestricted prose and proves every
-statement correct. That does not make natural-language review irrelevant. A
-heuristic reviewer can discover likely claims and implicit connections, focus on
-the sections affected by a change, and be required by commit policy. The system
-must distinguish “this review ran and its findings were resolved” from “this
-property was mathematically proven.”
+One SQLite application file is the authoritative workspace. JSON is the
+deterministic command/result and logical-snapshot format. The C# engine owns the
+semantics that ordinary database constraints do not express: typed dependency
+direction, transitive impact across old and projected state, review obligations,
+profile constraints, coverage, and inconclusive outcomes.
 
-The common product sits between:
+ValidatedWorld is not a document system. It does not read or rewrite a novel,
+patent application, whitepaper, manual, or game project. External tools may use
+its data and impact results, but that workflow remains outside its guarantee.
 
-- A structured document model.
-- A dependency and traceability graph.
-- A transaction system.
-- A static analyzer.
-- A mandatory review workflow.
-- Optional profile-specific model checking.
+## Why not arbitrary AI-authored tables
 
-This applies to technical designs and papers as directly as it applies to
-fiction. The content differs; the common problem is the same: a sequential
-document hides a web of semantic dependencies that becomes difficult for a human
-or AI to maintain as it grows.
+Allowing each AI or project to create any SQL schema sounds flexible, but removes
+the basis for deterministic product behavior.
 
-## The shared abstraction
+A foreign key can prove that one row references an existing row. It cannot, by
+itself, specify:
 
-Every supported project can contain:
+- whether the referencing row semantically depends on the referenced row;
+- whether impact flows forward, backward, both ways, or not at all;
+- whether a relationship is evidence, definition, contradiction, chronology,
+  implementation, knowledge, or presentation order;
+- which endpoint types and lifecycle states make the relation authoritative;
+- which changes require review;
+- whether missing data means false, unknown, or outside coverage;
+- how a changed schema affects existing records;
+- what evidence explains a validation result.
 
-- **Content units:** sections, paragraphs, figures, tables, scenes, requirements,
-  design components, or other stable authored units.
-- **Subjects:** named concepts, terms, systems, people, locations, variables, or
-  objects.
-- **Claims:** facts, assumptions, hypotheses, requirements, observations,
-  conclusions, decisions, definitions, or recommendations.
-- **Evidence:** citations, measurements, datasets, calculations, documents,
-  tests, events, or clues.
-- **Semantic links:** depends on, supports, contradicts, refines, supersedes,
-  defines, uses, implements, verifies, reveals, and profile-specific relations.
-- **Constraints:** explicit rules that must remain true.
+An AI could infer those meanings heuristically from table/column names, but then
+ValidatedWorld could not promise repeatable impact or validation across models.
+That would reduce the product to a prompt and database convention.
 
-The operational dependency graph is derived from those records. A change to a
-record walks the reverse graph and produces an explained impact set.
+The product therefore owns a small fixed physical schema and logical metamodel.
+Profiles add vocabulary through versioned type definitions and registered
+deterministic validators, not arbitrary physical DDL.
 
-That is the core product. Fictional chronology, character knowledge, and game
-state are additional semantics, not prerequisites for document impact analysis.
+## The common metamodel
 
-## What can be guaranteed
+Every project contains:
 
-The product must label every result by evidence strength.
+- **Schema package selections:** exact versions of the logical profiles that
+  define allowed record and relation types.
+- **Records:** stable-ID typed nodes with revisions and typed field values.
+- **Relationships:** stable-ID first-class relations with named endpoints,
+  provenance, fields, and declared impact semantics.
+- **References:** record-valued fields extracted into indexed foreign-key rows.
+- **Constraints:** instances of a closed deterministic constraint catalog.
+- **External artifacts and anchors:** ordinary profile records that point to
+  locations outside the database without loading their bytes.
+- **Transactions:** draft add/replace/remove operations against an exact head.
+- **Reviews:** dispositions tied to exact projected records and impact paths.
+- **Commits:** accepted operations, hashes, author/intent, and audit evidence.
 
-### Proven by deterministic validation
+The common engine need not know that a record is a character or an electrical
+quantity. It must know its logical type, field schema, references, and applicable
+relationship/constraint semantics. Profiles provide the domain interpretation.
 
-Given complete explicit records for a rule, ValidatedWorld can prove or disprove
-properties such as:
+## Persistence responsibilities
 
-- IDs are unique and references resolve to compatible record types.
-- A link connects allowed source and target kinds.
-- An accepted claim explicitly contradicts another accepted claim in the same
-  declared scope.
-- A derived claim has the support required by project policy.
-- A definition, requirement, or decision has required traceability links.
-- A derivation dependency contains a forbidden cycle.
-- An authored content unit's semantic review applies to its current text hash.
-- A proposed change's transitive impact set is complete with respect to all
-  explicit references and semantic links.
-- Every policy-selected impacted unit has an explicit review disposition.
-- A transaction is based on the current canonical revision and commits
-  atomically.
+SQLite guarantees and indexes structural facts such as:
 
-Narrative profiles can additionally prove declared chronology, knowledge,
-disclosure, and finite reachability properties.
+- globally unique project record and relation IDs;
+- existing project/type/endpoint/target rows;
+- non-null and simple check constraints;
+- restricted deletes;
+- atomic multi-table writes;
+- indexed lookup by ID, type, endpoint, and revision;
+- durable storage of drafts, reviews, commits, and diagnostics.
 
-### Proven within an explicit finite model
+The application must enable and verify foreign-key enforcement on every
+connection. Direct canonical SQL mutation is unsupported because it bypasses the
+semantic commit pipeline.
 
-For a finite transition specification, the system can exhaustively explore
-reachable abstract states within configured limits. It may prove a declared
-property or produce a replayable counterexample. If a limit is reached, the
-result is **inconclusive**, not successful.
+The physical database file is not content-addressed. SQLite page layout can
+change without logical meaning changing. Project identity is a hash of a
+deterministically ordered logical JSON snapshot derived from the database.
 
-This is principally needed for games and branching narratives, not for the first
-document/dependency product.
+## Semantic responsibilities
 
-### Required but heuristic review
+The C# engine can deterministically prove or disprove, within explicit data and
+supported profiles, properties such as:
 
-AI-assisted or text-linting review can be required to run and can block commit
-until its concerns are resolved or explicitly acknowledged. It can:
+- logical type definitions and field values are valid;
+- relationship endpoint roles and kinds are compatible;
+- every graph-relevant reference was extracted and indexed;
+- selected accepted assertions explicitly contradict;
+- a requirement or conclusion has declared support/traceability;
+- selected dependency kinds contain no forbidden cycle;
+- a transaction's impact is complete over every declared dependency rule;
+- every policy-selected impacted record has a current disposition;
+- a stale transaction cannot commit;
+- a rejected transaction leaves all authoritative database rows unchanged;
+- accepted operations replay from the recorded base to the same logical hash.
 
-- Propose claims implicit in a changed section.
-- Propose missing links to definitions, assumptions, evidence, or downstream
-  conclusions.
-- Compare changed text with structured annotations.
-- Flag likely contradictions, stale numbers, inconsistent terminology, missing
-  qualifications, unsupported conclusions, or accidental disclosures.
-- Rank impacted content for human or agent attention.
+For a later finite interactive-state profile, bounded exhaustive analysis may
+prove a property or return a replayable counterexample. Reaching a configured
+bound is inconclusive.
 
-These findings remain **concerns**. Requiring the review is a workflow guarantee;
-accepting the reviewer's semantic judgment as truth would not be.
+Every result is labeled:
+
+- **Proven:** every required deterministic phase completed and the declared
+  property holds.
+- **Disproven:** a deterministic rule found a violation with evidence.
+- **Inconclusive:** missing annotations, unsupported schema/profile data, bounds,
+  cancellation, or failure prevented a conclusion.
 
 ## What cannot be guaranteed
 
 ValidatedWorld cannot generally:
 
-- Recover every claim or implication from unrestricted natural language.
-- Know every implicit dependency an author failed to model and reviewers failed
-  to notice.
-- Prove that a scientific claim is true, a citation is reliable, a design will
-  work, or a paper is persuasive.
-- Prove patent novelty, enablement, legal sufficiency, or freedom to operate.
-- Judge literary quality, emotion, fun, originality, or commercial value.
-- Exhaust an unbounded game or tabletop campaign state space.
-- Decide arbitrary logic expressed in an unrestricted rules language.
-- Guarantee that generated prose is consistent merely because its structured
-  outline was valid.
-- Deterministically manufacture a complete audience-specific artifact from an
-  under-specified graph.
+- recover every fact or dependency from unrestricted prose;
+- detect a relationship that was never modeled;
+- infer reliable semantics from arbitrary user-created SQL tables;
+- prove a scientific claim, design, citation, patent, or legal argument correct;
+- judge literary quality, emotion, originality, persuasion, or fun;
+- generate or render a finished document or game;
+- verify that an external artifact reflects current project state;
+- guarantee an AI correctly applies impact guidance;
+- exhaust an unbounded game/campaign state space;
+- decide arbitrary logic in an unrestricted rule language.
 
-The UI, CLI, README, and reports must not imply otherwise.
+## Transactions rather than long database sessions
 
-## The annotation and review bargain
+A human or AI may spend minutes or hours constructing a draft, but SQLite write
+transactions must remain short. A ValidatedWorld transaction is therefore an
+application-level durable draft, not a database transaction held open for the
+entire review cycle.
 
-The system gains deterministic power when important meaning crosses the
-**semantic boundary**: content is bound to claims, and claims are connected by
-typed links or constraints.
+The flow is:
 
-Authors should not manually draw every low-level edge. Three sources contribute
-to the graph:
+1. Store draft operations with exact base revision/hash.
+2. Project and validate them outside an authoritative write lock.
+3. Gather required review dispositions.
+4. Begin a short SQLite write transaction.
+5. Recheck the authoritative head and all preconditions.
+6. Rebuild/revalidate any evidence that can have become stale.
+7. Apply all normalized rows and audit data.
+8. Update the project head and commit SQLite atomically.
 
-1. Typed references in canonical records generate edges automatically.
-2. Humans or authoring agents add intentional semantic links.
-3. Heuristic review proposes missing claims and links for confirmation.
+There is no separate semantic diff. The accepted operations are the direct
+change record; impact is the transitive consequence record.
 
-Only confirmed records become canonical. Candidate links retain provenance so
-the project can distinguish manual statements from AI suggestions.
+## Relationship to external documents
 
-Not every sentence needs a formal claim. A project policy selects which content
-requires semantic review—for example every requirement and conclusion, but not
-formatting prose. Coverage reports show which content is mapped, stale, or
-outside deterministic protection.
+Profile records may identify an external manuscript, design, patent workspace,
+source tree, Unity project, or dataset. Anchor records identify locations such as
+chapters, sections, components, tests, or scenes. Typed relations bind those
+anchors to semantic records.
 
-## From graph to finished artifact
+When a fact changes, impact analysis can report affected anchors. That is
+guidance, not synchronization. An anchor disposition proves only that the graph
+impact was considered, not that external bytes were edited correctly.
 
-An arbitrary semantic graph does not uniquely determine a patent application,
-player manual, or novel. It may omit rhetoric, ordering, examples, transitions,
-audience choices, formatting, or entire passages. ValidatedWorld must therefore
-separate three output paths:
+## Relationship to RAG and existing products
 
-1. **Deterministic projection:** a versioned output profile maps already
-   canonical content and semantic records into files. The same snapshot,
-   profile version, and options produce the same semantic bytes.
-2. **Generative composition:** a human or thinking AI authors missing content
-   from a composition plan and bounded context packets. Its result is a proposed
-   set of content/semantic transaction operations, not a trusted final export.
-3. **External adaptation:** another system consumes canonical JSON or a declared
-   projection and performs domain-specific work, such as importing a runtime
-   package into Unity.
+RAG retrieves likely relevant material for generation. GraphRAG commonly extracts
+a heuristic graph from text and uses it as a retrieval index. ValidatedWorld
+instead maintains deliberately authored authoritative state and rejects invalid
+changes. It may supply deterministic context to a RAG system but is not itself a
+RAG pipeline.
 
-This creates a useful rule: **render what is already authored; transact what
-must be invented.**
+The closer overlaps are requirements/traceability tools, SHACL/RDF validation,
+typed graph databases, and version-controlled databases. See
+[prior_art_and_positioning.md](prior_art_and_positioning.md).
 
-For example, a novel normally stores manuscript sections as canonical content,
-so EPUB or Markdown production can be deterministic. A claims-only technical
-graph may support a patent-drafting composition profile, but an AI must still
-make prose and organization choices. Those choices become reviewable content
-before a deterministic patent-document renderer formats them. ValidatedWorld
-does not certify the resulting application legally sufficient or patentable.
+The existence of those systems narrows the product claim. ValidatedWorld must not
+become another database or generic trace-link UI. Its candidate novelty is the
+combination of:
 
-Output extensibility is feasible as a C# contract and registry without choosing
-a plugin packaging standard yet. Dynamic third-party loading, process isolation,
-and marketplace packaging are later integration concerns. A target-specific
-composition profile should plan the artifact independently of the AI provider,
-so a patent/manual/novel workflow can change models without changing its output
-or validation contract.
+- profile-independent typed semantic records;
+- relationship-specific deterministic impact;
+- impact over both base and projected graph;
+- mandatory explained review before atomic commit;
+- explicit evidence/coverage/inconclusive reporting;
+- later narrative and interactive-state profiles.
 
-## The simplest useful change workflow
+## Why SQLite, not a server or graph database
 
-Suppose a technical design contains:
+SQLite is sufficient for the initial scale, supports foreign keys, indexes,
+recursive queries, and atomic transactions, and preserves a one-file portable
+project. Hundreds of pages will normally produce thousands or tens of thousands
+of semantic records, not a database-scale challenge.
 
-- A requirement that a sensor operate for 24 hours.
-- An assumption about average current draw.
-- A power-budget conclusion derived from that assumption.
-- A battery decision depending on the conclusion.
-- Architecture and verification sections bound to those claims.
+The likely bottleneck is graph density and full validation, not storage bytes.
+Gate A includes synthetic performance tests at 100,000 records and 1,000,000
+derived dependency edges.
 
-Changing the current-draw assumption should deterministically identify the
-derived conclusion, battery decision, architecture section, and verification
-plan as impacted. Before commit, each receives one disposition:
-
-- `updated` — it changed in the transaction;
-- `reviewed-no-change` — it remains valid, with a reason;
-- `not-applicable` — the dependency path does not require action, with a reason;
-- `pending` — commit remains blocked when policy requires disposition.
-
-An AI reviewer may notice that a number in the power-budget prose is now stale.
-Even if it does not, the explicit graph still forces the relevant section to be
-looked at. This is useful without a theorem prover, timeline, or game simulator.
-
-## Why transactions matter
-
-A transaction groups changes to content, claims, links, and review dispositions.
-Canon advances from one accepted snapshot to another or not at all.
-
-The transaction does not require every dependent record to be edited. It
-requires every policy-relevant dependent record to be considered. This is closer
-to a compiler plus a code-review checklist than to a database cascade.
-
-Review dispositions are bound to the projected content hashes and impact-path
-fingerprints. Changing the transaction invalidates stale dispositions.
-
-## How interactive game state fits
-
-The user's intuition that a game can remain a static graph is substantially
-correct. The canonical game project is static: it contains variables, possible
-values, conditions, effects, invariants, and transitions. A particular runtime
-state is a valuation of those variables after a path of player actions.
-
-The system should not author a separate node for every possible full state.
-Instead, it derives reachable states when checking a declared property. This is
-why game support is more complex than a linear document:
-
-- Untyped “more connections” cannot say which facts are mutually exclusive.
-- Edges need conditions, effects, and scopes.
-- Loops can create many paths.
-- State exploration can grow combinatorially.
-
-So the canonical model is still static, but validation sometimes needs bounded
-model checking. That complexity should not be imposed on the common document
-core or the first POC.
+A web/PostgreSQL host is authorized only when real requirements include multiple
+concurrent writers, centralized authorization, multi-tenancy, or remote service
+operations. A specialized graph store is authorized only when measured
+traversal/query workloads exceed the indexed relational implementation and its
+operational cost is justified.
 
 ## Smallest useful product
 
-The first product should be a **transactional document dependency and review
-checker**.
+Gate A is an **embedded relational graph transaction and validation tool**.
 
-It should support:
+It supports:
 
-- One ordered technical design document split into stable content units.
-- Subjects, claims, assertion roles/statuses, evidence, and typed semantic links.
-- Bindings from sections to the claims they assert, use, or discuss.
-- Strict JSON load and a versioned output-profile contract with deterministic
-  Markdown/report implementations.
-- Atomic transactions over content and semantic records.
-- Base-plus-projected dependency impact analysis.
-- Explained review obligations for impacted records.
-- Deterministic contradiction, support, cycle, traceability, and stale-annotation
-  checks.
-- A context/review packet for an external human or AI reviewer.
-- Structured submission and acknowledgement of heuristic concerns, without a
-  built-in paid model requirement.
+- one authoritative `project.vw.db`;
+- a fixed SQLite schema with migrations and integrity checks;
+- a small logical record/relation metamodel;
+- one versioned built-in technical profile;
+- stable IDs, revisions, typed values, references, and relation endpoints;
+- deterministic logical JSON serialization and hashing;
+- durable application-level draft transactions;
+- full projected-state validation;
+- base-plus-projected impact with shortest explanation paths;
+- mandatory review dispositions selected by policy;
+- atomic accepted commit and replayable audit evidence;
+- JSON commands/results plus bounded read-only queries.
 
-This slice is simpler than a mystery and directly tests the original spider-web
-document idea. It can be useful on its own.
+It does not require:
+
+- arbitrary project SQL schemas or user DDL;
+- a direct canonical SQL editing mode;
+- document import, generation, rendering, or publishing;
+- a custom diff/change-package format;
+- a built-in AI provider;
+- RDF, a graph database, PostgreSQL, a web app, GUI, or plugin;
+- narrative or interactive-state implementation.
+
+## First proof scenario
+
+The `TechnicalProject` sample describes an offline sensor design graph and
+external anchors for requirements, power budget, architecture, verification, and
+privacy.
+
+Changing average current from 20 mA to 25 mA must impact the runtime result,
+battery decision, and relevant anchors. A valid transaction repairs the affected
+structured values and dispositions together. The unrelated privacy anchor must
+not appear.
+
+The same scenario must demonstrate why raw foreign keys are insufficient: the
+engine follows declared semantic dependency rules, not every relational
+reference, and explains every selected path.
 
 ## Staged proof plan
 
-### Gate A — Common document graph
+### Gate A — SQLite semantic change control
 
-Use a small technical design sample and realistic change transactions. Measure:
+Measure:
 
-- Expected and actual impact sets.
-- Missed and irrelevant impacts.
-- Time needed to create/maintain links.
-- Whether required review dispositions prevent stale dependent sections.
-- Whether an agent can repair a transaction using structured explanations.
-- Determinism of reports and failed-commit atomicity.
-- Coverage of content units and semantic annotations.
-- Reproducibility and completeness disclosure of selected output profiles.
+- expected versus actual impact sets and explanation paths;
+- missed and irrelevant impacts;
+- modeling cost of types, records, and relationships;
+- schema/database integrity versus semantic-validator findings;
+- whether atomic commits prevent internally stale state;
+- whether lower-cost agents can inspect/query/repair transactions;
+- deterministic logical snapshots, reports, hashes, and replay;
+- performance at the expected and synthetic upper-bound fixtures;
+- usefulness compared with Doorstop and a plain relational schema.
 
-If Gate A succeeds, the project already has a useful release direction.
+If Gate A succeeds, the project has a useful release direction.
 
-### Gate B — Heuristic discovery/review
+### Gate B — Linear narrative profile
 
-Evaluate one or more AI reviewers on deliberately omitted links and stale prose.
-Measure proposal precision, recall against a hand-authored corpus, review cost,
-and whether scoped context materially outperforms reviewing the whole document.
-Do not make one provider mandatory in the core product.
+Add a reduced mystery schema for chronology, perspective, knowledge, clues, and
+disclosure. Keep manuscripts external. Retain the profile only if it catches
+meaningful structured-state errors at acceptable modeling cost.
 
-### Gate C — Linear narrative profile
+### Gate C — Interactive-state profile
 
-Add the Harbor mystery only after Gate A. First test linear chronology,
-perspective, and disclosure. Retain the profile only if its added authoring
-burden catches failures the common graph cannot.
+Only after Gate B, add finite typed variables, conditions, effects, invariants,
+and bounded exploration.
 
-### Gate D — Interactive-state profile
+### Gate D — Integration and optional hosting
 
-Only after Gate C, add a miniature branching scenario with typed variables,
-conditions, effects, invariants, and bounded exploration. Retain it only if
-replayable traces catch state-dependent failures that static impact and linear
-narrative rules cannot.
+After the schema/protocol are stable, evaluate MCP/plugin packaging and a thin
+HTTP host. PostgreSQL is considered only if hosted multi-writer needs are proven.
 
 ## Stop and scale-down criteria
 
-Keep the common document tool even if narrative modeling proves too expensive.
-Scale down further to impact packets and review obligations if typed claims are
-too burdensome but section-level dependencies remain useful.
-
-Archive the experiment only if explicit dependencies plus forced review provide
-no meaningful advantage over ordinary documents and unscoped AI review.
+If the general logical type system is too burdensome, freeze a smaller fixed
+record/relation catalog. If the proposition/assertion technical profile adds no
+value over generic nodes and links, remove it. If impact/review offers no
+meaningful advantage over Doorstop or ordinary SQL plus review, archive or pivot
+the experiment.
 
 ## Product language
 
 Prefer:
 
-> ValidatedWorld maps the important claims and dependencies hidden inside large
-> documents, validates explicit rules, and forces affected material through a
-> reviewable transaction.
+> ValidatedWorld atomically versions an explicit semantic project graph and
+> explains which modeled records must be reconsidered when it changes.
 
 Avoid:
 
-> ValidatedWorld guarantees that an entire paper, novel, or game is correct.
-
-That distinction preserves both the ambition and the credibility of the project.
+> ValidatedWorld is a database schema, RAG system, or AI prompt that guarantees a
+> whole document or world is correct.

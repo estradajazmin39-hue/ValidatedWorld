@@ -18,4 +18,8 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ValidatedWorld.Core\ValidatedWorld.Core.csproj" />
+  </ItemGroup>
+
 </Project>

@@ -7,4 +7,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ValidatedWorld.Application\ValidatedWorld.Application.csproj" />
+    <ProjectReference Include="..\ValidatedWorld.Persistence.Sqlite\ValidatedWorld.Persistence.Sqlite.csproj" />
+  </ItemGroup>
+
 </Project>

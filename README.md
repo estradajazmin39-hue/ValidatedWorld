@@ -1,94 +1,126 @@
 # ValidatedWorld
 
-ValidatedWorld is an experimental **consistency compiler for large, connected
-documents and designed worlds**.
+ValidatedWorld is an experimental **semantic change-control engine for complex
+project data**.
 
-A long document looks sequential on the page, but its meaning is a graph:
-definitions are used by later sections, conclusions depend on assumptions and
-evidence, requirements drive design decisions and tests, fictional events affect
-characters and clues, and one changed statement can invalidate material far away
-from it.
+A novel, technical design, patent outline, campaign, or game is presented in a
+sequence, but its important meaning forms a graph. Conclusions depend on
+assumptions and evidence; scenes depend on prior events and character knowledge;
+requirements depend on definitions and are realized by decisions and tests.
 
-ValidatedWorld makes the important parts of that hidden graph explicit. It gives
-content units and claims stable identities, records typed relationships between
-them, computes the impact of a proposed change, and requires affected material
-to be updated or deliberately reviewed before the change becomes canonical.
-Optional AI review can propose missing claims and connections or flag likely
-semantic conflicts; deterministic validation reports exactly what was proven and
-what remains heuristic.
+ValidatedWorld stores that explicit graph in an embedded SQLite project file. It
+validates proposed transactions, calculates their downstream impact, requires
+selected affected records to be reviewed, and commits the complete new state or
+nothing at all.
+
+## Storage and protocol
+
+The authoritative workspace is one portable SQLite application file:
+
+```text
+project.vw.db
+```
+
+SQLite supplies durable transactions, foreign keys, indexes, and efficient
+queries. ValidatedWorld supplies the semantic behavior a database schema cannot:
+typed dependency direction, base-plus-projected impact, explainable review
+obligations, domain constraints, and proven/disproven/inconclusive outcomes.
+
+JSON remains the public agent and integration protocol. Commands, transaction
+operations, diagnostics, impact results, and deterministic logical snapshots are
+versioned JSON. The project hash is computed from the logical canonical snapshot,
+not from SQLite's physical file bytes.
+
+## A small opinionated metamodel
+
+ValidatedWorld is not a suggestion that every AI invent arbitrary SQL tables and
+remember to check them carefully. That workflow cannot deterministically answer
+what a foreign key means, which direction impact flows, or whether every relevant
+record was reviewed.
+
+Instead, the physical database has a small fixed metamodel:
+
+- stable-ID records with versioned logical types and typed fields;
+- first-class typed relationships with named endpoints and impact semantics;
+- extracted record references with foreign-key integrity;
+- closed deterministic constraint kinds;
+- draft transactions and operations;
+- impact evidence and review dispositions;
+- accepted commits and audit records.
+
+Technical claims, fictional events, character knowledge, game transitions, and
+other domain concepts are versioned profiles over that metamodel. Project authors
+do not create arbitrary physical tables or write canonical rows directly.
+Unmodeled extension data may be retained, but it is reported as outside the
+engine's guarantees.
+
+## Product boundary
+
+ValidatedWorld owns:
+
+- the authoritative `project.vw.db` state;
+- a deterministic backend-neutral JSON snapshot representation;
+- stable IDs, logical types, and typed references;
+- structural and semantic validation;
+- explained graph impact and mandatory review policy;
+- atomic optimistic transactions and replayable commit evidence;
+- bounded JSON queries for humans, AIs, and integrations.
+
+ValidatedWorld does **not** own the finished novel, paper, patent application,
+manual, source tree, game project, or media. External artifact/anchor records may
+point to those products, but the engine does not import, rewrite, render, publish,
+or certify them.
+
+There is no special diff format. Accepted transaction operations are the direct
+change record; impact analysis supplies the transitive consequences.
 
 ## Intended uses
 
-- Technical designs: trace requirements, assumptions, decisions,
-  implementations, and verification plans.
-- Whitepapers and research-oriented documents: trace definitions, claims,
-  evidence, derivations, citations, and conclusions.
-- Novels and mysteries: track facts, chronology, character knowledge, clues, and
-  disclosure.
-- Games and campaigns: describe a static transition model whose possible runtime
-  states are derived from variables, conditions, effects, and player choices.
+- Technical work: definitions, assumptions, requirements, evidence, decisions,
+  conclusions, implementations, verification, and traceability.
+- Patent or standards planning: a structured claim/definition/evidence outline
+  without claims of legal or scientific correctness.
+- Novels and mysteries: canon facts, chronology, character knowledge, clues, and
+  disclosure while manuscript text remains external.
+- Games and campaigns: a static transition specification whose runtime states
+  are derived by a later bounded-analysis profile.
 
-Despite the name, a “world” is any versioned universe of connected claims and
-artifacts. Fiction is one profile, not the foundation of every project.
-
-ValidatedWorld cannot prove arbitrary prose correct or a paper scientifically
-sound. Its durable promise is narrower: preserve explicit constraints, expose
-change impact, force review where certainty ends, and assemble focused context
-for an authoring agent.
-
-## From project to deliverable
-
-ValidatedWorld does not assume one universal graph-to-document serializer.
-It separates four operations:
-
-- **Canonical serialization** losslessly stores the project snapshot.
-- **Output profiles** are versioned, replaceable renderers. Built-in profiles
-  reproducibly project accepted content into Markdown, reports, runtime
-  packages, or other target formats.
-- **AI composition** authors missing prose or structure as a proposed
-  transaction. It is reviewed and committed before publication; it is not
-  mislabeled as deterministic export.
-- **External adapters** may consume canonical JSON or a purpose-built projection
-  for Unity, publishing systems, patent tooling, or other applications.
-
-A novel project normally contains its reviewed manuscript as content units, so
-an output profile assembles and formats it. A claims-only graph usually does not
-contain enough information to determine a whole patent application or player
-manual. A specialized composition profile can plan the required sections and a
-thinking agent can draft them, but the resulting content must cross the same
-transaction, dependency, and review boundary as manually authored text.
-
-## Start here
-
-- [Feasibility and limits](docs/feasibility.md) — the guarantee boundary and the
-  smallest useful product.
-- [Product and architecture specification](docs/validated_world_authoring_spec.md)
-  — the common document/claim graph and specialized profiles.
-- [Implementation blueprint](docs/implementation_blueprint.md) — domain types,
-  algorithms, tests, and sequenced work packages for coding agents.
-
-## Current status
-
-The repository is a .NET 10 scaffold plus an implementation-ready design. The
-first proof of concept is a small technical design document: changing an
-assumption must identify every dependent claim and section and create review
-obligations. A mystery-world profile follows only after that simpler core proves
-useful.
+Despite the name, a “world” is any versioned universe of connected records.
+Fiction is one profile, not the common engine's foundation.
 
 ## Core workflow
 
 ```text
-inspect project and dependency graph
-→ begin transaction
-→ change content, claims, or links
-→ compute transitive impact
-→ validate explicit rules
-→ review every affected unit
-→ resolve or acknowledge heuristic concerns
-→ commit atomically
-→ compose missing content when needed, through another transaction
-→ render through a selected output profile
+open project.vw.db and verify its logical head hash
+→ begin a draft transaction against the exact head revision/hash
+→ add, replace, or remove typed records and relationships
+→ construct the projected logical state
+→ derive dependency edges from base and projected state
+→ compute explained transitive impact
+→ repair graph data and disposition policy-selected affected records
+→ run complete deterministic validation
+→ commit all relational changes atomically or roll back everything
+→ return versioned JSON results
 ```
+
+## Start here
+
+- [Feasibility and limits](docs/feasibility.md) — guarantee boundary and proof
+  gates.
+- [Product and architecture specification](docs/validated_world_authoring_spec.md)
+  — authoritative metamodel, persistence, and profile design.
+- [Implementation blueprint](docs/implementation_blueprint.md) — exact storage
+  schema, algorithms, tests, and work packages.
+- [Related systems and product position](docs/prior_art_and_positioning.md) —
+  overlaps with requirements tools, graph validation, versioned databases, and
+  RAG.
+
+## Current status
+
+The repository is a .NET 10 scaffold plus an implementation-ready design. Gate A
+is a small technical-project graph backed by SQLite. It must prove useful and
+accurate impact at acceptable modeling cost before narrative or game profiles
+are implemented.
 
 Build and test with:
 

@@ -2,74 +2,80 @@
 
 **Status:** Coding-agent handoff
 
-**Blueprint version:** 2.0
+**Blueprint version:** 4.0
 
 **Last reviewed:** 2026-08-11
 
 **Target:** .NET 10 / C#
 
-**POC schema:** `validatedworld/v1`
+**Database schema:** SQLite v1
+
+**Logical protocol:** `validatedworld/v1`
 
 ## 1. Purpose and reading order
 
-This document specifies the common document/claim graph implementation and the
-order in which coding agents should build it.
+This document specifies the embedded relational semantic change-control engine
+and the order in which coding agents build it.
 
 Read first:
 
 1. [feasibility.md](feasibility.md)
 2. [validated_world_authoring_spec.md](validated_world_authoring_spec.md)
-3. This blueprint
+3. [prior_art_and_positioning.md](prior_art_and_positioning.md)
+4. This blueprint
 
-Pseudocode is normative about observable behavior, not exact local syntax. If a
-coding agent discovers that an invariant or serialized contract is wrong, update
-the controlling documents in the same change.
+Pseudocode and SQL are normative about observable behavior. If implementation
+evidence invalidates a contract, update the controlling documents in the same
+change.
 
-Implement one work package at a time. Every package ends with:
+Every work package ends with:
 
 ```powershell
+dotnet restore ValidatedWorld.slnx
 dotnet build ValidatedWorld.slnx
 dotnet test ValidatedWorld.slnx
 ```
 
 ## 2. Non-negotiable invariants
 
-1. Core has no file, JSON, console, network, model-provider, UI, database,
-   word-processor, or game-engine dependency.
-2. The common core models authored content and semantic records; fiction is a
-   profile, not the base type system.
-3. A canonical snapshot is immutable during validation.
-4. Every canonical edit occurs through a transaction.
-5. A failed/stale commit leaves canonical bytes unchanged.
-6. Stable IDs, never headings/display names, are references.
-7. Missing information is unknown unless a profile declares a finite
-   closed-world rule.
-8. The operational dependency graph is derived from records and semantic links;
-   it is never a second authored source of truth.
-9. Impact means “must be considered,” not “must be edited.”
-10. Project policy may require every impacted record to have a current review
-    disposition before commit.
-11. Deterministic findings are Proven/Disproven/Inconclusive. Heuristic findings
-    are Concerns even when policy makes their resolution mandatory.
-12. AI-extracted claims/links never become canon without transaction operations.
-13. Diagnostic order, fingerprints, canonical serialization, and context
-    selection are deterministic.
-14. Delete operations never cascade implicitly.
-15. The common POC performs full validation at commit; incremental validation is
+1. `project.vw.db` is the only authoritative workspace artifact.
+2. JSON is the versioned protocol and logical snapshot representation, not the
+   physical source of truth.
+3. Logical project identity is a canonical JSON hash, never a hash of SQLite
+   file bytes.
+4. The SQLite schema is fixed and application-owned; project clients cannot add
+   canonical tables, triggers, or views.
+5. Domain vocabulary is profile-driven through exact logical packages, not
+   arbitrary physical DDL.
+6. Core has no SQLite, JSON, file, network, provider, UI, or game dependency.
+7. Every canonical mutation occurs through an application transaction.
+8. Durable drafts are not authoritative state and hold no long-lived SQLite
+   write transaction.
+9. A rejected or stale commit rolls back every relational and audit write.
+10. Stable IDs, not labels, paths, names, or row IDs, are semantic references.
+11. SQLite foreign keys establish structural integrity only. Dependency rules
+    establish semantic impact.
+12. Every graph-relevant reference is an explicit reference-valued field or
+    relation endpoint; extension JSON is never scanned for IDs.
+13. The dependency graph is derived and never authored as a second source of
+    truth.
+14. Impact uses the union of base and projected dependency graphs.
+15. Accepted operations are the direct change record; no separate semantic diff
+    is canonical.
+16. Impact means “must be considered,” not “must be edited.”
+17. Policy may require current dispositions for selected impacted objects.
+18. Deterministic results are Proven, Disproven, or Inconclusive.
+19. Remove never cascades implicitly. Physical foreign keys use Restrict/No
+    Action, and application repair is explicit.
+20. Gate A runs full logical validation; incremental semantic validation is
     deferred.
-16. Tests never require a network connection or paid model.
-17. Narrative time and perspective are not implemented before Gate A succeeds;
-    state exploration is not implemented before Gate C succeeds.
-18. Canonical serialization, deterministic output projection, and generative
-    authorship are different operations and public contracts.
-19. An output implementation never mutates canon or invents missing semantic or
-    creative content; such content enters through a transaction proposal.
+21. Gate A supports one writer at a time, matching SQLite's model.
+22. No importer, renderer, RAG pipeline, AI provider, web host, or graph database
+    is part of Gate A.
 
 ## 3. Solution architecture
 
-### 3.1 Project dependencies
-
-Add `ValidatedWorld.Application` during WP0.
+### 3.1 Projects and dependencies
 
 ```text
 ValidatedWorld.Core
@@ -84,1426 +90,1241 @@ ValidatedWorld.Validation
 ValidatedWorld.Application
   dependencies: Core, Serialization, Validation
 
-ValidatedWorld.Generation
-  dependencies: Core, Validation
-  purpose: deterministic context packets plus provider-neutral review and
-           authoring-composition proposals
-
-ValidatedWorld.Export
-  dependencies: Core, Validation
-  purpose: versioned output-profile contracts, manifests, and built-in renderers
+ValidatedWorld.Persistence.Sqlite
+  dependencies: Core, Serialization, Application, Microsoft.Data.Sqlite.Core,
+                explicitly pinned SQLitePCLRaw native bundle
 
 ValidatedWorld.Cli
-  dependencies: Application, Generation, Export
+  dependencies: Application, Persistence.Sqlite
 
 ValidatedWorld.Mcp (post-gate)
-  dependencies: Application, Generation, Export
+  dependencies: Application plus selected persistence composition
+
+ValidatedWorld.Web (only after hosted gate)
+  dependencies: Application plus selected persistence composition
 ```
 
-Validation never references Generation or Export. Application owns canonical
-mutation; Generation and Export are optional composed services.
+Application defines persistence ports. SQLite implements them. The composition
+root is the only layer that chooses SQLite.
 
 ### 3.2 Namespace responsibilities
 
 ```text
 ValidatedWorld.Core.Identifiers
+ValidatedWorld.Core.Schema
 ValidatedWorld.Core.Values
-ValidatedWorld.Core.Projects
-ValidatedWorld.Core.Content
-ValidatedWorld.Core.Claims
-ValidatedWorld.Core.Links
+ValidatedWorld.Core.Objects
 ValidatedWorld.Core.Constraints
 ValidatedWorld.Core.Transactions
 ValidatedWorld.Core.Reviews
 
 ValidatedWorld.Serialization.Json
-ValidatedWorld.Serialization.Workspaces
-ValidatedWorld.Serialization.Migrations
+ValidatedWorld.Serialization.Canonical
+ValidatedWorld.Serialization.Hashing
 
 ValidatedWorld.Validation.Diagnostics
+ValidatedWorld.Validation.Schema
 ValidatedWorld.Validation.Indexes
 ValidatedWorld.Validation.Dependencies
+ValidatedWorld.Validation.Impact
 ValidatedWorld.Validation.Rules
-ValidatedWorld.Validation.Reviews
+ValidatedWorld.Validation.Context
 
+ValidatedWorld.Application.Projects
 ValidatedWorld.Application.Transactions
 ValidatedWorld.Application.Commits
 ValidatedWorld.Application.Queries
-ValidatedWorld.Application.Import
+ValidatedWorld.Application.Persistence
 
-ValidatedWorld.Generation.Context
-ValidatedWorld.Generation.Review
-ValidatedWorld.Generation.Composition
-
-ValidatedWorld.Export.Contracts
-ValidatedWorld.Export.Manifests
-ValidatedWorld.Export.Documents
-ValidatedWorld.Export.Reports
-ValidatedWorld.Export.Runtime
+ValidatedWorld.Persistence.Sqlite.Connections
+ValidatedWorld.Persistence.Sqlite.Migrations
+ValidatedWorld.Persistence.Sqlite.Mapping
+ValidatedWorld.Persistence.Sqlite.Repositories
+ValidatedWorld.Persistence.Sqlite.Views
 ```
 
-### 3.3 Environmental abstractions
+### 3.3 Injected services
 
-Inject:
+Application injects:
 
-- `IClock`
-- `ITransactionIdGenerator`
-- `IWorldStore` (retain “World” in public product naming if desired)
-- `ITransactionStore`
-- `IWorkspaceLock`
-- `IAtomicFileWriter`
-- heuristic review providers
-- importer and output-profile registries
-- authoring-composition providers
+```csharp
+public interface IClock { DateTimeOffset UtcNow { get; } }
+public interface ITransactionIdGenerator { TransactionId Create(); }
+public interface IProjectRepository { /* snapshot/head operations */ }
+public interface IDraftTransactionRepository { /* durable draft operations */ }
+public interface ICommitRepository { /* audit/read operations */ }
+public interface IProjectWriteSession : IAsyncDisposable
+{
+    ValueTask<ProjectHead> ReadHeadAsync(CancellationToken cancellationToken);
+    ValueTask ApplyAcceptedCommitAsync(
+        AcceptedCommit commit,
+        CancellationToken cancellationToken);
+    ValueTask CommitAsync(CancellationToken cancellationToken);
+    ValueTask RollbackAsync(CancellationToken cancellationToken);
+}
+public interface IProjectWriteSessionFactory
+{
+    ValueTask<IProjectWriteSession> BeginImmediateAsync(
+        CancellationToken cancellationToken);
+}
+```
 
-Tests use fixed clocks/IDs and in-memory or fault-injecting stores.
+Port methods use logical domain types, not `DbConnection`, SQL strings, or rows.
+Tests use deterministic clocks/IDs and in-memory/fault-injecting ports.
 
-## 4. Common domain model
+## 4. Common immutable domain
 
 Use sealed immutable records and immutable collections at public boundaries.
-Core contains no `JsonElement` or serialization attributes.
+Validation operates on a complete `ProjectSnapshot`; Persistence maps it to and
+from normalized rows.
 
 ### 4.1 IDs
 
 ```csharp
-public readonly record struct CanonicalId(string Value);
 public readonly record struct ProjectId(string Value);
+public readonly record struct ObjectId(string Value);
+public readonly record struct TypeId(string Value);
+public readonly record struct PackageId(string Value);
 public readonly record struct TransactionId(string Value);
+public readonly record struct CommitId(string Value);
 ```
 
-Canonical IDs match:
+Project/object/type/package IDs match:
 
 ```regex
 ^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$
 ```
 
-Examples:
+Transaction IDs are `tx:` plus lower-case UUIDv7. Commit ID equals the accepted
+transaction ID in Gate A. Compare all identifiers with ordinal semantics. Reject
+rather than trim, case-fold, or normalize.
 
-```text
-artifact:sensor-design
-section:power-budget
-subject:average-current
-predicate:has-value
-proposition:average-current
-assertion:average-current-assumption
-source:bench-measurement-07
-link:runtime-derived-from-current
-constraint:requirements-have-tests
-```
-
-Compare with `StringComparer.Ordinal`. Reject noncanonical input; never trim,
-case-fold, or Unicode-normalize IDs.
-
-Transaction IDs are `tx:` plus lower-case UUIDv7. Tests inject a generator.
-
-### 4.2 Common record contract
+### 4.2 Schema package
 
 ```csharp
-public interface IProjectRecord
+public sealed record SchemaPackage(
+    PackageId Id,
+    string Version,
+    string DefinitionHash,
+    ImmutableArray<LogicalTypeDefinition> Types,
+    ImmutableArray<RequiredValidator> RequiredValidators);
+
+public enum LogicalObjectKind { Record, Relation, Constraint }
+
+public sealed record LogicalTypeDefinition(
+    TypeId Id,
+    PackageId PackageId,
+    string PackageVersion,
+    LogicalObjectKind ObjectKind,
+    string DisplayName,
+    ImmutableArray<FieldDefinition> Fields,
+    ImmutableArray<EndpointRoleDefinition> EndpointRoles,
+    ImmutableArray<DependencyRuleDefinition> DependencyRules,
+    ImmutableArray<string> Categories);
+```
+
+Only Relation types may declare endpoint roles/dependency rules. Constraint
+kinds are ordinary logical types whose object kind is Constraint and whose
+registered validators understand their fields. Type inheritance is deferred;
+Gate A packages declare complete concrete type definitions.
+
+### 4.3 Fields and values
+
+```csharp
+public enum FieldValueKind
 {
-    CanonicalId Id { get; }
-    int Revision { get; }
+    Text,
+    Integer,
+    Decimal,
+    Boolean,
+    Symbol,
+    Instant,
+    Reference
 }
-```
 
-Record revision starts at 1 and increments on committed replacement. It is
-separate from project revision.
+public enum ReferenceImpactMode
+{
+    None,
+    OwnerDependsOnTarget,
+    TargetDependsOnOwner,
+    Bidirectional
+}
 
-All addressable record IDs are globally unique across collections.
+public sealed record FieldDefinition(
+    string Name,
+    int Ordinal,
+    FieldValueKind ValueKind,
+    int MinimumCount,
+    int? MaximumCount,
+    bool IsOrderSignificant,
+    ImmutableArray<TypeId> AllowedReferenceTypes,
+    ReferenceImpactMode ReferenceImpact,
+    FieldValueConstraints Constraints);
 
-### 4.3 Neutral values
-
-```csharp
 public abstract record ProjectValue
 {
-    public sealed record RecordRef(CanonicalId RecordId) : ProjectValue;
     public sealed record Text(string Value) : ProjectValue;
     public sealed record Integer(long Value) : ProjectValue;
-    public sealed record Decimal(decimal Value) : ProjectValue;
+    public sealed record Decimal(string CanonicalValue) : ProjectValue;
     public sealed record Boolean(bool Value) : ProjectValue;
     public sealed record Symbol(string Value) : ProjectValue;
+    public sealed record Instant(DateTimeOffset Value) : ProjectValue;
+    public sealed record Reference(ObjectId TargetId) : ProjectValue;
 }
 ```
 
-JSON values are tagged. Decimal values serialize as invariant strings. Avoid
-floating point in canonical semantic values.
+Decimal values are canonical base-10 strings; floating point is forbidden for
+semantic values. Instants canonicalize to UTC ISO 8601 with seven fractional
+digits. Repeated unordered field values sort by canonical value; ordered values
+retain explicit ordinal.
 
-Namespaced extension payloads use a recursively immutable neutral value tree.
-Unknown extension namespaces are preserved and reported as uncovered, not
-silently interpreted.
-
-### 4.4 Project snapshot
+### 4.4 Relation roles and dependency rules
 
 ```csharp
+public sealed record EndpointRoleDefinition(
+    string Name,
+    int Ordinal,
+    int MinimumCount,
+    int? MaximumCount,
+    ImmutableArray<TypeId> AllowedTypes);
+
+public sealed record DependencyRuleDefinition(
+    int Ordinal,
+    string DependentRole,
+    string DependencyRole,
+    bool CreatesReviewImpact,
+    string Meaning);
+```
+
+The two roles must exist on the relation type. At instance time, the cross
+product of objects playing the roles yields dependency edges. If self-dependency
+is nonsensical for a relation type, its validator rejects identical endpoints.
+
+### 4.5 Objects
+
+```csharp
+public sealed record ProjectObject(
+    ObjectId Id,
+    int Revision,
+    LogicalObjectKind Kind,
+    TypeId TypeId,
+    ImmutableSortedDictionary<string, ImmutableArray<ProjectValue>> Fields,
+    ImmutableSortedDictionary<string, ImmutableArray<ObjectId>> Endpoints,
+    ImmutableArray<string> Tags,
+    ExtensionMap Extensions);
+
+public sealed record ExtensionMap(
+    ImmutableSortedDictionary<string, CanonicalJsonValue> Values);
+```
+
+Only Relation objects have endpoints. Constraint objects use registered closed
+types/validators. Extension keys are namespace-qualified. Extension values are
+round-tripped but uncovered; reference-looking strings inside them have no graph
+meaning.
+
+### 4.6 Project snapshot and head
+
+```csharp
+public sealed record ProjectHead(
+    ProjectId ProjectId,
+    long Revision,
+    string ParentLogicalHash,
+    string LogicalHash,
+    CommitId LastCommitId);
+
 public sealed record ProjectSnapshot(
-    ProjectHeader Header,
-    ImmutableArray<ArtifactDefinition> Artifacts,
-    ImmutableArray<ContentUnit> ContentUnits,
-    ImmutableArray<SubjectDefinition> Subjects,
-    ImmutableArray<PredicateDefinition> Predicates,
-    ImmutableArray<PropositionDefinition> Propositions,
-    ImmutableArray<AssertionRecord> Assertions,
-    ImmutableArray<SourceRecord> Sources,
-    ImmutableArray<ContentBinding> ContentBindings,
-    ImmutableArray<SemanticLink> SemanticLinks,
-    ImmutableArray<ProjectConstraint> Constraints,
-    ImmutableArray<SemanticReviewAttestation> SemanticReviews,
-    ImmutableArray<ProfileRecord> ProfileRecords);
-```
-
-`ProjectHeader` contains:
-
-- `SchemaVersion` (`validatedworld/v1`)
-- `ProjectId`
-- `Title`
-- `ProjectRevision` (`long`, starts at 0)
-- `ParentContentHash` (null only at revision 0)
-- `ContentHash`
-- `LastCommit`
-- `ProjectPolicy`
-- enabled profile IDs/versions
-
-Arrays exist for stable serialization. Validation builds indexes; Core does not
-store redundant inverse collections.
-
-### 4.5 Artifacts
-
-```csharp
-public sealed record ArtifactDefinition(
-    CanonicalId Id,
-    int Revision,
-    string Kind,
+    string ProtocolVersion,
+    ProjectHead Head,
     string Title,
-    string Format,
-    ImmutableArray<string> Tags,
-    ExtensionMap Extensions) : IProjectRecord;
+    ProjectPolicy Policy,
+    ImmutableArray<SchemaPackage> SchemaPackages,
+    ImmutableArray<ProjectObject> Objects);
 ```
 
-POC built-in kinds: `document`, `design`, `specification`, `whitepaper`. Format is
-`plain-text` or `markdown` for v1. The canonical snapshot stores content units;
-format controls deterministic reconstruction.
+Revision 0 initialization uses a documented null parent/last-commit encoding.
+Object arrays sort by ID. Package/type/field/role/rule arrays have the canonical
+ordering defined in Section 7.
 
-### 4.6 Content units
+## 5. Normative SQLite schema v1
 
-```csharp
-public sealed record ContentUnit(
-    CanonicalId Id,
-    int Revision,
-    CanonicalId ArtifactId,
-    CanonicalId? ParentUnitId,
-    string Kind,
-    long Sequence,
-    string? Heading,
-    string Text,
-    string TextHash,
-    ImmutableArray<string> Tags,
-    ExtensionMap Extensions) : IProjectRecord;
+### 5.1 Database header and migration
+
+Set:
+
+```sql
+PRAGMA application_id = 1448561732; -- 0x56574C44, "VWLD"
+PRAGMA user_version = 1;
 ```
 
-Built-in kinds: `section`, `paragraph`, `figure-caption`, `table`, `equation`,
-`requirement-block`, and `note`.
+Every schema connection executes and verifies:
 
-Rules:
-
-- Parent belongs to the same artifact.
-- Parent relationships are acyclic.
-- Sibling sequence values are unique. Gaps are allowed.
-- `TextHash` is SHA-256 over canonical UTF-8 text with `\n` newlines.
-- Loader recomputes and verifies `TextHash`.
-- Changing heading, text, artifact, or parent is a record replacement.
-
-`Sequence` is presentation order, not semantic dependency.
-
-### 4.7 Subjects
-
-```csharp
-public sealed record SubjectDefinition(
-    CanonicalId Id,
-    int Revision,
-    string Kind,
-    string DisplayName,
-    ImmutableArray<string> Aliases,
-    string? Description,
-    ImmutableArray<string> Tags,
-    ExtensionMap Extensions) : IProjectRecord;
+```sql
+PRAGMA foreign_keys = ON;
+PRAGMA foreign_keys;
+PRAGMA application_id;
+PRAGMA user_version;
 ```
 
-Initial kinds include `term`, `quantity`, `component`, `interface`, `method`,
-`dataset`, `requirement-target`, `organization`, and custom kinds. Narrative
-profiles later add characters, locations, events, and clues without changing the
-base record.
+The initial migration runs in one transaction and records SHA-256 of its exact
+UTF-8 resource text:
 
-### 4.8 Predicates and propositions
-
-```csharp
-public sealed record PredicateDefinition(
-    CanonicalId Id,
-    int Revision,
-    ImmutableArray<PredicateArgument> Arguments,
-    bool Symmetric,
-    WorldAssumption Assumption,
-    ExtensionMap Extensions) : IProjectRecord;
-
-public sealed record PredicateArgument(
-    string Role,
-    ValueTypeDefinition Type,
-    ImmutableArray<string> AllowedRecordKinds);
-
-public sealed record PropositionDefinition(
-    CanonicalId Id,
-    int Revision,
-    CanonicalId PredicateId,
-    ImmutableArray<NamedArgument> Arguments,
-    string Gloss) : IProjectRecord;
+```sql
+CREATE TABLE schema_migrations (
+    version             INTEGER PRIMARY KEY,
+    migration_id        TEXT NOT NULL UNIQUE,
+    script_sha256       TEXT NOT NULL,
+    applied_at_utc      TEXT NOT NULL
+) STRICT;
 ```
 
-Arguments are keyed by role and serialize in predicate-declared order. Missing,
-extra, duplicate, or type-incompatible arguments are errors.
+Unknown newer versions, missing migrations, or checksum mismatches block writes.
 
-The POC does not implement theorem proving. Propositions provide exact identity
-for contradiction, support, links, bindings, and review.
+### 5.2 Project and packages
 
-### 4.9 Assertions
+```sql
+CREATE TABLE projects (
+    project_id              TEXT PRIMARY KEY,
+    title                   TEXT NOT NULL CHECK(length(title) > 0),
+    head_revision           INTEGER NOT NULL CHECK(head_revision >= 0),
+    parent_logical_hash     TEXT NULL,
+    logical_hash            TEXT NOT NULL,
+    last_commit_id          TEXT NULL,
+    policy_json             TEXT NOT NULL CHECK(json_valid(policy_json)),
+    created_at_utc          TEXT NOT NULL,
+    FOREIGN KEY(last_commit_id) REFERENCES commits(commit_id)
+        ON DELETE RESTRICT,
+    CHECK(
+      (head_revision = 0 AND parent_logical_hash IS NULL AND
+       last_commit_id IS NULL) OR
+      (head_revision > 0 AND parent_logical_hash IS NOT NULL AND
+       last_commit_id IS NOT NULL)
+    )
+) STRICT;
 
-```csharp
-public enum Polarity { Positive, Negative }
+CREATE TABLE schema_packages (
+    package_id              TEXT NOT NULL,
+    package_version         TEXT NOT NULL,
+    definition_hash         TEXT NOT NULL,
+    PRIMARY KEY(package_id, package_version)
+) STRICT;
 
-public enum AssertionRole
-{
-    Fact,
-    Assumption,
-    Hypothesis,
-    Requirement,
-    Observation,
-    Result,
-    Conclusion,
-    Decision,
-    Recommendation,
-    Definition
-}
+CREATE TABLE schema_package_validators (
+    package_id              TEXT NOT NULL,
+    package_version         TEXT NOT NULL,
+    validator_id            TEXT NOT NULL,
+    validator_version       INTEGER NOT NULL CHECK(validator_version >= 1),
+    PRIMARY KEY(package_id, package_version, validator_id),
+    FOREIGN KEY(package_id, package_version)
+        REFERENCES schema_packages(package_id, package_version)
+        ON DELETE RESTRICT
+) STRICT;
 
-public enum AssertionStatus
-{
-    Proposed,
-    Accepted,
-    Rejected,
-    Deprecated,
-    Superseded
-}
-
-public sealed record AssertionRecord(
-    CanonicalId Id,
-    int Revision,
-    CanonicalId PropositionId,
-    Polarity Polarity,
-    AssertionRole Role,
-    AssertionStatus Status,
-    string Scope,
-    ImmutableArray<CanonicalId> SourceIds,
-    string? Rationale,
-    ExtensionMap Extensions) : IProjectRecord;
+CREATE TABLE project_packages (
+    project_id              TEXT NOT NULL,
+    package_id              TEXT NOT NULL,
+    package_version         TEXT NOT NULL,
+    PRIMARY KEY(project_id, package_id),
+    FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE RESTRICT,
+    FOREIGN KEY(package_id, package_version)
+        REFERENCES schema_packages(package_id, package_version)
+        ON DELETE RESTRICT
+) STRICT;
 ```
 
-`Scope` is a lower-kebab symbol. Common v1 uses `global`; profiles may define
-additional scope compatibility rules. Unknown profile scopes are uncovered and
-cannot participate in deterministic contradiction proof.
+Gate A permits exactly one row in `projects`; initialization rejects a second.
 
-By default only Accepted assertions are authoritative for contradiction and
-constraint checks. Policy may include Proposed assertions as warnings.
+### 5.3 Logical type definitions
 
-### 4.10 Sources and evidence
+```sql
+CREATE TABLE logical_types (
+    type_id                 TEXT PRIMARY KEY,
+    package_id              TEXT NOT NULL,
+    package_version         TEXT NOT NULL,
+    object_kind             TEXT NOT NULL
+        CHECK(object_kind IN ('record', 'relation', 'constraint')),
+    display_name            TEXT NOT NULL CHECK(length(display_name) > 0),
+    FOREIGN KEY(package_id, package_version)
+        REFERENCES schema_packages(package_id, package_version)
+        ON DELETE RESTRICT
+) STRICT;
 
-```csharp
-public sealed record SourceRecord(
-    CanonicalId Id,
-    int Revision,
-    string Kind,
-    string Title,
-    string? Locator,
-    string? Uri,
-    string? Version,
-    string? ContentHash,
-    string? Notes,
-    ExtensionMap Extensions) : IProjectRecord;
+CREATE TABLE logical_type_categories (
+    type_id                 TEXT NOT NULL,
+    category                TEXT NOT NULL,
+    PRIMARY KEY(type_id, category),
+    FOREIGN KEY(type_id) REFERENCES logical_types(type_id) ON DELETE RESTRICT
+) STRICT;
+
+CREATE TABLE field_definitions (
+    type_id                 TEXT NOT NULL,
+    field_name              TEXT NOT NULL,
+    field_ordinal           INTEGER NOT NULL CHECK(field_ordinal >= 0),
+    value_kind              TEXT NOT NULL CHECK(value_kind IN
+        ('text','integer','decimal','boolean','symbol','instant','reference')),
+    minimum_count           INTEGER NOT NULL CHECK(minimum_count >= 0),
+    maximum_count           INTEGER NULL CHECK(maximum_count IS NULL OR
+                                                maximum_count >= minimum_count),
+    is_order_significant    INTEGER NOT NULL CHECK(is_order_significant IN (0,1)),
+    reference_impact        TEXT NOT NULL CHECK(reference_impact IN
+        ('none','owner-depends-on-target','target-depends-on-owner',
+         'bidirectional')),
+    constraints_json        TEXT NOT NULL CHECK(json_valid(constraints_json)),
+    PRIMARY KEY(type_id, field_name),
+    UNIQUE(type_id, field_ordinal),
+    FOREIGN KEY(type_id) REFERENCES logical_types(type_id) ON DELETE RESTRICT,
+    CHECK(value_kind = 'reference' OR reference_impact = 'none')
+) STRICT;
+
+CREATE TABLE field_allowed_target_types (
+    owner_type_id           TEXT NOT NULL,
+    field_name              TEXT NOT NULL,
+    target_type_id          TEXT NOT NULL,
+    PRIMARY KEY(owner_type_id, field_name, target_type_id),
+    FOREIGN KEY(owner_type_id, field_name)
+        REFERENCES field_definitions(type_id, field_name) ON DELETE RESTRICT,
+    FOREIGN KEY(target_type_id) REFERENCES logical_types(type_id)
+        ON DELETE RESTRICT
+) STRICT;
+
+CREATE TABLE relation_role_definitions (
+    relation_type_id        TEXT NOT NULL,
+    role_name               TEXT NOT NULL,
+    role_ordinal            INTEGER NOT NULL CHECK(role_ordinal >= 0),
+    minimum_count           INTEGER NOT NULL CHECK(minimum_count >= 0),
+    maximum_count           INTEGER NULL CHECK(maximum_count IS NULL OR
+                                                maximum_count >= minimum_count),
+    PRIMARY KEY(relation_type_id, role_name),
+    UNIQUE(relation_type_id, role_ordinal),
+    FOREIGN KEY(relation_type_id) REFERENCES logical_types(type_id)
+        ON DELETE RESTRICT
+) STRICT;
+
+CREATE TABLE relation_role_allowed_types (
+    relation_type_id        TEXT NOT NULL,
+    role_name               TEXT NOT NULL,
+    allowed_type_id         TEXT NOT NULL,
+    PRIMARY KEY(relation_type_id, role_name, allowed_type_id),
+    FOREIGN KEY(relation_type_id, role_name)
+        REFERENCES relation_role_definitions(relation_type_id, role_name)
+        ON DELETE RESTRICT,
+    FOREIGN KEY(allowed_type_id) REFERENCES logical_types(type_id)
+        ON DELETE RESTRICT
+) STRICT;
+
+CREATE TABLE dependency_rules (
+    relation_type_id        TEXT NOT NULL,
+    rule_ordinal            INTEGER NOT NULL CHECK(rule_ordinal >= 0),
+    dependent_role          TEXT NOT NULL,
+    dependency_role         TEXT NOT NULL,
+    creates_review_impact   INTEGER NOT NULL
+        CHECK(creates_review_impact IN (0,1)),
+    meaning                 TEXT NOT NULL CHECK(length(meaning) > 0),
+    PRIMARY KEY(relation_type_id, rule_ordinal),
+    FOREIGN KEY(relation_type_id, dependent_role)
+        REFERENCES relation_role_definitions(relation_type_id, role_name)
+        ON DELETE RESTRICT,
+    FOREIGN KEY(relation_type_id, dependency_role)
+        REFERENCES relation_role_definitions(relation_type_id, role_name)
+        ON DELETE RESTRICT
+) STRICT;
 ```
 
-Kinds include `citation`, `document`, `dataset`, `measurement`, `experiment`,
-`calculation`, `test-result`, `code-artifact`, and `design-artifact`.
+Cross-row rules—such as Relation types only declaring roles—are validated when
+packages load and again from stored rows. Do not encode opaque business behavior
+in triggers.
 
-The POC validates shape, stable version/hash references, and required links. It
-does not fetch URIs or judge source credibility.
+### 5.4 Current logical objects
 
-### 4.11 Content bindings
+```sql
+CREATE TABLE graph_objects (
+    object_id               TEXT PRIMARY KEY,
+    object_revision         INTEGER NOT NULL CHECK(object_revision >= 1),
+    object_kind             TEXT NOT NULL
+        CHECK(object_kind IN ('record', 'relation', 'constraint')),
+    logical_type_id         TEXT NOT NULL,
+    extensions_json         TEXT NOT NULL CHECK(json_valid(extensions_json)),
+    UNIQUE(object_id, logical_type_id),
+    FOREIGN KEY(logical_type_id) REFERENCES logical_types(type_id)
+        ON DELETE RESTRICT
+) STRICT;
 
-```csharp
-public enum BindingRole
-{
-    Asserts,
-    Defines,
-    Uses,
-    Discusses,
-    PresentsEvidence,
-    Implements,
-    Verifies
-}
+CREATE TABLE object_tags (
+    object_id               TEXT NOT NULL,
+    tag                     TEXT NOT NULL,
+    PRIMARY KEY(object_id, tag),
+    FOREIGN KEY(object_id) REFERENCES graph_objects(object_id)
+        ON DELETE RESTRICT
+) STRICT;
 
-public sealed record ContentBinding(
-    CanonicalId Id,
-    int Revision,
-    CanonicalId ContentUnitId,
-    CanonicalId SemanticRecordId,
-    BindingRole Role,
-    string? Rationale) : IProjectRecord;
+CREATE TABLE object_field_values (
+    object_id               TEXT NOT NULL,
+    logical_type_id         TEXT NOT NULL,
+    field_name              TEXT NOT NULL,
+    value_ordinal           INTEGER NOT NULL CHECK(value_ordinal >= 0),
+    value_kind              TEXT NOT NULL CHECK(value_kind IN
+        ('text','integer','decimal','boolean','symbol','instant','reference')),
+    text_value              TEXT NULL,
+    integer_value           INTEGER NULL,
+    boolean_value           INTEGER NULL CHECK(boolean_value IN (0,1)),
+    reference_object_id     TEXT NULL,
+    PRIMARY KEY(object_id, field_name, value_ordinal),
+    FOREIGN KEY(object_id, logical_type_id)
+        REFERENCES graph_objects(object_id, logical_type_id)
+        ON DELETE RESTRICT,
+    FOREIGN KEY(logical_type_id, field_name)
+        REFERENCES field_definitions(type_id, field_name)
+        ON DELETE RESTRICT,
+    FOREIGN KEY(reference_object_id) REFERENCES graph_objects(object_id)
+        ON DELETE RESTRICT,
+    CHECK(
+      (value_kind IN ('text','decimal','symbol','instant') AND
+       text_value IS NOT NULL AND integer_value IS NULL AND
+       boolean_value IS NULL AND reference_object_id IS NULL) OR
+      (value_kind = 'integer' AND integer_value IS NOT NULL AND
+       text_value IS NULL AND boolean_value IS NULL AND
+       reference_object_id IS NULL) OR
+      (value_kind = 'boolean' AND boolean_value IS NOT NULL AND
+       text_value IS NULL AND integer_value IS NULL AND
+       reference_object_id IS NULL) OR
+      (value_kind = 'reference' AND reference_object_id IS NOT NULL AND
+       text_value IS NULL AND integer_value IS NULL AND boolean_value IS NULL)
+    )
+) STRICT;
+
+CREATE TABLE relation_endpoints (
+    relation_id             TEXT NOT NULL,
+    relation_type_id        TEXT NOT NULL,
+    role_name               TEXT NOT NULL,
+    endpoint_ordinal        INTEGER NOT NULL CHECK(endpoint_ordinal >= 0),
+    target_object_id        TEXT NOT NULL,
+    PRIMARY KEY(relation_id, role_name, endpoint_ordinal),
+    FOREIGN KEY(relation_id, relation_type_id)
+        REFERENCES graph_objects(object_id, logical_type_id)
+        ON DELETE RESTRICT,
+    FOREIGN KEY(relation_type_id, role_name)
+        REFERENCES relation_role_definitions(relation_type_id, role_name)
+        ON DELETE RESTRICT,
+    FOREIGN KEY(target_object_id) REFERENCES graph_objects(object_id)
+        ON DELETE RESTRICT
+) STRICT;
+
+CREATE INDEX ix_graph_objects_type
+    ON graph_objects(logical_type_id, object_id);
+CREATE INDEX ix_field_reference_target
+    ON object_field_values(reference_object_id)
+    WHERE reference_object_id IS NOT NULL;
+CREATE INDEX ix_relation_endpoint_target
+    ON relation_endpoints(target_object_id, relation_type_id, role_name);
+CREATE INDEX ix_relation_endpoint_role
+    ON relation_endpoints(relation_type_id, role_name, relation_id);
 ```
 
-Bindings are exact semantic references. `SemanticRecordId` may target a subject,
-proposition, assertion, source, constraint, or allowed profile record. Endpoint
-rules depend on `BindingRole`.
+Application validation checks that object kind equals its type's kind, stored
+value kind equals field definition, reference targets match allowed exact types,
+cardinalities hold, and endpoint targets match role types.
 
-Bindings create dependency edges from the content unit to the semantic record.
-For `Asserts`, `Defines`, or `PresentsEvidence`, impact is bidirectional review:
-changing the prose may stale the semantic record, and changing the semantic
-record impacts the prose.
+### 5.5 Draft transaction tables
 
-### 4.12 Semantic links
+Draft payloads are canonical operation JSON because they are proposed state, not
+authoritative normalized graph rows.
 
-```csharp
-public enum SemanticLinkKind
-{
-    DependsOn,
-    DerivedFrom,
-    Supports,
-    Contradicts,
-    Refines,
-    Supersedes,
-    Defines,
-    Uses,
-    Implements,
-    Satisfies,
-    Verifies,
-    Cites,
-    Mentions
-}
+```sql
+CREATE TABLE draft_transactions (
+    transaction_id          TEXT PRIMARY KEY,
+    project_id              TEXT NOT NULL,
+    base_revision           INTEGER NOT NULL CHECK(base_revision >= 0),
+    base_logical_hash       TEXT NOT NULL,
+    intent                  TEXT NOT NULL CHECK(length(intent) > 0),
+    author                  TEXT NOT NULL CHECK(length(author) > 0),
+    created_at_utc          TEXT NOT NULL,
+    status                  TEXT NOT NULL CHECK(status IN
+        ('draft','review-required','ready','rejected','committed','aborted')),
+    change_set_hash         TEXT NULL,
+    projected_logical_hash  TEXT NULL,
+    draft_revision          INTEGER NOT NULL CHECK(draft_revision >= 1),
+    FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE RESTRICT
+) STRICT;
 
-public enum LinkProvenanceKind
-{
-    Manual,
-    Imported,
-    AiProposedConfirmed,
-    DeterministicRule
-}
+CREATE TABLE draft_operations (
+    transaction_id          TEXT NOT NULL,
+    target_object_id        TEXT NOT NULL,
+    operation_kind          TEXT NOT NULL CHECK(operation_kind IN
+        ('add','replace','remove')),
+    expected_object_revision INTEGER NULL,
+    object_json             TEXT NULL CHECK(object_json IS NULL OR
+                                             json_valid(object_json)),
+    PRIMARY KEY(transaction_id, target_object_id),
+    FOREIGN KEY(transaction_id) REFERENCES draft_transactions(transaction_id)
+        ON DELETE RESTRICT,
+    CHECK(
+      (operation_kind = 'add' AND expected_object_revision IS NULL AND
+       object_json IS NOT NULL) OR
+      (operation_kind = 'replace' AND
+       expected_object_revision IS NOT NULL AND
+       expected_object_revision >= 1 AND
+       object_json IS NOT NULL) OR
+      (operation_kind = 'remove' AND
+       expected_object_revision IS NOT NULL AND
+       expected_object_revision >= 1 AND
+       object_json IS NULL)
+    )
+) STRICT;
 
-public sealed record LinkProvenance(
-    LinkProvenanceKind Kind,
-    string? ProviderOrRuleId,
-    string? ProposalHash);
-
-public sealed record SemanticLink(
-    CanonicalId Id,
-    int Revision,
-    CanonicalId SourceId,
-    CanonicalId TargetId,
-    SemanticLinkKind Kind,
-    string Rationale,
-    LinkProvenance Provenance,
-    ExtensionMap Extensions) : IProjectRecord;
+CREATE TABLE submitted_dispositions (
+    transaction_id          TEXT NOT NULL,
+    target_object_id        TEXT NOT NULL,
+    disposition             TEXT NOT NULL CHECK(disposition IN
+        ('reviewed-no-change','not-applicable')),
+    target_fingerprint      TEXT NOT NULL,
+    impact_fingerprint      TEXT NOT NULL,
+    reviewer_id             TEXT NOT NULL,
+    rationale               TEXT NOT NULL CHECK(length(rationale) > 0),
+    dispositioned_at_utc    TEXT NOT NULL,
+    PRIMARY KEY(transaction_id, target_object_id),
+    FOREIGN KEY(transaction_id) REFERENCES draft_transactions(transaction_id)
+        ON DELETE RESTRICT
+) STRICT;
 ```
 
-The link catalog is closed in schema v1. Endpoint and dependency behavior:
+Application draft edits increment `draft_revision`, recompute hashes, and delete
+or invalidate dispositions whose fingerprints no longer match.
 
-| Kind | Allowed source → target | Derived dependency edge |
-|---|---|---|
-| `DependsOn` | any semantic/content record → any record | source → target |
-| `DerivedFrom` | assertion/proposition → assertion/proposition/source | source → target |
-| `Supports` | source/assertion → assertion | target → source |
-| `Contradicts` | assertion/proposition ↔ assertion/proposition | both directions |
-| `Refines` | assertion/subject/content → same broad category | source → target |
-| `Supersedes` | same broad category → same broad category | both directions |
-| `Defines` | definition assertion/content → subject | users of subject depend on definition source |
-| `Uses` | content/assertion → subject/definition/source | source → target |
-| `Implements` | subject/content/assertion → requirement assertion | source → target |
-| `Satisfies` | assertion/proposition → requirement assertion | source → target |
-| `Verifies` | source/content/assertion → requirement assertion | source → target |
-| `Cites` | content/assertion → source | source → target |
-| `Mentions` | any → any | none by default |
+### 5.6 Commit and diagnostic tables
 
-`Defines` adds the direct source → subject edge. The index also derives a
-definition dependency from every `Uses(X, subject)` source X to each accepted
-definition source for that subject. Ambiguous definitions produce a diagnostic
-instead of choosing one.
+```sql
+CREATE TABLE commits (
+    commit_id               TEXT PRIMARY KEY,
+    project_id              TEXT NOT NULL,
+    project_revision        INTEGER NOT NULL UNIQUE CHECK(project_revision >= 1),
+    parent_logical_hash     TEXT NOT NULL,
+    logical_hash            TEXT NOT NULL UNIQUE,
+    change_set_hash         TEXT NOT NULL,
+    impact_hash             TEXT NOT NULL,
+    validation_hash         TEXT NOT NULL,
+    author                  TEXT NOT NULL,
+    intent                  TEXT NOT NULL,
+    committed_at_utc        TEXT NOT NULL,
+    FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE RESTRICT
+) STRICT;
 
-Semantic links are intentionally authored meaning. The adjacency lists derived
-from them are not canonical records.
+CREATE TABLE commit_operations (
+    commit_id               TEXT NOT NULL,
+    target_object_id        TEXT NOT NULL,
+    operation_kind          TEXT NOT NULL CHECK(operation_kind IN
+        ('add','replace','remove')),
+    expected_object_revision INTEGER NULL,
+    object_json             TEXT NULL CHECK(object_json IS NULL OR
+                                             json_valid(object_json)),
+    PRIMARY KEY(commit_id, target_object_id),
+    FOREIGN KEY(commit_id) REFERENCES commits(commit_id) ON DELETE RESTRICT,
+    CHECK(
+      (operation_kind = 'add' AND expected_object_revision IS NULL AND
+       object_json IS NOT NULL) OR
+      (operation_kind = 'replace' AND
+       expected_object_revision IS NOT NULL AND
+       expected_object_revision >= 1 AND
+       object_json IS NOT NULL) OR
+      (operation_kind = 'remove' AND
+       expected_object_revision IS NOT NULL AND
+       expected_object_revision >= 1 AND
+       object_json IS NULL)
+    )
+) STRICT;
 
-### 4.13 Constraints
+CREATE TABLE accepted_dispositions (
+    commit_id               TEXT NOT NULL,
+    target_object_id        TEXT NOT NULL,
+    disposition             TEXT NOT NULL CHECK(disposition IN
+        ('updated','reviewed-no-change','not-applicable')),
+    target_fingerprint      TEXT NOT NULL,
+    impact_fingerprint      TEXT NOT NULL,
+    reviewer_id             TEXT NULL,
+    rationale               TEXT NULL,
+    dispositioned_at_utc    TEXT NOT NULL,
+    explanation_path_json  TEXT NOT NULL CHECK(json_valid(explanation_path_json)),
+    PRIMARY KEY(commit_id, target_object_id),
+    FOREIGN KEY(commit_id) REFERENCES commits(commit_id) ON DELETE RESTRICT
+) STRICT;
 
-Schema v1 uses a closed union:
+CREATE TABLE validation_runs (
+    validation_run_id       TEXT PRIMARY KEY,
+    transaction_id          TEXT NULL,
+    evaluated_logical_hash  TEXT NOT NULL,
+    change_set_hash         TEXT NULL,
+    outcome                 TEXT NOT NULL CHECK(outcome IN
+        ('proven-valid','invalid','inconclusive')),
+    report_json             TEXT NOT NULL CHECK(json_valid(report_json)),
+    report_hash             TEXT NOT NULL,
+    created_at_utc          TEXT NOT NULL,
+    FOREIGN KEY(transaction_id) REFERENCES draft_transactions(transaction_id)
+        ON DELETE RESTRICT
+) STRICT;
 
-```csharp
-public abstract record ProjectConstraint : IProjectRecord
-{
-    public required CanonicalId Id { get; init; }
-    public required int Revision { get; init; }
-    public required DiagnosticSeverity FailureSeverity { get; init; }
-    public required string Rationale { get; init; }
-
-    public sealed record NoAcceptedContradictions(...) : ProjectConstraint;
-    public sealed record RequireSupportForRoles(...) : ProjectConstraint;
-    public sealed record AcyclicLinkKinds(...) : ProjectConstraint;
-    public sealed record UniqueDefinitions(...) : ProjectConstraint;
-    public sealed record RequireRequirementCoverage(...) : ProjectConstraint;
-    public sealed record RequireSemanticReviewForContentKinds(...) : ProjectConstraint;
-    public sealed record RequireImpactDispositions(...) : ProjectConstraint;
-    public sealed record RequireReviewProfileForChanges(...) : ProjectConstraint;
-}
+CREATE TABLE diagnostics (
+    validation_run_id       TEXT NOT NULL,
+    diagnostic_ordinal      INTEGER NOT NULL CHECK(diagnostic_ordinal >= 0),
+    diagnostic_code         TEXT NOT NULL,
+    severity                TEXT NOT NULL,
+    primary_object_id       TEXT NULL,
+    fingerprint             TEXT NOT NULL,
+    diagnostic_json         TEXT NOT NULL CHECK(json_valid(diagnostic_json)),
+    PRIMARY KEY(validation_run_id, diagnostic_ordinal),
+    FOREIGN KEY(validation_run_id)
+        REFERENCES validation_runs(validation_run_id) ON DELETE RESTRICT
+) STRICT;
 ```
 
-Case payloads:
+The accepted commit and project-head update occur in the same SQLite transaction
+as current-state row changes. Draft cleanup may occur in the same commit or a
+later maintenance transaction; a committed draft status is not authoritative.
 
-- `NoAcceptedContradictions`: included assertion roles/scopes.
-- `RequireSupportForRoles`: roles, minimum link count, accepted support link
-  kinds, and whether SourceIds count.
-- `AcyclicLinkKinds`: set of link kinds whose induced directed graph must be
-  acyclic.
-- `UniqueDefinitions`: covered subject kinds and scope compatibility policy.
-- `RequireRequirementCoverage`: minimum `Implements` and `Verifies` links per
-  Accepted Requirement assertion.
-- `RequireSemanticReviewForContentKinds`: content kinds/tags requiring a current
-  attestation.
-- `RequireImpactDispositions`: impacted record kinds/categories that block while
-  pending, maximum impact depth if intentionally bounded, and allowed
-  dispositions.
-- `RequireReviewProfileForChanges`: profile ID/version and triggering changed
-  record kinds/tags.
+### 5.7 Read views
 
-Do not add a general expression language in Gate A.
+Provide stable documented views:
 
-### 4.14 Semantic review attestations
-
-```csharp
-public sealed record SemanticReviewAttestation(
-    CanonicalId Id,
-    int Revision,
-    CanonicalId ContentUnitId,
-    string ReviewedTextHash,
-    ImmutableArray<ReviewedBindingFingerprint> ReviewedBindings,
-    string ReviewerId,
-    DateTimeOffset ReviewedAt,
-    string Rationale) : IProjectRecord;
-
-public sealed record ReviewedBindingFingerprint(
-    CanonicalId BindingId,
-    int BindingRevision,
-    string CanonicalBindingHash);
+```text
+vw_project_head
+vw_schema_packages
+vw_logical_types
+vw_objects
+vw_object_fields
+vw_relations
+vw_relation_endpoints
+vw_direct_dependencies
+vw_commits
+vw_diagnostics
 ```
 
-An attestation says that a reviewer compared a specific content hash with the
-listed current bindings. It does not prove the prose correct. It is current only
-when:
+`vw_direct_dependencies` returns:
 
-- `ReviewedTextHash == ContentUnit.TextHash`;
-- every listed binding still exists at the recorded revision and has the
-  recorded canonical hash; and
-- policy-required current bindings are included.
-
-### 4.15 Profile records
-
-```csharp
-public sealed record ProfileRecord(
-    CanonicalId Id,
-    int Revision,
-    string ProfileId,
-    string ProfileSchemaVersion,
-    NeutralMap Data) : IProjectRecord;
+```text
+dependent_object_id
+dependency_object_id
+evidence_kind       field-reference | relation-rule
+evidence_id         object/field or relation/rule
+creates_review_impact
 ```
 
-Gate A allows profile records to round-trip but reports them uncovered unless a
-registered validator understands the profile/schema. The common model must not
-accumulate speculative narrative fields before Gate C.
+It is the union of reference-impact declarations and relation dependency rules.
+It is a convenience/read surface, not stored canon. Application edge extraction
+and the view must be tested against the same golden edge set.
 
-## 5. Review workflow model
+## 6. Connection, safety, and integrity
 
-Review obligations and review runs belong to a draft transaction and its
-accepted receipt, not the canonical project. A `SemanticReviewAttestation` is a
-separate durable canonical record when project policy requires one. Concern and
-diagnostic dispositions remain audit data in the receipt/report.
+### 6.1 Connection factory
 
-### 5.1 Review obligations
+Use `Microsoft.Data.Sqlite.Core` directly with an explicitly pinned/audited
+SQLitePCLRaw native bundle. Do not rely on an unreviewed transitive native SQLite
+version. On open:
 
-```csharp
-public enum ReviewDisposition
-{
-    Pending,
-    Updated,
-    ReviewedNoChange,
-    NotApplicable
-}
+1. Resolve an absolute `.vw.db` path supplied by the caller.
+2. Open with the intended mode (`ReadOnly` for query; `ReadWrite` for existing;
+   `ReadWriteCreate` only for explicit initialization).
+3. Set and verify foreign keys.
+4. Set a bounded busy timeout.
+5. Refuse extension loading.
+6. Verify application ID, user version, migrations, and expected tables/views.
+7. Run `PRAGMA quick_check` on normal open and `integrity_check` on explicit
+   verify/recovery commands.
+8. Load the logical snapshot and verify its head hash before canonical writes.
 
-public sealed record ImpactStep(
-    CanonicalId DependentId,
-    CanonicalId DependencyId,
-    string EdgeKind,
-    string FieldPathOrLinkId);
+Never interpolate user values, identifiers, field names, or type names into SQL.
+All runtime data uses parameters. Migration SQL is a checked embedded resource.
 
-public sealed record ReviewObligation(
-    CanonicalId TargetId,
-    ReviewDisposition Disposition,
-    ImmutableArray<ImpactStep> ExplanationPath,
-    string TargetFingerprint,
-    string ImpactFingerprint,
-    string? ReviewerId,
-    string? Rationale,
-    DateTimeOffset? DispositionedAt);
-```
+### 6.2 Journal and concurrency mode
 
-Rules:
+Gate A defaults to rollback journal mode for a portable single-file-at-rest
+artifact. WAL may be an opt-in workspace setting after backup/copy behavior and
+sidecar management are documented and tested.
 
-- Directly changed records are `Updated` automatically.
-- Other policy-selected impacts begin `Pending`.
-- `ReviewedNoChange` and `NotApplicable` require reviewer, rationale, and time.
-- A disposition is valid only for its projected target and impact fingerprints.
-- Changing any operation recomputes the projected snapshot/impact and invalidates
-  dispositions whose fingerprints differ.
-- A record outside policy may appear in impact output without becoming a blocking
-  obligation.
+Use `BEGIN IMMEDIATE` for final commit. A busy writer produces a typed conflict;
+retry policy is bounded and cancellation-aware. Never wait for human/AI input
+while holding the write transaction.
 
-### 5.2 Review runs and concerns
+### 6.3 Backup and recovery
 
-```csharp
-public sealed record ReviewRun(
-    CanonicalId Id,
-    string ProfileId,
-    string ProfileVersion,
-    string BaseProjectHash,
-    string ChangeSetHash,
-    string ProjectedStateHash,
-    string ContextPacketHash,
-    ReviewerDescriptor Reviewer,
-    ReviewRunStatus Status,
-    ImmutableArray<ReviewConcern> Concerns,
-    DateTimeOffset StartedAt,
-    DateTimeOffset? CompletedAt);
+Provide an Application backup use case using SQLite's online backup API to a new
+validated destination. Do not advertise copying an open database as a safe
+backup.
 
-public sealed record ReviewConcern(
-    string ConcernId,
-    string Code,
-    string Message,
-    ImmutableArray<CanonicalId> CitedRecordIds,
-    ConcernDisposition Disposition,
-    string? ResolutionRationale,
-    string Fingerprint);
-```
+On commit failure, SQLite rollback is authoritative. On startup, draft and
+validation rows may remain; they cannot change the project head or current
+objects. Gate A does not invent a second journal or file-replacement protocol.
 
-Concern dispositions: `Open`, `ResolvedByChange`, `RejectedWithRationale`,
-`Acknowledged`. Policy decides which are acceptable.
+### 6.4 Untrusted databases
 
-Review completion and concern disposition are deterministically enforceable.
-Concern correctness is not.
+Treat project databases as untrusted:
 
-## 6. Canonical JSON
+- refuse unknown application IDs/migrations;
+- do not enable loadable extensions;
+- do not execute SQL stored in project data;
+- cap file size/page count, logical object/value counts, JSON lengths, graph
+  edges, traversal depth, diagnostics, and output bytes;
+- use read-only connections for inspection where possible;
+- validate every value after mapping even if SQL constraints passed.
 
-### 6.1 Top-level shape
+## 7. Canonical logical JSON
+
+### 7.1 Shape
 
 ```json
 {
   "schemaVersion": "validatedworld/v1",
   "project": {
     "id": "project:offline-sensor",
-    "title": "Offline Sensor Technical Design",
+    "title": "Offline Sensor Project",
     "revision": 3,
-    "parentContentHash": "sha256:...",
-    "contentHash": "sha256:...",
-    "profiles": ["technical-document/v1"],
-    "lastCommit": {
-      "transactionId": "tx:00000000-0000-7000-8000-000000000001",
-      "intent": "Revise average-current assumption",
-      "committedAt": "2026-08-10T20:00:00.0000000Z",
-      "author": "agent"
-    },
-    "policy": {
-      "blockOnRequiredInconclusive": true,
-      "maximumDependencyDepth": 1000,
-      "maximumImpactRecords": 100000
-    }
+    "parentLogicalHash": "sha256:...",
+    "logicalHash": "sha256:...",
+    "lastCommitId": "tx:...",
+    "policy": {}
   },
-  "artifacts": [],
-  "contentUnits": [],
-  "subjects": [],
-  "predicates": [],
-  "propositions": [],
-  "assertions": [],
-  "sources": [],
-  "contentBindings": [],
-  "semanticLinks": [],
-  "constraints": [],
-  "semanticReviews": [],
-  "profileRecords": []
+  "schemaPackages": [],
+  "objects": []
 }
 ```
 
-All arrays are required. Canonical serialization sorts addressable record arrays
-by ID. Ordered values retain semantic order; set-like values sort ordinally.
-Duplicates are errors, never silently deduplicated.
+Each package contains complete type/field/role/dependency definitions. Each
+object contains `id`, `revision`, `kind`, `typeId`, `fields`, `endpoints`, `tags`,
+and `extensions`.
 
-### 6.2 Representative content/claim/link
+### 7.2 Ordering
 
-```json
-{
-  "id": "section:power-budget",
-  "revision": 2,
-  "artifactId": "artifact:sensor-design",
-  "parentUnitId": null,
-  "kind": "section",
-  "sequence": 300,
-  "heading": "Power budget",
-  "text": "At an average draw of 20 mA, the 500 mAh battery provides 25 hours.",
-  "textHash": "sha256:...",
-  "tags": ["power"],
-  "extensions": {}
-}
-```
+- packages by `(packageId, semanticVersionOrdinal)`;
+- types by type ID;
+- fields/roles/rules by declared ordinal then ID/name;
+- objects by object ID;
+- field and endpoint names ordinally;
+- ordered values/endpoints by ordinal;
+- unordered values by canonical value;
+- tags and extension keys ordinally.
 
-```json
-{
-  "id": "assertion:average-current-assumption",
-  "revision": 1,
-  "propositionId": "proposition:average-current",
-  "polarity": "positive",
-  "role": "assumption",
-  "status": "accepted",
-  "scope": "global",
-  "sourceIds": ["source:bench-measurement-07"],
-  "rationale": "Representative active-mode duty cycle",
-  "extensions": {}
-}
-```
+Numbers, strings, instants, booleans, escaping, and whitespace have one normative
+encoding. Reject duplicate JSON properties in protocol input.
 
-```json
-{
-  "id": "link:runtime-derived-from-current",
-  "revision": 1,
-  "sourceId": "assertion:runtime-estimate",
-  "targetId": "assertion:average-current-assumption",
-  "kind": "derived-from",
-  "rationale": "Runtime estimate uses the average-current assumption.",
-  "provenance": {
-    "kind": "manual",
-    "providerOrRuleId": null,
-    "proposalHash": null
-  },
-  "extensions": {}
-}
-```
-
-### 6.3 Canonical hashing
+### 7.3 Hashes
 
 ```text
-projection = complete canonical snapshot with project.contentHash omitted
-bytes = canonical UTF-8 without BOM and with \n newlines
-hash = SHA-256(bytes), lower-case hex prefixed "sha256:"
+LogicalHash = SHA-256(canonical logical snapshot with project.logicalHash omitted)
+
+ChangeSetHash = SHA-256(canonical transaction identity/base plus operations
+                        sorted by target ID)
+
+ProjectedLogicalHash = SHA-256(canonical projected logical state using
+                               provisional next head fields)
 ```
 
-The projection includes project revision, parent hash, commit metadata, policy,
-content text/hashes, and all semantic records. Loader recomputes and compares.
+Review evidence and acknowledgements do not alter projected logical state and are
+excluded from `ChangeSetHash`.
 
-Transaction-time hashes are distinct to avoid a circular dependency on commit
-metadata:
+### 7.4 Snapshot import/export boundary
 
-```text
-ChangeSetHash = SHA-256(canonical transaction schema version, transaction ID,
-                        project ID, base revision/hash, and ID-sorted operations)
+`snapshot write` produces the canonical logical JSON for audit, testing,
+interchange, or source control. `snapshot init` accepts only a revision-zero
+snapshot and may initialize a new database only after full
+schema/profile/semantic validation. Later-revision snapshots lack the commit
+operations needed to recreate their audit chain; use SQLite backup to clone a
+complete existing project.
 
-ProjectedStateHash = SHA-256(canonical projected header fields except
-                             ContentHash and LastCommit, plus every projected
-                             semantic record)
-```
+Gate A does not overwrite an existing authoritative database from a snapshot and
+does not call snapshots document exports.
 
-Review dispositions, review runs, reports, acknowledgements, timestamps, and
-other mutable workflow results are excluded from `ChangeSetHash`. Changing an
-operation changes both hashes. Final commit serialization adds `LastCommit` and
-computes the canonical project `ContentHash`; review evidence stays bound to the
-change set and projected state it actually evaluated.
+## 8. Indexes and dependency graph
 
-### 6.4 Strict reader
-
-Before DTO deserialization, scan with `Utf8JsonReader` and an ordinal property set
-per object to reject duplicate properties. Then deserialize with:
-
-- case-sensitive names;
-- no comments/trailing commas;
-- strict numbers;
-- explicit union converters;
-- unmapped-member rejection;
-- depth and input-byte limits.
-
-Record JSON Pointer and byte offset for addressable records/important fields.
-User input failures return diagnostics rather than escaping serializer exceptions.
-
-### 6.5 Content text canonicalization
-
-On input:
-
-1. Require valid Unicode text.
-2. Convert CRLF/CR to LF for canonical storage.
-3. Preserve all other characters and trailing spaces; content semantics may care.
-4. Compute `TextHash` over UTF-8 bytes exactly as stored.
-
-Do not trim or reflow authored text in canonical serialization.
-
-## 7. Indexes and operational dependency graph
-
-### 7.1 Project index
-
-Build a `ProjectIndex` once for each loaded/projected snapshot:
+### 8.1 Project index
 
 ```csharp
 public sealed class ProjectIndex
 {
     public ProjectSnapshot Snapshot { get; }
-    public ImmutableDictionary<CanonicalId, IProjectRecord> RecordsById { get; }
-    public ImmutableDictionary<CanonicalId, ContentUnit> ContentUnitsById { get; }
-    public ImmutableDictionary<CanonicalId, AssertionRecord> AssertionsById { get; }
-    public ImmutableDictionary<CanonicalId, ImmutableArray<ContentBinding>>
-        BindingsByContentUnit { get; }
-    public ImmutableDictionary<CanonicalId, ImmutableArray<SemanticLink>>
-        LinksByEndpoint { get; }
+    public ImmutableDictionary<ObjectId, ProjectObject> ObjectsById { get; }
+    public ImmutableDictionary<TypeId, LogicalTypeDefinition> TypesById { get; }
+    public ImmutableDictionary<TypeId, ImmutableArray<ProjectObject>> ObjectsByType { get; }
+    public ImmutableDictionary<ObjectId, ImmutableArray<ProjectObject>> RelationsByEndpoint { get; }
 }
 ```
 
-Duplicate IDs are reported together. Do not pick an arbitrary winner; mark the
-ID ambiguous and skip dependent rules explicitly.
+Duplicate/ambiguous rows are integrity failures, never last-writer-wins.
 
-Derived indexes include:
-
-- artifact children ordered by `(ParentUnitId, Sequence, Id)`;
-- propositions by predicate;
-- assertions by proposition/role/status/scope;
-- bindings by content and semantic target;
-- links by source, target, and kind;
-- definitions by subject;
-- implementation/verification links by requirement;
-- constraints by applicable record kind/tag.
-
-Indexes are caches and never serialized as canon.
-
-### 7.2 Dependency edge model
+### 8.2 Dependency edges
 
 ```csharp
-public enum DependencyEdgeKind
+public enum DependencyEvidenceKind
 {
-    TypedReference,
-    ContentContainment,
-    ContentBinding,
-    SemanticLink,
-    DerivedDefinition,
+    FieldReference,
+    RelationRule,
+    TypeDefinition,
     ConstraintReference,
-    ProfileReference
+    ProfileDerived
 }
 
 public sealed record DependencyEdge(
-    CanonicalId DependentId,
-    CanonicalId DependencyId,
-    DependencyEdgeKind Kind,
-    string EvidenceIdOrFieldPath,
+    ObjectId DependentId,
+    ObjectId DependencyId,
+    DependencyEvidenceKind EvidenceKind,
+    string EvidenceId,
     bool CreatesReviewImpact);
 ```
 
-Store forward and reverse adjacency as immutable ID-sorted arrays. Retain
-multiple evidence edges between the same pair for explanations; traversal may
-deduplicate destinations.
-
-### 7.3 Edge extraction
-
-Use explicit visitors, not authoritative reflection crawling.
-
-Typed reference examples:
+Extract with explicit visitors:
 
 ```text
-content unit -> artifact and parent
-proposition -> predicate and record-ref arguments
-assertion -> proposition and sources
-binding -> content unit and semantic target
-link -> source and target
-attestation -> content unit and binding fingerprints
-constraint -> explicitly referenced records
-profile record -> references identified by registered profile visitor
+for every reference field value:
+  apply its ReferenceImpactMode
+
+for every relation instance and dependency rule:
+  dependentPlayers = endpoints[DependentRole]
+  dependencyPlayers = endpoints[DependencyRole]
+  emit sorted cross-product edges with relation/rule evidence
+
+for every registered constraint/profile visitor:
+  emit only declared referenced-object edges
 ```
 
-Semantic-link dependency directions follow section 4.12. The link record itself
-depends on both endpoints. The semantic relationship adds separate derived edges
-between endpoints.
+Do not reflect over strings or JSON looking for IDs. Keep all evidence edges even
+when dependent/dependency pairs repeat; traversal may deduplicate destination
+objects while retaining sorted evidence.
 
-Containment normally means child depends on parent. For review impact, artifact
-metadata changes may affect all contained units; add explicit derived parent →
-child impact edges without pretending the child is a stored field of the parent.
-
-Bindings:
-
-- `Uses`, `Discusses`, `Implements`, `Verifies`: content depends on semantic
-  target.
-- `Asserts`, `Defines`, `PresentsEvidence`: bidirectional review impact between
-  content and semantic target.
-
-`Mentions` links appear in relationship queries but `CreatesReviewImpact=false`
-by default.
-
-Unknown profile references are coverage gaps. Do not invent edges by scanning
-opaque extension strings for ID-shaped text.
-
-### 7.4 Impact algorithm
-
-Use both base and projected graphs:
+### 8.3 Impact algorithm
 
 ```text
 ComputeImpact(changedIds, baseGraph, projectedGraph, policy):
-    reverseUnion = review-impact reverse edges from both graphs
+    reverseUnion = review-impact reverse edges from base and projected graphs
     visited = changedIds
-    queue = changedIds sorted ordinal with depth 0
+    queue = changedIds sorted ordinal at depth 0
     predecessor = empty
 
     while queue not empty:
         current, depth = dequeue
-        if depth == policy.MaximumDependencyDepth:
-            mark truncated/inconclusive; continue
+        if depth == MaximumDependencyDepth:
+            mark truncated/inconclusive
+            continue
 
         for dependent in reverseUnion[current] sorted ordinal:
             if visited.Add(dependent):
-                predecessor[dependent] = deterministic explaining edge set
+                predecessor[dependent] = deterministic selected edge/evidence
                 enqueue(dependent, depth + 1)
 
-        if visited count exceeds MaximumImpactRecords:
-            return Inconclusive with partial set
+        if visited count > MaximumImpactObjects:
+            return Inconclusive with partial evidence
 
-    return Complete(changed, impacted, predecessor)
+    return Complete(changed, impacted excluding seeds, shortest paths)
 ```
 
-Use breadth-first traversal. The predecessor map gives a shortest hop path. If
-multiple edges connect the selected hop, retain all, sorted by kind/evidence.
-Tie between predecessor nodes is resolved by canonical ID.
+Use breadth-first traversal. Tie between predecessor nodes resolves by object ID;
+retain all sorted evidence for the selected hop. Base-only edges preserve impact
+from removed dependencies; projected-only edges include new dependencies.
 
-Cycles terminate through `visited`. A required complete impact analysis that
-hits a bound blocks by default.
+## 9. Schema and object validation
 
-## 8. Deterministic common validators
+### 9.1 Stored schema package validation
 
-### 8.1 Identity/reference/type
+Validate:
 
-1. Validate all IDs and global uniqueness.
-2. Validate record revision `>= 1`.
-3. Resolve every typed reference.
-4. Validate endpoint category/kind.
-5. Validate no content containment cycle and sibling sequence uniqueness.
-6. Validate content hashes.
-7. Validate predicate arity/roles/value types.
-8. Validate link endpoint rules.
+1. Package ID/version/hash and required validators.
+2. Unique type IDs and valid object kinds.
+3. Unique field/role ordinals and names within each complete type definition.
+4. Field kinds/cardinalities/constraints.
+5. Reference target types and impact modes.
+6. Relation-only role and dependency definitions.
+7. Dependency rules reference existing roles.
+8. Exact registered package definition hash matches stored definitions.
 
-Accumulate independent errors. Skip semantic rules whose prerequisites are
-missing or ambiguous and mark the rule result inconclusive.
+A mismatch between built-in code and stored built-in schema is an unsupported or
+inconsistently modified project, not an opportunity to guess. This check detects
+accidental/incomplete mutation, not a privileged attacker who rewrites data,
+hashes, and history together.
 
-### 8.2 Assertion contradiction
+### 9.2 Object validation
 
-Common v1 checks exact proposition identity and compatible scope:
+For every object:
 
-```text
-authoritative = assertions where Status == Accepted
-group by PropositionId and Scope
-if group contains Positive and Negative assertions whose roles are included by
-the active NoAcceptedContradictions constraint:
-    emit contradiction for each minimal opposite pair
-```
+1. Validate ID and revision.
+2. Resolve type and require matching object kind.
+3. Load the type's complete declared fields/roles.
+4. Reject unknown fields/endpoints outside namespaced extensions.
+5. Check cardinality, order, canonical values, symbols/ranges/patterns.
+6. Resolve references and allowed target types.
+7. Validate relation roles/endpoints and allowed types.
+8. Ensure every reference and endpoint agrees with normalized database rows.
+9. Report uncovered extension namespaces.
 
-Proposed/Rejected/Deprecated/Superseded assertions do not create errors by
-default. A semantic `Contradicts` link between two simultaneously accepted
-assertions also triggers the constraint even when propositions differ; that link
-is the author's explicit statement that the natural-language claims conflict.
+### 9.3 Generic constraints
 
-The validator does not infer contradiction between arbitrary glosses.
+Initial validators include:
 
-### 8.3 Support coverage
+- selected explicit contradictions;
+- minimum support relationships/sources;
+- Tarjan SCC detection for selected dependency relation types;
+- unique active definitions;
+- implementation and verification coverage;
+- required impact dispositions.
 
-For each authoritative assertion whose role is selected by
-`RequireSupportForRoles`:
+These prove explicit graph properties, not prose or real-world truth.
 
-```text
-supporters = SourceIds
-             + incoming Supports links (source supports assertion)
-             + outgoing DerivedFrom targets
-             + outgoing Cites targets
-filter supporters by constraint-allowed kinds
-if distinct supporter count < minimum:
-    emit missing-support diagnostic with accepted repair link kinds
-```
+## 10. Transactions, review, and commit
 
-This proves traceability, not truth of the supporting material.
-
-### 8.4 Derivation cycles
-
-For `AcyclicLinkKinds`:
-
-1. Construct the directed endpoint graph for included link kinds using their
-   source → target semantic direction.
-2. Visit vertices/edges in canonical-ID order.
-3. Run Tarjan strongly connected components.
-4. An SCC with more than one vertex, or a self-loop, violates the constraint.
-5. Emit one stable diagnostic per SCC listing sorted IDs and internal link IDs.
-
-Ordinary dependency cycles may be legitimate. Only declared acyclic semantic
-link kinds are checked.
-
-### 8.5 Definition validation
-
-An accepted Definition assertion must participate in `Defines(definition,
-subject)` or an equivalent binding.
-
-For `UniqueDefinitions`, group accepted definition sources by subject and
-compatible scope. More than one emits ambiguity unless one explicitly
-`Supersedes` the others and the older assertions are Superseded/Deprecated.
-
-Every `Uses(X, subject)` gains dependency edges to the unique active definition.
-If no definition exists, severity follows constraint policy. If ambiguous, do
-not pick one.
-
-### 8.6 Requirement traceability
-
-For each Accepted Requirement assertion selected by
-`RequireRequirementCoverage`:
-
-- Count incoming `Implements` relationships where source is accepted/current.
-- Count incoming `Verifies` relationships where source is accepted/current.
-- Content bindings with matching roles count only when the bound semantic record
-  is compatible.
-- Compare each count with its configured minimum.
-
-Diagnostics identify separately missing implementation and missing verification.
-
-### 8.7 Semantic-review freshness
-
-For every content unit selected by `RequireSemanticReviewForContentKinds`:
-
-1. Find its current attestation.
-2. Require exactly one active attestation under v1.
-3. Compare `ReviewedTextHash` to current `TextHash`.
-4. Compare reviewed binding fingerprints with current policy-relevant bindings.
-5. Emit stale/missing review evidence precisely.
-
-Editing whitespace changes the text hash and invalidates review. An importer may
-offer a formatting-only review profile, but the core does not guess that a text
-change is semantically irrelevant.
-
-### 8.8 Constraint and profile coverage
-
-Unknown constraint cases are schema errors. Unknown profile records round-trip
-only when their profile declares preservation-compatible behavior; otherwise
-loading is unsupported. A registered profile reports whether each record was
-validated. The common coverage report lists uncovered namespaces/records.
-
-## 9. Transaction algorithms
-
-### 9.1 Transaction and operations
+### 10.1 Operations
 
 ```csharp
-public sealed record ProjectTransaction(
-    TransactionId Id,
-    ProjectId ProjectId,
-    long BaseProjectRevision,
-    string BaseContentHash,
-    string Intent,
-    string Author,
-    DateTimeOffset CreatedAt,
-    TransactionStatus Status,
-    ImmutableArray<ProjectOperation> Operations,
-    ImmutableArray<ReviewDispositionRecord> ReviewDispositions,
-    ImmutableArray<ReviewRun> ReviewRuns,
-    ImmutableArray<DiagnosticAcknowledgement> Acknowledgements);
-
 public abstract record ProjectOperation
 {
-    public required CanonicalId TargetId { get; init; }
-    public sealed record Add(IProjectRecordDraft Record) : ProjectOperation;
-    public sealed record Replace(int ExpectedRevision, IProjectRecordDraft Record)
+    public required ObjectId TargetId { get; init; }
+    public sealed record Add(ProjectObjectDraft Object) : ProjectOperation;
+    public sealed record Replace(int ExpectedRevision, ProjectObjectDraft Object)
         : ProjectOperation;
     public sealed record Remove(int ExpectedRevision) : ProjectOperation;
 }
 ```
 
-One final operation per target ID. Editing a draft replaces that operation.
-Imported duplicate targets are errors. Clients cannot select record revisions.
+One final operation per target. Editing a draft replaces that operation and
+increments draft revision. The operation document cannot set committed revision.
 
-### 9.2 Apply operations
+### 10.2 Projection
 
 ```text
 Apply(base, transaction):
     require project ID/base revision/base hash match
-    copy each canonical collection to ID-keyed builders
+    copy current objects to ID-keyed builders
 
-    for operation sorted by TargetId:
-        Add: require absent; materialize Revision=1
-        Replace: require current and expected revision; preserve category;
-                 materialize Revision=expected+1
-        Remove: require current and expected revision; remove only target
+    for operation sorted by target ID:
+        Add: require absent; materialize revision 1
+        Replace: require current expected revision; preserve object ID;
+                 materialize expected revision + 1
+        Remove: require current expected revision; remove target only
 
-    materialize arrays sorted by ID
-    provisional project revision = base + 1
-    parent hash = base hash
-    return projected snapshot, changed IDs, operation diagnostics
+    materialize sorted immutable snapshot with provisional next head
+    validate every post-operation reference; never cascade
 ```
 
-Broken references after removal are snapshot diagnostics. Repairs can coexist in
-the same transaction. No cascade.
+Changing a relation's type is remove-plus-add and is disallowed under one-target
+operation uniqueness in Gate A; use a new stable ID or an explicit future
+migration workflow. Changing a record's logical type is rejected in Replace.
 
-### 9.3 Disposition fingerprints
+### 10.3 Review fingerprints
 
 ```text
-TargetFingerprint = SHA-256(target ID + projected record revision + canonical
-                            projected record bytes)
-
-ImpactFingerprint = SHA-256(ChangeSetHash + target ID +
-                            ordered shortest ImpactStep values)
+TargetFingerprint = SHA-256(target ID + projected revision + canonical object)
+ImpactFingerprint = SHA-256(ChangeSetHash + target ID + ordered shortest path)
 ```
 
-Recompute after every operation change. Retain a disposition only if both
-fingerprints match. `Updated` is recomputed automatically for direct changes.
+Direct policy-selected changes receive `updated`. Other selected impacts require
+submitted `reviewed-no-change` or `not-applicable` with reviewer, rationale, time,
+and exact fingerprints. Inconclusive required impact blocks commit.
 
-### 9.4 Build obligations
-
-```text
-BuildObligations(impact, projected, constraints, submittedDispositions):
-    for changed ID:
-        add Updated obligation if policy selects it for reporting
-
-    for impacted ID sorted:
-        if no RequireImpactDispositions constraint selects record:
-            continue
-        compute target/impact fingerprints
-        if matching submitted disposition exists and allowed:
-            validate reviewer/rationale fields; use it
-        else:
-            Pending
-
-    return stable-sorted obligations
-```
-
-If impact is inconclusive, obligations are incomplete and commit policy blocks
-when complete impact is required.
-
-### 9.5 Review profile enforcement
-
-For every `RequireReviewProfileForChanges` constraint triggered by the changed
-set:
-
-1. Find a Completed review run with exact profile/version, base project hash,
-   current change-set hash, projected-state hash, and non-truncated acceptable
-   context packet.
-2. Require every concern to have a policy-allowed disposition.
-3. Rejected/Acknowledged concerns require rationale and actor.
-4. A provider failure, stale hash, or missing run is an incomplete required
-   review, not proof of invalid content.
-
-### 9.6 Diagnostic acknowledgements
-
-Fingerprint:
-
-```text
-SHA-256(rule code + rule version + primary ID + sorted related IDs +
-        canonical evidence values)
-```
-
-Messages/source line numbers are excluded. Acknowledgements never suppress
-errors, internal failures, stale transaction conflicts, or required
-inconclusive analysis. Policy may allow them for warnings/concerns.
-
-### 9.7 Commit orchestration
-
-```text
-Commit(transactionId):
-    load draft transaction
-    acquire exclusive workspace lock
-    read/strictly verify canonical head
-
-    if head revision/hash differs from transaction base:
-        return Conflict without mutation
-
-    projected = Apply(head, transaction)
-    if operation errors: return Rejected
-
-    baseIndex/graph = Build(head)
-    projectedIndex/graph = Build(projected)
-    impact = ComputeImpact(changed, baseGraph, projectedGraph, policy)
-    obligations = BuildObligations(...)
-    report = ValidateFull(projected, graphs, impact, obligations, reviews)
-    decision = EvaluateCommitPolicy(report)
-
-    if decision blocks or requires external approval:
-        persist report; return without canonical mutation
-
-    commit metadata = injected clock/author/intent
-    recheck submitted evidence against ChangeSetHash and ProjectedStateHash
-    bytes/hash = CanonicalSerialize(projected + commit metadata)
-    atomically replace canonical file while lock remains held
-    reconcile transaction/receipt metadata
-    return Committed(revision, hash, report)
-```
-
-### 9.8 Atomic workspace
-
-POC layout:
-
-```text
-<workspace>/
-  project.vw.json
-  .validatedworld/
-    commit.lock
-    transactions/<tx-id>.json
-    reports/<tx-id>.json
-    receipts/<revision>-<tx-id>.json
-```
-
-Replacement:
-
-1. Resolve exact workspace/canonical paths.
-2. Write a unique sibling temp file on the same volume.
-3. Flush it to disk and close.
-4. Re-read and verify canonical hash.
-5. Use atomic replace with a known backup where supported.
-6. Reopen/verify canonical before removing backup.
-
-`IAtomicFileWriter` reports whether the filesystem provides the required
-semantics. Inability is blocking.
-
-On startup, verified canonical content wins. If it is corrupt and a known backup
-verifies, report an explicit recovery option; never silently roll back or choose
-files by newest timestamp.
-
-Inject failures before write, during write, after flush, before replace, after
-replace, and during receipt update. Every failure before replace preserves exact
-canonical bytes. If replace succeeds but receipt update fails, the embedded
-commit metadata is authoritative and recovery reconciles it.
-
-### 9.9 Concurrency
-
-No automatic merge in Gate A. A stale transaction reports base/head hashes and
-revisions. A future rebase replays operations against head, checks record
-preconditions, recomputes all impact/reviews, and never carries stale
-dispositions.
-
-## 10. Validation engine and diagnostics
-
-### 10.1 Validator contract
-
-```csharp
-public interface IProjectValidator
-{
-    string RuleCode { get; }
-    int RuleVersion { get; }
-    ValidationPhase Phase { get; }
-    ValueTask<ImmutableArray<Diagnostic>> ValidateAsync(
-        ValidationContext context,
-        CancellationToken cancellationToken);
-}
-```
-
-`ValidationContext` contains projected snapshot/index/graph, optional base graph,
-impact result, obligations, review runs, policy, and mode.
-
-Validators return findings for invalid user data; they do not throw. Unexpected
-exceptions become one stable internal-failure diagnostic and make the phase
-inconclusive. Cancellation is inconclusive.
-
-Register validators explicitly. Stable-sort results by:
-
-1. phase;
-2. severity;
-3. rule code;
-4. primary ID;
-5. source pointer;
-6. fingerprint.
-
-### 10.2 Report
+### 10.4 Validation report
 
 ```csharp
 public sealed record ValidationReport(
     ValidationOutcome Outcome,
-    string BaseProjectHash,
-    string EvaluatedStateHash,
+    string BaseLogicalHash,
+    string EvaluatedLogicalHash,
     string? ChangeSetHash,
     ImmutableArray<PhaseResult> Phases,
     ImmutableArray<Diagnostic> Diagnostics,
     ImpactResult? Impact,
     ImmutableArray<ReviewObligation> ReviewObligations,
-    ReviewCoverage ReviewCoverage,
     CoverageReport Coverage,
     ValidationStatistics Statistics);
 ```
 
-Outcome is `ProvenValid`, `Invalid`, or `Inconclusive`.
+Unexpected validator exceptions become stable internal-failure diagnostics and
+make the phase inconclusive. Cancellation is inconclusive. Sort diagnostics by
+phase, severity, code, primary ID, evidence ID, fingerprint.
 
-- Any deterministic error makes it Invalid.
-- With no error, incomplete required phases make it Inconclusive.
-- ProvenValid means all policy-required deterministic/workflow checks completed;
-  it does not assert general prose truth.
-
-Coverage includes:
-
-- content units by kind;
-- current/stale/missing semantic reviews;
-- bound/unbound content;
-- assertions by role/status;
-- links by kind/provenance;
-- uncovered profile/extension records;
-- complete/truncated impact;
-- required/completed review profiles;
-- pending/dispositioned obligations and concerns;
-- validators run/skipped/failed/not applicable.
-
-### 10.3 Diagnostic ranges
+### 10.5 Commit orchestration
 
 ```text
-VW10xx  JSON, schema, hashing, migration
-VW11xx  IDs, records, references, values
-VW12xx  content/artifact order and hashes
-VW13xx  predicates, propositions, assertions
-VW14xx  bindings, semantic links, definitions
-VW15xx  support, cycles, requirement traceability
-VW16xx  dependency impact and review obligations
-VW17xx  review runs, concerns, attestations
-VW18xx  transaction, policy, commit, storage
-VW20xx  exports and coverage
-VW30xx  narrative profile (reserved)
-VW31xx  interactive-state profile (reserved)
-VW90xx  internal failure/unsupported construct
-AIxxxx  heuristic concerns
+Commit(transactionId):
+    load draft and operations
+    read/verify base snapshot
+    reject base mismatch
+    projection = Apply(base, operations)
+    baseGraph/projectedGraph = Build(...)
+    impact = ComputeImpact(...)
+    obligations = BuildObligations(...)
+    report = ValidateFull(...)
+    reject unless commit policy accepts
+
+    begin short SQLite IMMEDIATE write transaction
+    re-read project head and draft revision/change-set hash
+    reject/rollback if either changed
+    verify submitted dispositions still match computed evidence
+    normalize and apply every accepted object mutation
+    insert commit operations/dispositions/report/commit
+    compute/verify final logical snapshot hash from transaction-visible rows
+    update project head
+    commit SQLite transaction once
+    return accepted JSON result
+```
+
+If the head and exact draft revision/hash are unchanged after acquiring the write
+transaction, the previously computed full semantic report is valid. The final
+logical snapshot is reloaded/hash-checked inside the transaction to catch mapping
+or persistence defects.
+
+### 10.6 Persistence mutation order
+
+For replacements/removals, perform explicit ordered row changes that keep
+foreign keys valid at statement boundaries. Gate A may use deferred foreign-key
+constraints where needed, but must finish with `PRAGMA foreign_key_check` clean
+inside the transaction.
+
+Recommended approach:
+
+1. Upsert/add target object headers needed by new references.
+2. Remove/rewrite relation endpoints and field values for changed objects.
+3. Insert new field values/endpoints/tags.
+4. Delete removed object headers only after all referencing rows were explicitly
+   repaired/removed by operations.
+5. Write audit and head rows.
+6. Verify relational integrity and logical hash.
+
+No `ON DELETE CASCADE` compensates for a missing operation.
+
+### 10.7 Replay
+
+Replay starts from a logical base snapshot or an initialized empty database with
+matching schema packages and applies accepted operations in revision order using
+the normal projection/validation rules. It must reproduce every recorded head
+hash. Gate A does not implement branch, merge, rebase, or arbitrary rollback.
+
+## 11. Diagnostics
+
+Ranges:
+
+```text
+VW10xx  database application ID, migrations, integrity, mapping
+VW11xx  schema packages, types, fields, roles, validators
+VW12xx  objects, values, references, endpoints
+VW13xx  profile assertions and lifecycle
+VW14xx  dependency extraction and relationship semantics
+VW15xx  support, cycles, definitions, traceability
+VW16xx  impact and review obligations
+VW18xx  transaction, concurrency, commit, audit, replay
+VW20xx  coverage, context, read views
+VW90xx  internal failure or unsupported construct
 ```
 
 Initial codes:
 
 ```text
-VW1001 invalid JSON
-VW1002 duplicate JSON property
-VW1003 unsupported schema version
-VW1004 project content hash mismatch
-VW1101 invalid canonical ID
-VW1102 duplicate canonical ID
-VW1103 missing reference
-VW1104 wrong endpoint/record kind
-VW1201 invalid content parent/order
-VW1202 content text hash mismatch
-VW1301 predicate argument mismatch
-VW1302 accepted assertion contradiction
-VW1401 invalid binding endpoints
-VW1402 invalid semantic-link endpoints
-VW1403 missing or ambiguous active definition
+VW1001 invalid/unrecognized SQLite application file
+VW1002 migration missing or checksum mismatch
+VW1003 SQLite integrity/foreign-key failure
+VW1004 logical snapshot hash mismatch
+VW1005 relational-to-logical mapping mismatch
+VW1101 invalid/unsupported schema package
+VW1102 invalid logical type hierarchy
+VW1103 invalid field definition
+VW1104 invalid role/dependency rule
+VW1105 required validator unavailable
+VW1201 invalid/duplicate object ID
+VW1202 object kind/type mismatch
+VW1203 invalid/missing field value
+VW1204 missing or incompatible reference
+VW1205 invalid relation endpoint/cardinality
+VW1301 accepted assertion contradiction
+VW1401 dependency extraction mismatch
+VW1402 invalid semantic relation instance
 VW1501 missing required support
-VW1502 forbidden semantic dependency cycle
-VW1503 missing requirement implementation
-VW1504 missing requirement verification
-VW1601 impact analysis limit reached
+VW1502 forbidden dependency cycle
+VW1503 missing implementation
+VW1504 missing verification
+VW1601 impact bound reached
 VW1602 required impact disposition pending
 VW1603 stale impact disposition
-VW1701 missing semantic review attestation
-VW1702 stale semantic review attestation
-VW1703 required review profile missing/stale/failed
-VW1704 unresolved required review concern
-VW1801 stale transaction base
+VW1801 stale project head
 VW1802 operation precondition failed
-VW1803 approval required
-VW1804 atomic replacement unavailable/failed
+VW1803 commit policy rejected
+VW1804 SQLite busy/write failure
+VW1805 commit replay mismatch
 VW2001 incomplete semantic/profile coverage
-VW2002 output profile missing/unsupported input
-VW2003 invalid output path, collision, or size limit
-VW2101 import mapping incomplete/ambiguous
-VW2102 import input or proposal invalid
-VW2201 composition response invalid/incomplete
+VW2002 context/query limit reached
 VW9001 validator internal failure
 VW9002 unsupported construct
 ```
 
-Do not recycle meanings within schema v1.
+Do not recycle a code's meaning within protocol v1.
 
-## 11. Application and CLI
+## 12. Application and CLI
 
-### 11.1 Application handlers
+### 12.1 Application handlers
 
 ```text
 InitializeProject
+OpenAndVerifyProject
 GetProjectStatus
-GetRecord
-ListRecords
-BeginTransaction
-GetTransaction
-ApplyOperations
-ValidateProject
-ValidateTransaction
-AnalyzeTransactionImpact
-ListReviewObligations
-SetReviewDisposition
-SubmitReviewRun
-ResolveReviewConcern
-CommitTransaction
-AbortTransaction
+WriteLogicalSnapshot
+InitializeFromRevisionZeroSnapshot
+BackupProject
+
+GetObject
+ListObjects
+GetRelation
+ListRelations
 GetDependencies
 GetDependents
 ExplainDependencyPath
-ExplainDiagnostic
-ListImporters
-DescribeImporter
-BuildImportProposal
+BuildContextQuery
+
+BeginTransaction
+GetTransaction
+ApplyOperations
+AnalyzeTransactionImpact
+ValidateTransaction
+ListReviewObligations
+SetReviewDisposition
+CommitTransaction
+AbortTransaction
+
+GetCommit
+ListCommits
+VerifyCommitReplay
 ```
 
-Generation provides context, review, and composition-proposal services. Export
-provides output-profile discovery/rendering and manifest services. Hosts compose
-them with Application; only Application may apply a proposal to a transaction.
+Expected invalid input returns `OperationResult<T>`, not exceptions. Every read
+result includes project revision/hash. Every draft result includes transaction
+ID, base identity, draft revision, and change-set/projected hashes as applicable.
 
-Expected invalid input returns typed `OperationResult<T>`, not exceptions. Every
-read includes project revision/hash. Every draft result includes transaction/base
-identity.
-
-### 11.2 CLI commands
+### 12.2 CLI commands
 
 ```text
-vw init --workspace <path> --project-id <id> --title <text>
-vw status --workspace <path>
+vw init --db <path> --project-id <id> --title <text>
+vw verify --db <path> [--full]
+vw status --db <path>
+vw snapshot write --db <path> --output <path-or-stdout>
+vw snapshot init --input <revision-zero-path-or-stdin> --db <new-path>
+vw backup --db <path> --output <new-path>
 
-vw tx begin --workspace <path> --intent <text> [--author <text>]
-vw tx show --workspace <path> --tx <id>
-vw tx apply --workspace <path> --tx <id> --operations <file-or-stdin>
-vw tx impact --workspace <path> --tx <id>
-vw tx validate --workspace <path> --tx <id>
-vw tx obligations --workspace <path> --tx <id>
-vw tx disposition --workspace <path> --tx <id> --target <id>
-                  --status <reviewed-no-change|not-applicable> --reason <text>
-vw tx review submit --workspace <path> --tx <id> --input <file-or-stdin>
-vw tx concern resolve --workspace <path> --tx <id> --concern <id>
-                      --status <value> --reason <text>
-vw tx commit --workspace <path> --tx <id> [--approval <token>]
-vw tx abort --workspace <path> --tx <id>
+vw object get --db <path> --id <id>
+vw object list --db <path> [--type <id>] [--tag <value>]
+vw relation list --db <path> [--type <id>] [--endpoint <id>]
+vw dependencies --db <path> --id <id> [--transitive]
+vw dependents --db <path> --id <id> [--transitive]
+vw explain path --db <path> --from <id> --to <id>
+vw context --db <path> --seed <id> [--max-objects <n>]
 
-vw get --workspace <path> --id <id>
-vw list --workspace <path> [--category <value>] [--kind <value>] [--tag <value>]
-vw dependencies --workspace <path> --id <id> [--transitive]
-vw dependents --workspace <path> --id <id> [--transitive]
-vw explain path --workspace <path> --from <id> --to <id>
-vw validate --workspace <path>
-vw context --workspace <path> --seed <id> [--tx <id>] --output <path>
+vw tx begin --db <path> --intent <text> --author <text>
+vw tx show --db <path> --tx <id>
+vw tx apply --db <path> --tx <id> --operations <file-or-stdin>
+vw tx impact --db <path> --tx <id>
+vw tx validate --db <path> --tx <id>
+vw tx obligations --db <path> --tx <id>
+vw tx disposition --db <path> --tx <id> --target <id>
+                  --status <reviewed-no-change|not-applicable>
+                  --reason <text> --reviewer <id>
+vw tx commit --db <path> --tx <id>
+vw tx abort --db <path> --tx <id>
 
-vw importer list
-vw importer describe --id <id> --version <version>
-vw importer propose --workspace <path> --id <id> --version <version>
-                    --input <path> [--options <path>] --proposal <path>
-
-vw output list
-vw output describe --id <id> --version <version>
-vw output render --workspace <path> --id <id> --version <version>
-                 [--artifact <id>] [--options <path>] --output <directory>
-
-vw composition list
-vw composition request --workspace <path> --provider <id>
-                       --contract <path> --proposal <path>
+vw commit get --db <path> --revision <number>
+vw commit verify --db <path> [--through <number>]
 ```
 
-Composition commands are introduced in WP9. No natural-language query parser is
-required.
+There is no arbitrary `vw sql` write command. Users may open a verified database
+read-only with standard SQLite tools and use documented `vw_*` views.
 
-### 11.3 Output envelope
+### 12.3 Result envelope
 
 ```json
 {
@@ -1513,14 +1334,15 @@ required.
   "project": {
     "id": "project:offline-sensor",
     "revision": 3,
-    "contentHash": "sha256:..."
+    "logicalHash": "sha256:..."
   },
   "transaction": {
     "id": "tx:...",
     "baseRevision": 3,
-    "baseContentHash": "sha256:...",
+    "baseLogicalHash": "sha256:...",
+    "draftRevision": 4,
     "changeSetHash": "sha256:...",
-    "projectedStateHash": "sha256:..."
+    "projectedLogicalHash": "sha256:..."
   },
   "diagnostics": [],
   "coverage": {},
@@ -1528,981 +1350,378 @@ required.
 }
 ```
 
-Exactly one JSON document on stdout. Operational logs go to stderr.
+Exactly one JSON document goes to stdout. Operational logs go to stderr.
 
-### 11.4 Exit codes
+### 12.4 Exit codes
 
 ```text
 0  completed / proven valid where validation applies
 2  deterministic validation rejected
 3  command/input contract error
-4  stale revision or record/lock conflict
-5  storage failure
-6  required analysis/review inconclusive
-7  review obligations or concern resolution required
-8  unsupported schema/profile or migration required
+4  stale head/object/draft precondition or writer conflict
+5  database integrity, migration, mapping, or write failure
+6  required analysis inconclusive
+7  required review dispositions pending
+8  unsupported schema/package/validator or migration required
 9  internal failure
 ```
 
-Warnings do not change exit code unless policy blocks them.
+## 13. Deterministic context queries
 
-## 12. Context packets and heuristic review
-
-### 12.1 Context packet
+A context query selects logical JSON for a human, AI, or RAG consumer. It does
+not generate content.
 
 ```csharp
-public sealed record ContextPacket(
+public sealed record ContextQueryResult(
     string SchemaVersion,
     ProjectId ProjectId,
-    long BaseProjectRevision,
-    long EvaluatedProjectRevision,
-    string BaseProjectHash,
-    string? ChangeSetHash,
-    string EvaluatedStateHash,
-    ImmutableArray<CanonicalId> SeedIds,
-    ImmutableArray<ContextRecord> Records,
-    ImmutableArray<ImpactStep> SelectionPaths,
-    ImmutableArray<CanonicalId> OmittedRecordIds,
-    bool Truncated,
-    string PacketHash);
-```
-
-Selection priority:
-
-```text
-0 seeds and directly changed records
-1 applicable constraints and active definitions
-2 forward dependencies required to understand seeds
-3 review-obligation targets and shortest impact paths
-4 content units bound to included semantic records
-5 additional reverse dependents by increasing distance
-```
-
-Within priority/distance sort by ID. Include records atomically. If a required
-seed/constraint cannot fit, packet construction is inconclusive. Always list
-omissions and limits.
-
-### 12.2 Review provider
-
-```csharp
-public interface IProjectReviewProvider
-{
-    string ProviderId { get; }
-    Task<ReviewResponse> ReviewAsync(ReviewRequest request, CancellationToken ct);
-}
-```
-
-Cache key covers project/transaction/packet hashes, profile/template versions,
-provider/model ID, parameters, and response schema.
-
-Provider output can propose:
-
-- concerns;
-- candidate subjects/propositions/assertions;
-- candidate bindings/semantic links;
-- suggested dispositions with rationale.
-
-Only concerns enter a review run automatically. Candidate canonical records or
-dispositions require explicit application/confirmation by an agent or human.
-
-The POC accepts externally produced structured review JSON and uses a fake
-provider for tests. A real paid provider is Gate B, not Gate A.
-
-### 12.3 Review packet prompt contract
-
-A profile instructs a reviewer to:
-
-1. Use only supplied records and clearly label inference.
-2. Cite every concern with record IDs.
-3. Identify likely missing links separately from contradictions.
-4. State when context is insufficient.
-5. Return the versioned structured response schema.
-
-An AI review that ignores the schema fails; its prose is not parsed loosely into
-canonical findings.
-
-## 13. Import, composition, and output boundaries
-
-Do not use "serialization" as a synonym for all output. The system has four
-separate paths:
-
-```text
-canonical serialization  snapshot <-> lossless validatedworld/v1 JSON
-import                    external bytes -> proposed transaction operations
-composition               context + target contract -> proposed authored content
-output projection         accepted records -> derived files + manifest
-```
-
-### 13.1 Canonical source boundary
-
-In Gate A, the workspace JSON records are canonical. A `ContentUnit.Text` field
-contains the reviewed source text for that unit; it is not a pointer into a
-mutable Markdown file. This avoids pretending that arbitrary edits to prose can
-be mapped back to stable semantic records without ambiguity.
-
-Generated files are never canonical merely because an output profile emitted
-them. Editing one has no effect until an importer maps it back into proposed
-operations and the normal transaction succeeds.
-
-### 13.2 Importer contract
-
-The initial contract belongs in `ValidatedWorld.Application.Import`; extract a
-separate assembly only after multiple adapters justify it.
-
-```csharp
-public sealed record ImporterDescriptor(
-    string ImporterId,
-    string Version,
-    ImmutableArray<string> MediaTypes,
-    string OptionSchemaId,
-    string OptionSchemaVersion,
-    bool Heuristic);
-
-public interface IProjectImporter
-{
-    ImporterDescriptor Descriptor { get; }
-    ValueTask<ImportProposal> ImportAsync(
-        ImportRequest request,
-        CancellationToken cancellationToken);
-}
-
-public sealed record ImportRequest(
-    ProjectSnapshot BaseSnapshot,
-    IImportSource Source,
-    NeutralMap Options,
-    ImmutableArray<IdentityMapping> ConfirmedMappings);
-
-public interface IImportSource
-{
-    string FileName { get; }
-    string MediaType { get; }
-    long Length { get; }
-    string ContentHash { get; }
-    ValueTask<Stream> OpenReadAsync(CancellationToken cancellationToken);
-}
-
-public sealed record ImportProposal(
-    ImportOutcome Outcome,
-    string InputHash,
-    ImmutableArray<ProjectOperation> ProposedOperations,
-    ImmutableArray<IdentityMapping> ProposedMappings,
-    ImmutableArray<Diagnostic> Diagnostics,
-    ImmutableArray<string> Omissions);
-```
-
-An importer never writes a workspace or commits a transaction. The host shows
-identity mappings and operations before applying them to a draft transaction.
-Heuristic importer results must retain provider/template provenance.
-
-The Gate A marked-Markdown importer recognizes stable unit markers:
-
-```markdown
-<!-- vw:unit unit:power-budget -->
-## Power budget
-...
-```
-
-Rules:
-
-1. Enforce media/input-size limits before parsing.
-2. Normalize line endings, but preserve all other text exactly.
-3. Reject duplicate, missing, or malformed unit markers.
-4. Match units by marker ID, never by heading text or ordinal position.
-5. Propose changed unit text/hashes; never mutate the snapshot.
-6. Create normal impact obligations when operations are applied.
-7. Never infer canonical assertions merely because prose changed.
-
-Unmarked Markdown may be offered to a heuristic importer, but it produces an
-identity map and proposal requiring confirmation.
-
-### 13.3 Output-profile contract
-
-`ValidatedWorld.Export` exposes a stable contract. An output profile is a
-renderer/projection, not an author:
-
-```csharp
-public enum OutputReproducibility
-{
-    Reproducible,
-    EnvironmentBound
-}
-
-public sealed record OutputProfileDescriptor(
-    string ProfileId,
-    string Version,
-    ImmutableArray<string> SupportedProjectProfiles,
-    ImmutableArray<string> OutputMediaTypes,
-    string OptionSchemaId,
-    string OptionSchemaVersion,
-    OutputReproducibility Reproducibility,
-    bool AcceptsInvalidSnapshots,
-    bool AllowsUncoveredProjectProfiles);
-
-public interface IOutputProfile
-{
-    OutputProfileDescriptor Descriptor { get; }
-    ValueTask<OutputProfileResult> RenderAsync(
-        OutputRequest request,
-        IOutputSink output,
-        CancellationToken cancellationToken);
-}
-
-public sealed record OutputRequest(
-    DisclosureFilteredProjectView View,
-    ValidationReport ValidationReport,
-    ImmutableArray<CanonicalId> SelectedArtifactIds,
-    NeutralMap Options,
-    OutputLimits Limits);
-
-public sealed record OutputLimits(
-    int MaximumFiles,
-    long MaximumBytesPerFile,
-    long MaximumTotalBytes,
-    int MaximumRelativePathLength);
-
-public sealed record OutputFileRequest(
-    string RelativePath,
-    string MediaType);
-
-public interface IOutputSink
-{
-    ValueTask<Stream> CreateFileAsync(
-        OutputFileRequest request,
-        CancellationToken cancellationToken);
-}
-
-public sealed record OutputProfileResult(
-    OutputOutcome Outcome,
-    ImmutableArray<Diagnostic> Diagnostics,
-    ImmutableArray<CanonicalId> OmittedRecordIds,
-    string CoverageSummary);
-```
-
-`DisclosureFilteredProjectView` is an immutable structurally filtered view built
-by the Export host before invoking an output profile. It contains source project
-ID/revision/hash and typed record collections but cannot expose records outside
-the authorized disclosure selection.
-
-The registry resolves exact `(ProfileId, Version)` pairs. Duplicate registrations
-are startup errors. Do not select by display name, media type alone, or
-"latest" version. Gate A uses explicit dependency-injection registration; it
-does not scan or load arbitrary assemblies.
-
-Output profile rules:
-
-1. Never mutate a supplied view or canonical workspace.
-2. Never invent missing semantic facts, creative prose, or canonical IDs.
-   Declared deterministic boilerplate, labels, and formatting are allowed.
-3. Report unsupported/missing input as partial or inconclusive coverage.
-4. Return only normalized relative paths; reject rooted paths, `..`, duplicates,
-   reserved workspace names, and outputs over configured limits.
-5. Sort semantic input deterministically unless target order is explicitly
-   authored.
-6. A `Reproducible` profile must return identical paths, media types, and bytes
-   for the same source hash, profile/version, disclosure view, and options.
-7. An `EnvironmentBound` profile records its renderer/environment fingerprint
-   and cannot claim byte reproducibility across environments.
-
-The host-controlled sink validates each requested path, collision, and limit;
-provides a bounded hashing stream in a staging directory; and records the file
-manifest when the stream closes. Output implementations do not receive
-unrestricted workspace paths and do not hold an entire large artifact in
-memory. Tests use an in-memory sink.
-
-### 13.4 Export manifest and built-ins
-
-The host emits a manifest alongside every output set:
-
-```csharp
-public sealed record OutputManifest(
-    string ManifestSchemaVersion,
-    ProjectId ProjectId,
     long ProjectRevision,
-    string ProjectContentHash,
-    string ValidationReportHash,
-    string OutputProfileId,
-    string OutputProfileVersion,
-    string OptionsHash,
-    string DisclosureViewHash,
-    OutputReproducibility Reproducibility,
-    string? EnvironmentFingerprint,
-    ImmutableArray<OutputFileManifest> Files,
-    ImmutableArray<CanonicalId> OmittedRecordIds,
-    OutputOutcome Outcome,
-    DateTimeOffset GeneratedAt);
+    string LogicalHash,
+    ImmutableArray<ObjectId> SeedIds,
+    ImmutableArray<ProjectObject> Objects,
+    ImmutableArray<DependencyEdge> Edges,
+    ImmutableArray<ImpactStep> SelectionPaths,
+    ImmutableArray<ObjectId> OmittedObjectIds,
+    bool Truncated,
+    string ResultHash);
 ```
 
-`GeneratedAt` is excluded from semantic reproducibility comparison. File
-manifests contain normalized relative path, media type, length, and SHA-256.
-
-Host algorithm:
+Priority:
 
 ```text
-RenderOutput(profileId, version, snapshot, validationReport,
-             disclosureSelection, selectedArtifacts, options, outputDirectory):
-    profile = registry.ResolveExact(profileId, version)
-    require profile exists; reject unsupported enabled project profiles unless
-            descriptor allows them and result reports their records uncovered
-    require validationReport evaluates snapshot hash and policy allows rendering
-    validate/canonicalize options against descriptor option schema
-    view = BuildDisclosureFilteredView(snapshot, disclosureSelection)
-
-    request = OutputRequest(view, validationReport, selectedArtifacts,
-                            options, configuredLimits)
-    create host-controlled bounded sink over a unique sibling staging directory
-    result = profile.RenderAsync(request, sink)
-    if canceled/failed: return without output-directory mutation
-
-    require all sink streams closed
-    validate result outcome, diagnostics, omissions, sink paths/media types,
-             per-file/total sizes, duplicate paths, and file count
-    sort sink manifest entries by normalized relative path
-    build manifest and semantic manifest hash
-
-    require outputDirectory does not already exist in Gate A
-    write manifest into the staging directory
-    atomically rename staging directory to outputDirectory where supported
-    on failure retain no partial published directory and report cleanup path
+0 seed objects
+1 exact type definitions and applicable constraints
+2 forward dependencies needed to understand seeds
+3 reverse impacted dependents and paths
+4 external anchors bound through relations
+5 additional related objects by increasing graph distance
 ```
 
-Rendering an invalid snapshot is rejected by default. An explicitly named
-diagnostic/report output profile may opt into invalid input and must declare that
-capability in its descriptor. No profile can downgrade the validation report.
+Within priority/distance sort by ID. Include each object atomically. Report
+limits and omissions. A required seed/type/constraint that cannot fit produces
+inconclusive output.
 
-Gate A registers these built-in reproducible profiles:
+## 14. Gate A package and sample
 
-- `validatedworld.markdown-document/v1`;
-- `validatedworld.impact-report/v1`;
-- `validatedworld.review-checklist/v1`;
-- `validatedworld.context-packet/v1`;
-- `validatedworld.graphviz/v1`;
-- `validatedworld.jsonl-inventory/v1`.
+### 14.1 Built-in packages
 
-Each is an independent implementation or cohesive implementation class. The CLI
-never contains a central artifact-kind switch that attempts to generate all
-future products.
+Embed canonical package JSON resources for:
 
-### 13.5 Generative composition contract
+- `core/v1`: artifact, anchor, containment, binds/uses/mentions, and generic
+  constraint vocabulary;
+- `technical-project/v1`: subject, proposition, assertion, source, and technical
+  dependency/traceability vocabulary.
 
-If required prose or organization is absent, rendering must stop. A composition
-profile first creates a target-specific plan; a provider may then author its
-tasks. This keeps patent/manual/novel knowledge separate from the selected AI:
+Initialization validates the resources, computes their definition hashes, and
+normalizes them into schema tables. The same resources generate documentation
+goldens. Do not duplicate package definitions as C# enum switches and SQL seed
+scripts; one canonical resource plus registered validator identifiers is the
+source.
 
-```csharp
-public sealed record CompositionProfileDescriptor(
-    string ProfileId,
-    string Version,
-    ImmutableArray<string> SupportedProjectProfiles,
-    ImmutableArray<string> TargetArtifactKinds,
-    string OptionSchemaId,
-    string OptionSchemaVersion);
+### 14.2 TechnicalProject fixture
 
-public interface ICompositionProfile
-{
-    CompositionProfileDescriptor Descriptor { get; }
-    CompositionPlan BuildPlan(CompositionPlanningRequest request);
-}
+`samples/TechnicalProject/project.vw.db` is generated deterministically from a
+checked-in initialization/transaction script or logical snapshot; do not hand
+edit its binary bytes. Check in a canonical `project.snapshot.json` golden and
+fixture-building command alongside it.
 
-public sealed record CompositionPlanningRequest(
-    ProjectSnapshot Snapshot,
-    ProjectIndex Index,
-    string TargetArtifactKind,
-    string Audience,
-    ImmutableArray<CanonicalId> ExistingArtifactIds,
-    NeutralMap Options);
-
-public sealed record CompositionContract(
-    string CompositionProfileId,
-    string CompositionProfileVersion,
-    string TargetArtifactKind,
-    string Audience,
-    ImmutableArray<RequiredContentRole> RequiredContent,
-    string PreferredOutputProfileId,
-    string PreferredOutputProfileVersion,
-    NeutralMap Options);
-
-public sealed record CompositionTask(
-    string TaskId,
-    string Purpose,
-    ImmutableArray<CanonicalId> SeedIds,
-    ImmutableArray<RequiredContentRole> RequiredContent,
-    ImmutableArray<string> DependsOnTaskIds,
-    int MaximumProposedOperations,
-    long MaximumProposedTextBytes);
-
-public sealed record CompositionPlan(
-    CompositionOutcome Outcome,
-    CompositionContract Contract,
-    ImmutableArray<CompositionTask> Tasks,
-    ImmutableArray<Diagnostic> Diagnostics,
-    ImmutableArray<string> Omissions,
-    string PlanHash);
-
-public sealed record CompositionRequest(
-    ProjectId ProjectId,
-    long BaseProjectRevision,
-    string BaseProjectHash,
-    CompositionContract Contract,
-    string PlanHash,
-    CompositionTask Task,
-    ImmutableArray<ContextPacket> ContextPackets,
-    ImmutableArray<CanonicalId> ExistingArtifactIds);
-
-public sealed record CompositionProviderDescriptor(
-    string ProviderId,
-    string Version,
-    string ResponseSchemaId,
-    string ResponseSchemaVersion);
-
-public interface IAuthoringCompositionProvider
-{
-    CompositionProviderDescriptor Descriptor { get; }
-    ValueTask<CompositionProposal> ComposeAsync(
-        CompositionRequest request,
-        CancellationToken cancellationToken);
-}
-
-public sealed record CompositionProposal(
-    CompositionOutcome Outcome,
-    string RequestHash,
-    CompositionProviderDescriptor Provider,
-    string ModelAndParameterHash,
-    ImmutableArray<ProjectOperation> ProposedOperations,
-    ImmutableArray<ReviewConcern> Concerns,
-    ImmutableArray<CanonicalId> CitedRecordIds,
-    ImmutableArray<string> Omissions,
-    bool Truncated);
-```
-
-Composition profiles and providers use separate exact-version registries. A
-composition profile is deterministic target knowledge: it defines the expected
-artifact roles, task ordering/dependencies, context seeds, limits, and preferred
-output profile. It may be a purpose-built C# implementation; a declarative
-template language is not required. Task IDs are unique, dependency references
-resolve, and the task graph is acyclic. Planning the same snapshot/intent/options
-must reproduce the same `PlanHash`.
-
-The provider is replaceable thinking capacity. It receives one plan task at a
-time and cannot change its limits or silently add tasks. Response validation
-checks the exact plan/task/request hashes before exposing proposed operations.
-
-The provider receives bounded disclosed context, not an unrestricted workspace.
-Its operations are untrusted drafts. Applying them uses normal transaction
-preconditions; validation, impact, obligations, and required review all rerun.
-The provider never writes a final export or marks its own work accepted.
-
-Large products should be composed in stable content-unit transactions, not one
-opaque model response. A composition profile may plan required sections and
-their dependencies first, then request one bounded proposal at a time.
-
-Examples:
-
-| Target | Appropriate path |
-|---|---|
-| Novel with accepted chapter text | deterministic manuscript/EPUB output profile |
-| Claims graph without patent prose | patent composition proposals → reviewed transactions → patent document output profile |
-| Game graph without player-facing explanations | manual composition proposals → reviewed transactions → manual output profile |
-| Unity runtime package | deterministic runtime output profile or external adapter over declared JSON |
-
-Composition profiles can enforce required section/role coverage, but they do
-not prove patent sufficiency, player comprehension, or literary quality.
-
-A project-specific Unity adapter that only validates raw state data is neither
-an output profile nor a composition provider. It is an input/profile-validator
-adapter: it binds diagnostics to an exact external content hash, returns stable
-evidence-bearing findings, and declares which external schema it covers. It may
-instead import selected typed facts as transaction proposals. It never silently
-makes mutable external data canonical.
-
-### 13.6 Extension loading and safety
-
-The C# interfaces and versioned CLI/JSON schemas are the durable seams. Gate A
-supports built-in and host-registered trusted implementations. Dynamic assembly
-discovery, dependency isolation, unloading, signing, capability permissions,
-and marketplace packaging are deferred to WP12.
-
-An in-process third-party implementation is trusted code. An untrusted adapter
-should run out of process and receive a filtered request package. Neither form
-may weaken canonical transaction or validation rules.
-
-## 14. Gate A proof project: TechnicalDesign
-
-The first sample is deliberately small enough to inspect manually and rich
-enough to disprove the core product if impact analysis is noisy or incomplete.
-
-### 14.1 Document
-
-`samples/TechnicalDesign` describes an offline environmental sensor. Its source
-artifact has these stable content units:
+The graph contains:
 
 ```text
-unit:overview
-unit:requirements
-unit:power-budget
-unit:architecture
-unit:verification
-unit:privacy
+requirement: runtime >= 24 hours
+assumption: average current = 20 mA
+assumption: battery capacity = 500 mAh
+result: nominal runtime = 25 hours
+conclusion: battery satisfies runtime requirement
+
+derived-from(result, current)
+derived-from(result, capacity)
+depends-on(conclusion, result)
+satisfies(conclusion, requirement)
+
+anchors: requirements, power-budget, architecture, verification, privacy
+bindings from semantic objects to relevant anchors
 ```
 
-The sample uses value-neutral stable proposition IDs. Values live in proposition
-arguments and may change without changing identity. It includes:
-
-```text
-proposition:runtime-requirement  sensor must operate for at least 24 hours
-  assertion:runtime-requirement          Accepted Requirement
-
-proposition:average-current      active current is 20 mA
-  assertion:average-current-assumption   Accepted Assumption
-
-proposition:battery-capacity     available capacity is 500 mAh
-  assertion:battery-capacity-assumption  Accepted Assumption
-
-proposition:runtime-estimate     calculated nominal runtime is 25 hours
-  assertion:runtime-estimate             Accepted Result
-
-proposition:battery-sufficiency  selected battery satisfies runtime requirement
-  assertion:battery-sufficiency          Accepted Conclusion
-```
-
-Required links include:
-
-```text
-assertion:runtime-estimate
-  DerivedFrom -> assertion:average-current-assumption
-  DerivedFrom -> assertion:battery-capacity-assumption
-
-assertion:battery-sufficiency
-  DependsOn -> assertion:runtime-estimate
-  Satisfies -> assertion:runtime-requirement
-
-unit:architecture
-  DependsOn -> assertion:battery-sufficiency
-  Implements -> assertion:runtime-requirement
-
-unit:verification
-  DependsOn -> assertion:battery-sufficiency
-  Verifies -> assertion:runtime-requirement
-```
-
-Bindings connect assertions to the content unit that states, calculates,
-implements, or tests them. `unit:privacy` has no dependency path from the
-electrical assumptions.
-
-The Gate A disposition policy selects Accepted Assumption, Result, Conclusion,
-and Decision assertions plus section content units. It reports direct selected
-changes as `Updated`; links, bindings, and attestations remain visible in the
-full impact report but are enforced by their own validators instead of becoming
-blocking disposition targets.
-
-### 14.2 Required mutation scenario
-
-The acceptance transaction replaces `proposition:average-current` at its current
-record revision so its value argument changes from 20 mA to 25 mA. The stable ID
-does not change. The transaction also updates the bound sentence in
-`unit:power-budget` and replaces its semantic-review attestation.
-
-The engine must deterministically identify review obligations for:
-
-- the accepted current assumption;
-- the calculated-runtime result assertion;
-- the battery-sufficiency conclusion assertion;
-- the architecture section that implements the choice;
-- the verification section whose plan depends on the choice;
-- the directly changed power-budget section, reported as `Updated`.
-
-It must not include `unit:privacy`. The author must update the runtime and
-conclusion, or attest with evidence that each remains valid. A commit with any
-pending obligation must fail atomically.
-
-The expected corrected calculation is 20 hours. Gate A deliberately does not
-pretend to derive arithmetic from prose, so the graph's job is to force the
-runtime and sufficiency reviews. A golden invalid follow-up updates the runtime
-result to 20 hours while retaining both an Accepted sufficiency conclusion and
-an explicit `Contradicts` relationship between that conclusion and the runtime
-requirement. `NoAcceptedContradictions` must reject it. This distinguishes the
-honest common guarantee (impact and explicit-rule checking) from a later typed
-numeric-calculation validator.
+Changing current to 25 mA must impact the result, conclusion, and relevant
+anchors, not privacy. The engine does not perform arithmetic; fixture operations
+supply the known repaired capacity/runtime values.
 
 ### 14.3 Intentional-error corpus
 
-Include transactions for:
+Include fixtures for:
 
-- omitted runtime dependency;
-- reversed `DerivedFrom` edge;
-- changed prose with a stale binding hash;
-- unreviewed impacted section;
-- unsupported `NotApplicable` disposition with no evidence;
-- positive and negative Accepted assertions of the same proposition/scope;
-- stale base revision;
-- semantically irrelevant privacy edit;
-- truncated context packet;
-- malformed heuristic response.
+- wrong application ID/user version/migration hash;
+- SQLite foreign-key/integrity failure;
+- logical hash mismatch caused by accidental/incomplete direct mutation;
+- invalid type hierarchy, field, role, or dependency rule;
+- unavailable required validator;
+- duplicate/invalid object ID;
+- type/kind mismatch;
+- invalid field cardinality/value/reference;
+- invalid relation endpoint/cardinality;
+- omitted or reversed semantic dependency;
+- explicit contradiction;
+- missing support/definition/implementation/verification;
+- forbidden cycle;
+- unreviewed or stale impacted object;
+- stale project/draft/object precondition;
+- impact/context bound reached;
+- unrelated privacy false-positive regression;
+- writer conflict and injected commit failure;
+- relational/logical mapping mismatch;
+- replay mismatch;
+- uncovered extension/profile data.
 
-Each fixture has a golden structured diagnostic file. Golden files compare
-semantic fields and deterministic ordering; volatile timestamps are excluded.
+Every fixture has golden structured diagnostics. Golden comparisons exclude
+injected timestamps but assert deterministic semantic fields and ordering.
 
-### 14.4 Gate A success criteria
+### 14.4 Performance corpus
+
+Generate deterministic sparse and dense fixtures:
+
+```text
+small:       1,000 objects / 10,000 edges
+expected:   10,000 objects / 100,000 edges
+stress:    100,000 objects / 1,000,000 edges
+```
+
+Measure database load, logical materialization, validation, direct queries,
+impact traversal, snapshot generation, and accepted commit. Record hardware and
+budgets; do not encode an unsupported universal performance claim.
+
+### 14.5 Gate A success criteria
 
 Gate A passes only if:
 
-1. A clean checkout can restore, build, and run all tests.
-2. The base TechnicalDesign project validates with no errors.
-3. Every intentional error yields its expected diagnostic code and evidence.
-4. The current-change transaction produces all and only the expected impact
-   obligations before any manual additions.
-5. A pending-obligation or invalid transaction changes no canonical bytes.
-6. Replaying accepted transactions produces identical canonical hashes.
-7. A user or agent can inspect every impact path and understand why it exists.
+1. Clean checkout restores, builds, and tests.
+2. The sample database integrity-checks and logical-hash-verifies.
+3. Database constraints reject structural corruption in supported write paths.
+4. Semantic validators catch cases foreign keys cannot.
+5. Current-change impact exactly matches the expected set and paths.
+6. Pending dispositions block commit.
+7. Invalid/stale/busy/faulted commits change no authoritative/audit rows.
+8. Accepted commit yields expected rows and logical hash.
+9. Replay reproduces recorded hashes.
+10. Read views and C# edge extraction agree.
+11. Lower-cost agent evaluation succeeds using JSON plus read-only SQL views.
+12. Modeling burden and performance are documented.
+13. Comparison with Doorstop/plain SQLite identifies material additional value.
 
-If criterion 4 cannot be met without linking nearly every section to every
-other section, the minimal product has failed. Record that result in
-`docs/feasibility.md` before expanding scope.
+If useful impact requires near-complete connectivity or the metamodel adds no
+value over ordinary SQL, Gate A fails and the feasibility verdict is updated.
 
-## 15. Profiles after Gate A
+## 15. Later profiles and hosts
 
-Profiles add vocabulary and validators; they do not fork the transaction,
-serialization, impact, review, or diagnostic architecture.
+### 15.1 Linear narrative — Gate B
 
-### 15.1 TechnicalDesign profile
+Add package types/validators for story events, fictional intervals, participants,
+effects, belief/knowledge states, clues, and disclosure. No new physical tables
+are required unless measurement proves the generic field/endpoint representation
+inadequate.
 
-Gate A supplies a deliberately small controlled vocabulary:
+Keep project revision, fictional time, narrative order, canon truth, and
+perspective separate.
 
-```text
-subject kinds: component, interface, requirement, metric, assumption,
-               decision, risk, test, source
-predicate kinds: value, unit, minimum, maximum, status, selected-option,
-                 rationale, result
-link kinds: DependsOn, DerivedFrom, Defines, Uses, Supports, Contradicts,
-            Implements, Satisfies, Verifies, Supersedes, Cites, Mentions
-```
+### 15.2 Interactive state — Gate C
 
-Projects can add namespaced extension terms, but the core only applies rules to
-terms it understands. Unknown extensions round-trip and are reported as outside
-deterministic coverage.
+Add finite typed variables, expression AST records, transition effects,
+invariants, and traces. Bounded BFS explores canonical state encodings and
+returns shortest counterexamples. Reaching state/depth limits is inconclusive.
 
-### 15.2 LinearNarrative profile
+### 15.3 Hosted service — optional Gate D
 
-After Gate A, add narrative records without redefining the common core:
+Only demonstrated multiple-writer/remote requirements authorize:
 
-```csharp
-public sealed record StoryEvent(
-    EventId Id,
-    string Name,
-    ScopeId ScopeId,
-    FictionalInterval When,
-    int NarrativeOrdinal,
-    ImmutableArray<EventParticipant> Participants,
-    ImmutableArray<EventEffect> Effects,
-    ImmutableArray<CanonicalId> EvidenceIds);
+- ASP.NET API host;
+- authentication/authorization and tenant isolation;
+- PostgreSQL persistence implementation;
+- server-side job/cancellation/observability concerns.
 
-public sealed record BeliefState(
-    AssertionId Id,
-    SubjectId KnowerId,
-    PropositionId PropositionId,
-    BeliefPolarity Polarity,
-    ConfidenceBand Confidence,
-    FictionalInterval ValidDuring,
-    ImmutableArray<CanonicalId> EvidenceIds);
-```
+The Application protocol and logical snapshot/hash stay backend-neutral.
+PostgreSQL migrations and concurrency semantics require their own acceptance
+suite; do not assume SQLite SQL is portable.
 
-Keep these axes separate:
+### 15.4 Integration packaging — optional Gate E
 
-- canon truth: which assertions hold in the fictional world;
-- perspective: what each character knows or believes;
-- fictional time: when events and assertions hold;
-- narrative order: when readers or players encounter material;
-- authoring revision: which project commit contains the records.
+After protocol stability, expose Application use cases through MCP/Codex/plugin
+packaging. No provider or packaging type enters Core or canonical state.
 
-First narrative validators cover interval overlap, event precondition/effect
-references, impossible co-location where explicitly modeled, revelation before
-knowledge, and mutually exclusive active facts. Missing facts remain unknown.
+## 16. Test strategy
 
-The Harbor mystery sample is the Gate C fixture. It must not delay the document
-graph proof.
-
-### 15.3 InteractiveState profile
-
-An interactive story is authored as a static transition specification:
-
-```csharp
-public sealed record StateVariableDefinition(
-    StateVariableId Id,
-    string Name,
-    ValueDomain Domain,
-    JsonElement InitialValue);
-
-public sealed record TransitionDefinition(
-    TransitionId Id,
-    string Name,
-    BooleanExpression EnabledWhen,
-    ImmutableArray<StateEffect> Effects,
-    ImmutableArray<ConstraintId> RequiredInvariantIds);
-```
-
-The graph remains static: variable definitions, possible transitions,
-preconditions, effects, invariants, scenes, and consequences are canonical
-records. A particular playthrough is a derived trace through that graph, not a
-second mutable canon.
-
-Do not represent state by copying a complete world for every branch. Use a
-bounded vector of declared state variables and transitions. This is not merely
-"more edges": conditional edges need explicit predicates and effects or the
-validator cannot distinguish mutually exclusive branches.
-
-Bounded exploration algorithm:
+### 16.1 Layers
 
 ```text
-frontier := ordered set containing initial state
-visited := hash(initial state) -> shortest trace
+Core unit/property tests
+  IDs, packages, types, fields, roles, values, objects, operations
 
-while frontier not empty and states < MaxStates and depth < MaxDepth:
-    state := remove smallest canonical state hash
-    for transition in transitions sorted by ID:
-        if transition.EnabledWhen(state):
-            next := ApplyEffects(state, transition)
-            validate invariants(next)
-            record counterexample on violation
-            enqueue next if unseen
+Serialization unit/property tests
+  strict JSON, canonical order, logical hash, operation/result schemas
 
-if a bound prevents complete exploration:
-    result := Inconclusive with explored counts and frontier evidence
-else:
-    result := ProvenWithinDeclaredModel
-```
+Validation unit/property tests
+  schema validation, indexes, edges, constraints, impact, obligations, context
 
-This can prove properties only within the declared variables, transitions, and
-bounds. It cannot prove arbitrary game code correct. Runtime integration and
-game-engine adapters remain outside Core.
+Application integration tests with in-memory ports
+  draft lifecycle, projection, stale checks, policy, commit orchestration, replay
 
-## 16. Safety, migration, and recovery
-
-### 16.1 Workspace safety
-
-- Validate the complete snapshot before replacing the canonical file.
-- Write temporary files within the workspace directory.
-- Flush the temporary file before atomic replacement where the platform permits.
-- Preserve the last accepted snapshot until replacement succeeds.
-- Treat lock loss or base-hash mismatch as a stale transaction.
-- Never follow workspace-relative paths outside the workspace root.
-- Never execute source text, expressions, or reviewer output as code.
-
-### 16.2 Schema migration
-
-Migration is an explicit command that:
-
-1. reads and validates the old schema;
-2. writes a new workspace or backup beside the original;
-3. produces a deterministic migration report;
-4. validates the migrated project;
-5. replaces the source only with explicit confirmation.
-
-The POC has no compatibility promise. Prefer a clear breaking schema change to
-an ambiguous migration. Preserve unknown extension records only when their
-round-trip behavior is tested.
-
-### 16.3 Recovery records
-
-Accepted transaction records contain the base hash, projected hash, canonical
-patch, obligation dispositions, validation report hash, author, and timestamp.
-They are an audit/replay aid, not another source of canon. If replay output
-differs from the recorded projected hash, stop and report corruption.
-
-## 17. Test strategy
-
-### 17.1 Test layers
-
-```text
-Core unit tests
-  ID/value-object validation, intervals, assertion scope, link contracts
-
-Serialization unit and property tests
-  strict parsing, canonical ordering, hash stability, unknown fields,
-  duplicate IDs, round trips
-
-Validation unit tests
-  diagnostic codes, evidence, tri-state results, binding checks
-
-Application integration tests
-  transaction lifecycle, impact obligations, stale commits, atomic failure,
-  replay, workspace locks
+SQLite integration/fault tests
+  migrations, PRAGMAs, constraints, mapping, transactions, rollback, backup,
+  views, mutation detection, busy behavior
 
 CLI contract tests
-  stdout envelope, stderr separation, exit codes, deterministic ordering
+  JSON input/output, stdout/stderr, exit codes, deterministic results
 
-Output/import contract tests
-  exact registry resolution, option schemas, reproducible bytes/manifests,
-  path/collision/size rejection, incomplete coverage, proposal-only import
-
-Sample/golden tests
-  TechnicalDesign base project and intentional-error corpus
-
-Optional provider contract tests
-  review/composition schema enforcement, cache keys, limits, inconclusive
-  responses, cited context, and no implicit canon edits
+Sample/golden/performance tests
+  TechnicalProject and generated corpora
 ```
 
-### 17.2 Required properties
+### 16.2 Required properties
 
-Use generated inputs for these invariants:
+- Database → logical snapshot → canonical JSON is deterministic.
+- Canonical JSON → new database → logical snapshot is equivalent.
+- Physical insertion order does not change logical hash.
+- SQLite file bytes may differ while logical hashes remain equal.
+- Stable IDs and revisions survive round trip.
+- Every normalized reference/endpoint resolves.
+- Read-view direct edges equal C# extracted edges.
+- Unrelated insertion does not change an existing impact set/path.
+- Base/projected union never loses base-only/projected-only impact.
+- Any required bounded-out analysis is inconclusive.
+- Operation changes invalidate stale dispositions.
+- Failed commits preserve identical logical head, current rows, and audit rows.
+- Accepted commit and replay reproduce the same logical hash.
+- Extension JSON never creates hidden references.
+- Artifact locators are never dereferenced.
+- No CLI command emits non-JSON stdout.
 
-- canonical serialization is idempotent;
-- record order does not affect canonical output;
-- IDs are stable through round trips;
-- impact results are stable under unrelated record insertion;
-- union-graph impact never loses a base-only or projected-only dependency path;
-- failed commits preserve the exact canonical bytes;
-- replay of an accepted transaction reproduces its recorded hash;
-- all diagnostic evidence IDs exist in the evaluated snapshot;
-- any bounded-out analysis reports inconclusive, never success.
-- a Reproducible output profile returns identical semantic files/manifests for
-  the same view, exact profile version, and canonical options;
-- importer and composition results cannot alter canon until their operations are
-  explicitly applied and committed.
+### 16.3 Fault injection
 
-### 17.3 Mutation and fault injection
+Inject failures after draft load, base verification, projection, validation,
+writer acquisition, head recheck, object header mutation, value mutation,
+endpoint mutation, audit insert, hash verification, head update, and before
+SQLite commit. Every failure before commit must roll back the entire SQL
+transaction.
 
-Inject failures after temporary write, validation, flush, lock verification, and
-immediately before replace. Verify that canon is either the complete old
-snapshot or the complete new snapshot, never a partial file. Inject cancellation
-into provider calls and context construction; cancellation cannot mutate canon.
+## 17. Ordered work packages
 
-## 18. Ordered work packages
+Implement one package at a time. Do not add later-host dependencies early.
 
-Do one work package at a time. Do not introduce projects or frameworks needed
-only by a later package.
+### WP0 — architecture scaffold
 
-### WP0 — solution wiring
+- Add `ValidatedWorld.Application` and tests.
+- Add `ValidatedWorld.Persistence.Sqlite` and tests.
+- Add explicit project references from Section 3.
+- Reference `Microsoft.Data.Sqlite.Core` plus an explicitly pinned/audited native
+  bundle directly in Persistence.Sqlite.
+- Acceptance: scaffold and existing suite restore/build/test cleanly.
 
-- Add `ValidatedWorld.Application` and matching test project.
-- Verify project references follow Section 3.
-- Add shared test helpers only where two projects actually need them.
-- Acceptance: the empty wiring builds and the entire existing suite passes.
+### WP1 — common metamodel
 
-### WP1 — common immutable domain
+- Implement IDs, schema packages, type/field/role/dependency definitions, values,
+  objects, snapshots, policies, operations, and review records.
+- Acceptance: unit/property tests cover every local valid/rejected shape.
 
-- Implement IDs, `ProjectSnapshot`, artifact/content, proposition/assertion,
-  source/binding, link, constraint, and profile records.
-- Enforce constructor-level local invariants without cross-record lookups.
-- Acceptance: domain tests cover valid creation and every rejected local shape.
+### WP2 — logical JSON and built-in packages
 
-### WP2 — strict serialization and TechnicalDesign skeleton
+- Implement strict protocol DTOs, canonical writers/hashes, and canonical
+  `core/v1` plus `technical-project/v1` package resources.
+- Acceptance: round-trip/order/duplicate/unknown-field/hash goldens pass.
 
-- Implement strict JSON readers, canonical writers, hashes, workspace loader,
-  and the clean TechnicalDesign snapshot.
-- Acceptance: round-trip, reorder, duplicate, unknown-field, and golden-hash
+### WP3 — SQLite schema and mapping
+
+- Implement connections, v1 migration, repositories, read views, integrity
+  checks, logical snapshot load, initialize, and backup.
+- Acceptance: migration/constraint/mutation-detection/mapping/backup integration
   tests pass.
 
-### WP3 — indexes and deterministic validation
+### WP4 — indexes and semantic validation
 
-- Build immutable indexes and common/profile validators.
-- Add evidence-bearing diagnostics and coverage reports.
-- Acceptance: the intentional structural and semantic error fixtures produce
-  their golden results.
+- Validate stored schema packages/objects, build indexes/edges, implement generic
+  and technical constraints, diagnostics, and coverage.
+- Acceptance: intentional-error fixtures match golden JSON; read views agree.
 
-### WP4 — transaction projection and atomic commit
+### WP5 — durable drafts and projection
 
-- Implement patch operations, projection, stale checks, validation gate,
-  atomic replacement, transaction log, and replay.
-- Acceptance: fault-injection tests prove failed commits preserve canonical
-  bytes and accepted replay reproduces hashes.
+- Implement draft repository, operations, preconditions, projection, hashes,
+  validation runs, and disposition invalidation.
+- Acceptance: concurrent draft edits and stale operation cases are deterministic.
 
-### WP5 — impact and mandatory review
+### WP6 — impact and mandatory review
 
-- Implement semantic seeds, base/projected union traversal, content projection,
-  obligation creation, dispositions, attestations, and commit policy.
-- Acceptance: the current-change scenario produces exactly the Section 14 set;
-  incomplete or stale review cannot commit.
+- Implement base/projected union BFS, explanation paths, bounds, obligations, and
+  fingerprints.
+- Acceptance: TechnicalProject yields exactly Section 14 impact and no privacy
+  false positive.
 
-### WP6 — agent-grade interface
+### WP7 — atomic accepted commit and replay
 
-- Implement CLI envelopes/exit codes, context packets, importer/output-profile
-  contracts and exact-version registries, the marked-Markdown importer,
-  built-in Markdown/DOT/JSONL/report profiles, safe output hosting, manifests,
-  and help text.
-- Acceptance: a scripted agent can inspect, stage, analyze, review, validate,
-  commit, discover capabilities, propose an import, and select/render an exact
-  output profile without parsing human prose. A registered test output profile
-  works without modifying CLI/Application switches.
+- Implement short SQLite write session, ordered row mutations, integrity/hash
+  recheck, accepted audit, rollback fault handling, and replay.
+- Acceptance: every fault rolls back; accepted replay matches.
 
-### WP7 — Gate A evaluation
+### WP8 — queries and CLI
 
-- Run the falsification measurements in `docs/feasibility.md`.
-- Record false-positive/false-negative examples and authoring burden.
-- Acceptance: explicitly approve, narrow, or stop the common product before
-  narrative specialization begins.
+- Implement handlers, JSON envelopes, commands, exit codes, context, snapshot,
+  backup, and help/read-view documentation.
+- Acceptance: scripted agent completes init through commit/replay using JSON and
+  queries read-only views successfully.
 
-### WP8 — optional heuristic review
+### WP9 — Gate A evaluation
 
-- Add review schema, external-result ingestion, fake provider, caching, concern
-  resolution, and one optional real provider adapter outside Core.
-- Acceptance: malformed, partial, canceled, and contradictory reviewer outputs
-  are auditable and cannot alter canon automatically.
-
-### WP9 — optional authoring composition
-
-- Add exact-version composition-profile/provider registries, deterministic task
-  planning, external-result ingestion, a fake provider, bounded multi-unit
-  proposal handling, provenance, and CLI proposal output.
-- Acceptance: a new composition profile can plan and propose a new document
-  target without editing output/rendering or provider code; providers are
-  replaceable; malformed, stale, oversized, or uncited output cannot mutate
-  canon; and accepted operations still pass a normal transaction.
+- Run correctness, modeling-cost, lower-cost-agent, comparison, and performance
+  evaluations.
+- Acceptance: explicitly approve, narrow, replace components, or stop before
+  narrative work.
 
 ### WP10 — LinearNarrative profile
 
-- Add fictional time, events, knowledge/belief, narrative order, validators, and
-  a reduced Harbor mystery sample.
-- Acceptance: Gate C linear-story counterexamples are replayable and diagnostic
-  coverage is stated precisely.
+- Authorized only by Gate A outcome.
 
 ### WP11 — InteractiveState profile
 
-- Add typed state variables, transition expressions/effects, invariants, traces,
-  and bounded exploration.
-- Acceptance: Gate D known-good and known-bad miniature campaigns return proven,
-  disproven, and inconclusive results correctly.
+- Authorized only by Gate B outcome.
 
-### WP12 — integration packaging
+### WP12 — optional host/integration gates
 
-- Stabilize the CLI/tool schema first, then evaluate MCP/Codex/plugin packaging
-  against the current external standard.
-- Acceptance: the integration is a thin adapter; no provider or packaging types
-  leak into Core or canonical files.
+- Evaluate MCP packaging first; web/PostgreSQL only for demonstrated hosted
+  requirements.
 
-## 19. Pull-request checklist
+## 18. Pull-request checklist
 
 Every implementation change states:
 
-- the work package or bounded vertical slice;
-- the changed canonical/public contracts;
-- tests added or updated;
-- sample/golden changes;
-- deterministic guarantees and remaining inconclusive behavior;
-- `dotnet restore ValidatedWorld.slnx` result;
-- `dotnet build ValidatedWorld.slnx` result;
-- `dotnet test ValidatedWorld.slnx` result.
+- work package/bounded slice;
+- changed physical migration or logical JSON contract;
+- schema package/validator version changes;
+- tests and database/snapshot/golden changes;
+- guarantees and remaining inconclusive behavior;
+- restore/build/test results.
 
-Do not call a slice complete when its acceptance criteria or required full-suite
-verification are missing.
+Never silently edit an applied migration. Add a new checked migration. During the
+POC, breaking logical changes are allowed but must use an explicit new package or
+protocol/schema migration.
 
-## 20. Deferred decisions and explicit non-goals
+## 19. Deferred decisions and non-goals
 
 Defer until evidence requires them:
 
-- a universal ontology or unrestricted user rule language;
-- automatic semantic extraction as authoritative canon;
-- natural-language query parsing;
-- incremental validation and graph databases;
-- rich visual graph editing;
-- collaborative multi-writer merge semantics;
-- a game-engine runtime;
-- arbitrary source-code or mathematical-proof verification;
-- a general publishing layout/template language;
-- reflection-based loading of arbitrary in-process extension assemblies;
-- plugin packaging tied to a currently fashionable format.
+- user-authored schema packages;
+- arbitrary project DDL or direct canonical SQL writes;
+- universal ontology or unrestricted rule language;
+- automatic semantic extraction;
+- built-in AI/provider/RAG orchestration;
+- document import/generation/rendering/publishing;
+- custom diff/change-package protocol;
+- incremental semantic validation;
+- graph database, RDF/SHACL runtime, TerminusDB, or Dolt persistence;
+- branch/merge/rebase collaboration;
+- PostgreSQL/web/multi-tenant service;
+- rich visual graph editor;
+- game-engine runtime;
+- dynamic extension loading;
+- public plugin packaging.
 
-The intended scaled-down product is still useful if heuristic extraction,
-narrative logic, and interactive exploration all fail: it is a transactional,
-typed dependency and mandatory-review compiler for connected documents. If even
-the TechnicalDesign impact gate cannot beat ordinary search plus a checklist at
-reasonable authoring cost, stop expanding the project and say so plainly.
+The scaled-down product remains useful only if it beats ordinary SQLite plus
+manual review: a deterministic semantic transaction layer that explains
+transitive impact and refuses incomplete reviewed changes. If it cannot prove
+that advantage, stop expanding and say so plainly.
