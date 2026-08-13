@@ -49,6 +49,7 @@ open and integrity-check project.vw.db
 → compute explained transitive impact
 → repair data and disposition selected impacted objects
 → run every required deterministic validator
+→ optionally run required AI semantic review and disposition concerns [Gate B]
 → recheck head and evidence inside a short SQLite write transaction
 → atomically apply the new state and commit evidence, or roll back everything
 → return a versioned JSON result
@@ -71,6 +72,8 @@ transaction/validation boundary is the product.
 - Derived dependency/impact indexes.
 - Deterministic validators and structured diagnostics.
 - Review dispositions for policy-selected impacted objects.
+- A planned provider-neutral AI semantic-review workflow over bounded,
+  hash-addressed dependency/impact context (Gate B).
 - Deterministic logical JSON snapshots, commands, and results.
 - Accepted commit operations and audit/replay evidence.
 
@@ -80,7 +83,8 @@ transaction/validation boundary is the product.
   media.
 - Extracting meaning from those artifacts.
 - Updating, rendering, or publishing them.
-- General AI-provider, prompt, or composition workflows.
+- General-purpose AI agent, RAG, composition, generation, and arbitrary prompt
+  workflows outside the scoped semantic reviewer.
 - Arbitrary user-owned relational schemas.
 - Hosted identity, authorization, collaboration, and multi-tenancy.
 
@@ -96,6 +100,12 @@ Every semantic validation result is:
 - **Disproven:** a deterministic rule found a violation, with evidence.
 - **Inconclusive:** missing annotations, unsupported schema/profile data, a
   configured bound, cancellation, or failure prevented a conclusion.
+
+A separate Gate B result class is **Concern**: a heuristic reviewer identified a
+possible issue using supplied context. Review completion, freshness, packet
+coverage, and concern disposition are auditable workflow facts. Concern
+correctness is not deterministic, and a concern is never silently promoted to a
+`Disproven` result.
 
 Database constraint success is structural evidence, not proof of semantic
 validity. An incomplete semantic phase is never a pass.
@@ -438,7 +448,33 @@ Nonautomatic dispositions require reviewer, rationale, and time. They are
 fingerprinted over the projected target, change set, and impact path. Operation
 changes invalidate stale dispositions.
 
-### 7.6 Commit
+### 7.6 Planned AI semantic review — Gate B
+
+After deterministic projection, validation, impact, and obligation construction,
+a project policy may require a named AI semantic-review profile for selected
+changes. The application builds an exact review plan from changed objects, the
+policy-selected impact closure, explanation edges, required forward
+dependencies, applicable constraints, and anchors. It then supplies bounded,
+versioned context packets to a provider-neutral reviewer.
+
+The reviewer returns structured concerns with cited object/field/edge evidence,
+insufficient-context observations, and separately identified candidate records,
+relationships, or operations. Candidates never become canonical automatically.
+Policy may require a complete fresh run and a disposition for every concern.
+
+If the full selected dependency chain cannot fit one request, the later phase
+uses deterministic sharding plus a coverage manifest and synthesis call. A run
+is complete only if every required object and dependency edge was presented and
+all required calls completed. This guarantees review coverage, not model
+comprehension or correctness.
+
+Provider refusal, timeout, cancellation, malformed output, unavailable
+credentials, or incomplete coverage makes the review failed or inconclusive; it
+is not a content-validation error. No network call occurs inside a SQLite write
+transaction. The normative later-phase design is
+[Planned AI semantic review](ai_semantic_review.md).
+
+### 7.7 Commit
 
 After an apparently valid reviewed draft, commit:
 
@@ -532,7 +568,15 @@ distinguishes proposed, accepted, rejected, deprecated, and superseded.
 The profile proves structured traceability, not scientific, engineering, patent,
 or legal correctness.
 
-### 10.2 Linear narrative profile — Gate B
+### 10.2 AI semantic review — Gate B
+
+Gate B is a cross-profile review service, not another domain ontology. It adds
+review plans, bounded context-packet coverage, provider-neutral structured
+concerns, freshness and disposition policy, a fake provider, and one optional
+dependency-isolated OpenAI adapter. It is evaluated first against deliberately
+omitted or stale TechnicalProject semantics.
+
+### 10.3 Linear narrative profile — Gate C
 
 Adds fictional time, temporally scoped assertions, events, character
 knowledge/belief, narrative order, clues, and explicit disclosure/deduction
@@ -541,7 +585,7 @@ rules. Manuscripts remain external.
 Keep canon truth, character perspective, fictional time, narrative order, and
 authoring revision separate.
 
-### 10.3 Interactive-state profile — Gate C
+### 10.4 Interactive-state profile — Gate D
 
 Adds finite typed state variables, conditions, effects, transitions, invariants,
 and reachability constraints. Runtime state is a derived valuation after an
@@ -561,6 +605,8 @@ ValidatedWorld.Application          Core, Serialization, Validation
 ValidatedWorld.Persistence.Sqlite   Core, Serialization, Application
 ValidatedWorld.Cli                  Application, Persistence.Sqlite
 
+ValidatedWorld.AiReview             later; Core + Serialization + Validation
+ValidatedWorld.AiReview.OpenAI      later; AiReview + pinned OpenAI client
 ValidatedWorld.Mcp                  later; Application + selected persistence
 ValidatedWorld.Web                  later; Application + selected persistence
 ```
@@ -569,6 +615,11 @@ Application defines persistence ports. SQLite implements them. Validation
 operates on immutable logical snapshots and indexes, not SQL connections. This
 keeps semantics backend-neutral without pretending all database engines have the
 same operational behavior.
+
+During Gate B, Application adds a reference to the provider-neutral AiReview
+assembly and review persistence ports; SQLite implements those ports, and the
+CLI alone composes an optional OpenAI adapter. No deterministic-core project
+references a provider SDK.
 
 ## 12. Gate A proof of concept
 
@@ -620,6 +671,10 @@ Gate A must prove:
 No document import/rendering, arbitrary DDL, AI provider, web server, RDF store,
 graph database, narrative timeline, or game exploration is required.
 
+Gate A's no-provider boundary is deliberate: it proves a useful local product
+with no secret or mutable remote service. It does not remove the planned Gate B
+semantic reviewer.
+
 Gate A is implemented through the blueprint's ordered work packages. Each
 engineering package has deterministic automated acceptance and full-solution
 verification; passing behavior is established by repository evidence rather than
@@ -639,7 +694,33 @@ automatically start the next task. Gate A completion places the plan at
 Current task `None` until a human declares the roadmap finished or requests a
 separate later-phase planning task.
 
-## 13. Success and stop criteria
+## 13. Gate B AI semantic-review proof
+
+Gate B begins only after WP9 records a successful Gate A result and a human
+requests a separate planning task. It must:
+
+1. Preserve all deterministic behavior when the AI-review assemblies and
+   configuration are absent.
+2. Build hash-addressed review plans/packets with explicit object/edge coverage,
+   omissions, bounds, and freshness.
+3. Accept only versioned schema-valid concerns that cite supplied IDs and
+   evidence.
+4. Keep candidate links/operations noncanonical until explicitly applied.
+5. Enforce required run/concern dispositions without calling the concerns true.
+6. Make every provider failure, refusal, bound, and cancellation auditable and
+   inconclusive.
+7. Keep secrets outside the project/database/protocol and never invoke a
+   provider implicitly.
+8. Pass its normal suite with fake providers and scripted HTTP—no key or live
+   network.
+9. Evaluate an explicitly enabled real provider on known missing/stale issues,
+   false positives, cost, latency, and scoped-versus-unscoped usefulness.
+
+If the built-in call does not outperform exporting the same packet to an
+external reviewer and importing structured results, retain interchange and omit
+the adapter. Gate A remains useful independently.
+
+## 14. Success and stop criteria
 
 Gate A succeeds if explicit typed relationships surface the correct records and
 anchors, transactions prevent stale semantic state, SQLite reduces persistence
@@ -663,7 +744,7 @@ The common POC explicitly does not:
   or literary quality;
 - implement collaborative branches/merges or public plugin packaging.
 
-## 14. Durable direction
+## 15. Durable direction
 
 > Keep one explicit relationally stored semantic graph internally coherent across
 > revisions, explain what each proposed change affects, and let external tools

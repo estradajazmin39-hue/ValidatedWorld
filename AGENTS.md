@@ -13,6 +13,11 @@ physical store. The engine validates explicit semantics, computes change impact,
 and can require review of affected records. It does not ingest, generate, render,
 publish, or validate arbitrary finished prose or game assets.
 
+If Gate A proves the deterministic core useful, the first planned later phase is
+a bounded AI semantic reviewer. It receives exact dependency/impact context and
+returns cited heuristic concerns. It is provider-neutral, auditable,
+non-authoritative, and cannot mutate canon or turn a model opinion into proof.
+
 ## Required reading and authority
 
 Before making architectural, product, schema, persistence, or public API
@@ -28,6 +33,10 @@ decisions, read these files in order:
    packaging, realistic scenarios, end-to-end tests, and agent QA.
 5. `docs/implementation_execution_plan.md` — completed work, the one current
    task, and the remaining roadmap order.
+
+Before making AI-review, provider, prompt, network-disclosure, or secret-storage
+decisions, also read `docs/ai_semantic_review.md`. It is a post-Gate-A design,
+not authorization to pull that work into the current roadmap.
 
 `docs/prior_art_and_positioning.md` records relevant existing systems and should
 be consulted before broadening the product.
@@ -83,6 +92,10 @@ mean an application/SQLite operation, not a Git commit.
 - `src/ValidatedWorld.Persistence.Sqlite` — SQLite schema, migrations,
   repositories, transactions, integrity checks, and logical snapshot mapping.
 - `src/ValidatedWorld.Cli` — agent-grade JSON command host and composition root.
+- `src/ValidatedWorld.AiReview` — planned post-Gate-A provider-neutral semantic
+  review packets, concerns, and orchestration; not yet created.
+- `src/ValidatedWorld.AiReview.OpenAI` — planned dependency-isolated optional
+  OpenAI adapter; not yet created.
 - `tests/` — automated tests mirroring production boundaries.
 - `tests/ValidatedWorld.TestKit` — planned reusable app/CLI fixture and process
   helpers; it never writes canonical SQLite rows directly.
@@ -116,9 +129,20 @@ mean an application/SQLite operation, not a Git commit.
 - Require every policy-selected impacted record to be updated or given a current
   reviewed-no-change/not-applicable disposition before commit.
 - Report deterministic results as proven, disproven, or inconclusive.
+- Report AI/text-review results only as concerns. Policy may require a current
+  review and disposition of every concern, but concern correctness is never a
+  deterministic guarantee.
+- Keep AI review auditable and non-authoritative. Extracted records, links,
+  operations, and dispositions remain proposals until explicitly applied
+  through the normal transaction boundary.
 - Use stable IDs, diagnostic codes, structured JSON results, deterministic
   ordering, and explainable impact paths.
 - Keep SQLite, JSON, UI, model-provider, and game-engine dependencies out of Core.
+- Never make a provider call while a SQLite write transaction is open. Normal
+  validation, impact, and commit commands never contact a provider implicitly.
+- Never persist or log provider credentials. Use .NET user-secrets for local
+  development and environment variables for published/deployed processes as
+  specified in `docs/ai_semantic_review.md`.
 - Keep the web host optional. Gate A is local/embedded; PostgreSQL or a service is
   justified only by demonstrated multi-user requirements.
 - Do not substitute a graph database, RAG index, or arbitrary AI-generated SQL
@@ -158,6 +182,11 @@ be testable without human inspection, interactive UI use, mutable external
 services, secrets, or subjective manual judgment. Use fixed clocks/IDs/seeds,
 temporary app-generated databases, deterministic fault injection, scripted CLI
 scenarios, and structured golden outputs as applicable.
+
+The later AI-review phase follows the same rule for its normal suite: use fake
+providers and scripted HTTP responses. A real-provider evaluation is separately
+opt-in, requires an intentionally supplied secret, and is never required for the
+default restore/build/test sequence.
 
 Testing has three required layers whenever the current product surface supports
 them:
@@ -234,9 +263,11 @@ functions, and agent-friendly JSON/read-only SQL query surfaces.
 
 Avoid arbitrary project DDL, direct canonical SQL mutation, universal ontologies,
 unrestricted rules languages, natural-language query parsers, automatic
-acceptance of AI suggestions, document generation, premature incremental
-validation, a graph database, a web platform, plugin packaging, and visual
-editors until an evidence gate authorizes them.
+acceptance of AI suggestions, general-purpose AI agent/RAG orchestration,
+document generation, premature incremental validation, a graph database, a web
+platform, plugin packaging, and visual editors until an evidence gate authorizes
+them. The scoped post-Gate-A semantic-review design is not general AI
+orchestration.
 
 ## Definition of done
 
@@ -253,7 +284,8 @@ remaining uncertainty, and next planned assignment to the human, then stops.
 The current roadmap is done after WP0-WP9 and the Gate A evidence are complete.
 Then set Current task to `None - the planned Gate A roadmap is complete; human
 direction required`, report the result, and ask whether to call the project
-complete, request a separate later-phase planning task, narrow/pivot, or stop.
+complete, request a separate Gate B AI semantic-review planning task,
+narrow/pivot, or stop.
 Do not plan or implement more work without a new human prompt.
 
 When Current task is `None`, do not invent work. Report that the planned work is

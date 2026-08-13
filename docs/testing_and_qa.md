@@ -213,3 +213,33 @@ WP3 must prove the no-external-install promise with automated smoke tests:
 Actual execution is required on every platform the project claims to support.
 Cross-publish asset inspection alone is not a runtime claim. Until a platform is
 exercised, report it as unverified rather than implying portability.
+
+## 7. Planned Gate B AI-review evidence
+
+AI semantic review adds exploratory intelligence, not a deterministic oracle.
+Its normal test suite must still be self-contained:
+
+- use deterministic fake providers for concern and no-concern workflows;
+- use scripted HTTP handlers for provider-adapter mapping, errors, retries,
+  refusal, truncation, timeout, and cancellation;
+- prove that review plan, packet, cache, and freshness hashes cover every
+  material non-secret input;
+- prove that malformed or stale results cannot satisfy policy or mutate canon;
+- scan structured output, logs, diagnostics, stored rows, and exception text for
+  secret leakage; and
+- require no API key or live network for restore, build, test, packaging, or
+  ordinary black-box QA.
+
+The tracked TechnicalProject corpus gains reviewed Gate B variants with known
+omitted links, stale values, terminology conflicts, missing qualifications,
+insufficient-context cases, and unrelated distractors. Expected issue IDs and
+evidence form the evaluation reference set; they are source assets, not
+prepopulated databases.
+
+A real-provider evaluation is a separately invoked, cost-bounded experiment.
+It requires explicit live-test opt-in plus credentials supplied through the
+secret mechanisms in [Planned AI semantic review](ai_semantic_review.md). Record
+provider/model, prompt/profile/schema versions, corpus revision, aggregate
+precision/recall, false-positive burden, cost, latency, and sanitized findings.
+Never record an API key or private chain-of-thought. A live result cannot replace
+the deterministic fake/scripted acceptance suite.

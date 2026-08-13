@@ -86,6 +86,17 @@ dotnet test ValidatedWorld.slnx --no-build --no-restore
 21. Gate A supports one writer at a time, matching SQLite's model.
 22. No importer, renderer, RAG pipeline, AI provider, web host, or graph database
     is part of Gate A.
+23. Gate B AI results are Concerns, never Proven or Disproven findings.
+24. A required AI review may block commit when missing, stale, incomplete, or
+    undispositioned; provider failure is review-inconclusive, not invalid canon.
+25. No AI review response, candidate operation, link, or disposition mutates
+    canon automatically.
+26. No provider call occurs while a SQLite write transaction is open, and no
+    provider is contacted implicitly by normal verify/impact/commit commands.
+27. Provider credentials never enter project data, logical JSON, CLI request
+    bodies/arguments, logs, diagnostics, cache keys, or test fixtures.
+28. The default build/test suite uses fake/scripted providers and requires no
+    secret or live network.
 
 ## 3. Solution architecture
 
@@ -101,15 +112,23 @@ ValidatedWorld.Serialization
 ValidatedWorld.Validation
   dependencies: Core
 
-ValidatedWorld.Application
+ValidatedWorld.AiReview (post-Gate-A Gate B)
   dependencies: Core, Serialization, Validation
+
+ValidatedWorld.Application
+  Gate A dependencies: Core, Serialization, Validation
+  Gate B adds: AiReview
 
 ValidatedWorld.Persistence.Sqlite
   dependencies: Core, Serialization, Application, Microsoft.Data.Sqlite.Core,
                 explicitly pinned SQLitePCLRaw native bundle
 
 ValidatedWorld.Cli
-  dependencies: Application, Persistence.Sqlite
+  Gate A dependencies: Application, Persistence.Sqlite
+  Gate B composition adds: AiReview.OpenAI
+
+ValidatedWorld.AiReview.OpenAI (post-Gate-A optional adapter)
+  dependencies: AiReview, pinned official OpenAI client
 
 ValidatedWorld.Mcp (post-gate)
   dependencies: Application plus selected persistence composition
@@ -144,17 +163,27 @@ ValidatedWorld.Validation.Impact
 ValidatedWorld.Validation.Rules
 ValidatedWorld.Validation.Context
 
+ValidatedWorld.AiReview.Planning
+ValidatedWorld.AiReview.Packets
+ValidatedWorld.AiReview.Contracts
+ValidatedWorld.AiReview.Concerns
+
 ValidatedWorld.Application.Projects
 ValidatedWorld.Application.Transactions
 ValidatedWorld.Application.Commits
 ValidatedWorld.Application.Queries
 ValidatedWorld.Application.Persistence
+ValidatedWorld.Application.AiReview
 
 ValidatedWorld.Persistence.Sqlite.Connections
 ValidatedWorld.Persistence.Sqlite.Migrations
 ValidatedWorld.Persistence.Sqlite.Mapping
 ValidatedWorld.Persistence.Sqlite.Repositories
 ValidatedWorld.Persistence.Sqlite.Views
+ValidatedWorld.Persistence.Sqlite.AiReview
+
+ValidatedWorld.AiReview.OpenAI.Responses
+ValidatedWorld.AiReview.OpenAI.Configuration
 ```
 
 ### 3.3 Injected services
@@ -1136,6 +1165,18 @@ Direct policy-selected changes receive `updated`. Other selected impacts require
 submitted `reviewed-no-change` or `not-applicable` with reviewer, rationale, time,
 and exact fingerprints. Inconclusive required impact blocks commit.
 
+Gate B adds a separate AI-review freshness fingerprint:
+
+```text
+AiReviewFingerprint = SHA-256(
+    base hash + draft revision + change-set hash + projected hash
+    + review profile/version + prompt template/hash + review-plan hash
+    + ordered packet hashes + provider/model + material parameters)
+```
+
+Changing any component makes the run and its concern dispositions stale. API
+keys and authorization data are never fingerprint inputs.
+
 ### 10.4 Validation report
 
 ```csharp
@@ -1168,6 +1209,7 @@ Commit(transactionId):
     impact = ComputeImpact(...)
     obligations = BuildObligations(...)
     report = ValidateFull(...)
+    [Gate B] load/verify any policy-required AI review run and concern dispositions
     reject unless commit policy accepts
 
     begin short SQLite IMMEDIATE write transaction
@@ -1307,6 +1349,18 @@ ListCommits
 VerifyCommitReplay
 ```
 
+Gate B later adds these Application use cases without changing the Gate A
+contracts:
+
+```text
+PlanAiSemanticReview
+RunAiSemanticReview
+ImportAiSemanticReviewResult
+GetAiSemanticReviewRun
+ListAiSemanticReviewConcerns
+SetAiSemanticReviewConcernDisposition
+```
+
 Expected invalid input returns `OperationResult<T>`, not exceptions. Every read
 result includes project revision/hash. Every draft result includes transaction
 ID, base identity, draft revision, and change-set/projected hashes as applicable.
@@ -1346,6 +1400,23 @@ vw tx abort --db <path> --tx <id>
 vw commit get --db <path> --revision <number>
 vw commit verify --db <path> [--through <number>]
 ```
+
+Planned Gate B commands are explicit network/audit operations:
+
+```text
+vw tx ai-review plan --db <path> --tx <id> --profile <id>
+vw tx ai-review run --db <path> --tx <id> --profile <id>
+vw tx ai-review import --db <path> --tx <id> --input <file-or-stdin>
+vw tx ai-review get --db <path> --tx <id> --run <id>
+vw tx ai-review concerns --db <path> --tx <id> --run <id>
+vw tx ai-review disposition --db <path> --tx <id> --run <id>
+    --concern <id> --status <rejected-with-rationale|acknowledged>
+    --reason <text> --reviewer <id>
+```
+
+`plan` never contacts a provider and reports exact scope, coverage, packet
+counts, omissions, and configured limits. `run` is the only in-app provider
+call. Supplying credentials as command arguments or JSON is forbidden.
 
 There is no arbitrary `vw sql` write command. Users may open a verified database
 read-only with standard SQLite tools and use documented `vw_*` views.
@@ -1390,8 +1461,8 @@ Exactly one JSON document goes to stdout. Operational logs go to stderr.
 3  command/input contract error
 4  stale head/object/draft precondition or writer conflict
 5  database integrity, migration, mapping, or write failure
-6  required analysis inconclusive
-7  required review dispositions pending
+6  required analysis or AI review inconclusive
+7  required impact or AI-concern dispositions pending
 8  unsupported schema/package/validator or migration required
 9  internal failure
 ```
@@ -1421,7 +1492,9 @@ than implying the whole project is valid.
 Each WP3-WP8 slice retains deterministic CLI contract tests and is followed by
 an actual agent-operated black-box walkthrough described in Section 16.4.
 
-## 13. Deterministic context queries
+## 13. Context queries and planned AI semantic review
+
+### 13.1 Deterministic context query
 
 A context query selects logical JSON for a human, AI, or RAG consumer. It does
 not generate content.
@@ -1455,6 +1528,107 @@ Priority:
 Within priority/distance sort by ID. Include each object atomically. Report
 limits and omissions. A required seed/type/constraint that cannot fit produces
 inconclusive output.
+
+### 13.2 Gate B review plan and packet coverage
+
+Gate B reuses context-query primitives but does not equate one convenience
+context query with complete review. For an exact draft it first constructs:
+
+```csharp
+public sealed record AiReviewPlan(
+    string SchemaVersion,
+    TransactionId TransactionId,
+    long DraftRevision,
+    string ChangeSetHash,
+    string ProjectedLogicalHash,
+    ImmutableArray<ObjectId> RequiredObjectIds,
+    ImmutableArray<DependencyEdge> RequiredEdges,
+    ImmutableArray<AiReviewPacketManifest> Packets,
+    ImmutableArray<ObjectId> ExcludedObjectIds,
+    bool RequiresSynthesis,
+    string PlanHash);
+```
+
+Required scope is the union of:
+
+```text
+direct operation targets
+policy-selected complete reverse impact closure and explanation edges
+forward dependencies needed to understand every changed/impacted object
+applicable exact type definitions and constraints
+policy-selected bound external anchors
+```
+
+Sort all sets and hashes canonically. If the plan fits configured provider
+limits, create one packet. Otherwise, only when Gate B measurement justifies the
+complexity, partition deterministically by impacted root/path cluster. Include
+boundary-edge stubs and necessary dependencies in every shard. A coverage matrix
+must prove every required object and edge appears in at least one packet. A
+multi-packet plan requires a synthesis packet containing changed objects,
+cross-shard edges, packet summaries, and concerns.
+
+The run is complete only when required coverage is exact, every shard succeeded,
+and required synthesis succeeded. Bounds, an oversized indivisible object,
+missing coverage, or any required failed call makes it inconclusive. Coverage
+proves what was presented, not that the model understood it.
+
+### 13.3 Provider contract, concerns, and freshness
+
+```csharp
+public interface IProjectSemanticReviewProvider
+{
+    string ProviderId { get; }
+    Task<AiReviewResponse> ReviewAsync(
+        AiReviewRequest request,
+        CancellationToken cancellationToken);
+}
+```
+
+The request includes the base/draft/change-set/projected hashes, review
+profile/version, prompt template/version/hash, review-plan and packet hashes,
+provider/model, material parameters, strict response-schema version, and packet
+content. The cache/request identity hashes every material non-secret field.
+
+The response is strict versioned JSON containing status, structured concerns,
+insufficient-context observations, and a separate list of candidate
+records/relations/operations. Each concern has a run-local stable ID, `AIxxxx`
+code, category, severity, message, supplied object IDs, field/edge/path evidence,
+optional confidence, suggested follow-up, and fingerprint.
+
+Unknown citations, schema mismatch, refusal, truncation, timeout, cancellation,
+or malformed content fails or makes the run inconclusive. Do not parse free-form
+prose into findings. Candidate changes require an explicit normal transaction
+operation. Concern dispositions are `open`, `resolved-by-change`,
+`rejected-with-rationale`, or `acknowledged`; policy decides which are
+acceptable. Changing any request-identity field stales the run and dispositions.
+
+Gate B adds checked migration tables for run metadata, packet manifests, and
+concerns. They are draft/audit state and do not enter the logical project hash.
+Accepted receipts retain the exact satisfying run/fingerprints. Persist no
+credential or authorization header. Raw provider bodies are retained only under
+an explicit project-data retention setting; normalized concerns and body hashes
+remain auditable.
+
+### 13.4 Provider isolation and secrets
+
+The first optional adapter is `ValidatedWorld.AiReview.OpenAI`. At Gate B
+implementation time, pin and audit the current official `OpenAI` NuGet client,
+use the Responses API with strict structured output, require an explicit model
+ID, expose no tools, and record the actual returned model. Re-check the official
+API documentation rather than copying a transient SDK example into this
+blueprint.
+
+Gate B adds `Microsoft.Extensions.Configuration.UserSecrets` to the CLI and
+reads `AiReview:OpenAI:ApiKey` from .NET user-secrets in source development or
+`OPENAI_API_KEY` from the process environment. Non-secret settings use the
+`VW_`-prefixed hierarchical names in `.env.example`. Never accept secrets in CLI
+arguments, project JSON, or the database. `.env` files are ignored but are not
+searched or loaded automatically.
+
+Only `vw tx ai-review run` contacts a provider, before any SQLite write
+transaction. Planning, deterministic validation, impact, commit, and the default
+test suite remain offline. See [Planned AI semantic review](ai_semantic_review.md)
+for the complete security, privacy, cost, failure, and evaluation contract.
 
 ## 14. Gate A package and sample
 
@@ -1617,9 +1791,17 @@ Gate A passes only if:
 If useful impact requires near-complete connectivity or the metamodel adds no
 value over ordinary SQL, Gate A fails and the feasibility verdict is updated.
 
-## 15. Later profiles and hosts
+## 15. Later evidence gates
 
-### 15.1 Linear narrative — Gate B
+### 15.1 AI semantic review — Gate B
+
+Implement the provider-neutral review design in Section 13 and
+`docs/ai_semantic_review.md`. Evaluate it on the TechnicalProject known-issue
+corpus before giving it narrative-specific prompts. Gate B may be retained with
+only external structured-result import if an in-app provider call does not add
+enough value to justify its privacy, cost, and configuration surface.
+
+### 15.2 Linear narrative — Gate C
 
 Add package types/validators for story events, fictional intervals, participants,
 effects, belief/knowledge states, clues, and disclosure. No new physical tables
@@ -1629,13 +1811,18 @@ inadequate.
 Keep project revision, fictional time, narrative order, canon truth, and
 perspective separate.
 
-### 15.2 Interactive state — Gate C
+### 15.3 Interactive state — Gate D
 
 Add finite typed variables, expression AST records, transition effects,
 invariants, and traces. Bounded BFS explores canonical state encodings and
 returns shortest counterexamples. Reaching state/depth limits is inconclusive.
 
-### 15.3 Hosted service — optional Gate D
+### 15.4 Integration packaging — optional Gate E
+
+After protocol stability, expose Application use cases through MCP/Codex/plugin
+packaging. No provider or packaging type enters Core or canonical state.
+
+### 15.5 Hosted service — optional Gate F
 
 Only demonstrated multiple-writer/remote requirements authorize:
 
@@ -1647,11 +1834,6 @@ Only demonstrated multiple-writer/remote requirements authorize:
 The Application protocol and logical snapshot/hash stay backend-neutral.
 PostgreSQL migrations and concurrency semantics require their own acceptance
 suite; do not assume SQLite SQL is portable.
-
-### 15.4 Integration packaging — optional Gate E
-
-After protocol stability, expose Application use cases through MCP/Codex/plugin
-packaging. No provider or packaging type enters Core or canonical state.
 
 ## 16. Test strategy
 
@@ -1700,6 +1882,13 @@ service. Tests control clocks, IDs, random seeds, scheduling/fault points, and
 environment-dependent limits. Scripted scenarios assert structured results and
 exit codes. Skipped, flaky, manually inspected, or tautological tests are not
 completion evidence.
+
+The later Gate B suite preserves this property with fake semantic-review
+providers and scripted `HttpMessageHandler` responses. Live-provider evaluation
+is a separate explicitly enabled product experiment, never a default unit,
+integration, end-to-end, or completion test. Absence of credentials must produce
+a deterministic structured configuration result without attempting a network
+call.
 
 When a required behavior lacks an automated oracle, creating that oracle is part
 of the work package. If no reliable oracle can be built, the behavior remains
@@ -1888,15 +2077,26 @@ report the evidence to the human, and stop.
 - Acceptance: explicitly approve, narrow, replace components, or stop before
   narrative work.
 
-### WP10 — LinearNarrative profile
+### WP10 — AI semantic review (separate post-Gate-A plan)
 
-- Authorized only by Gate A outcome.
+- Authorized only by a successful Gate A outcome and a new human-requested
+  planning task.
+- Implement review plans/coverage, packets, structured concerns, freshness,
+  dispositions, persistence, fake/scripted providers, import, CLI, secret-safe
+  configuration, and one optional OpenAI adapter outside the deterministic core.
+- Evaluate known omitted/stale TechnicalProject issues and scoped-versus-unscoped
+  usefulness. Keep only external result interchange if the built-in call adds no
+  material value.
 
-### WP11 — InteractiveState profile
+### WP11 — LinearNarrative profile
 
 - Authorized only by Gate B outcome.
 
-### WP12 — optional host/integration gates
+### WP12 — InteractiveState profile
+
+- Authorized only by Gate C outcome.
+
+### WP13 — optional host/integration gates
 
 - Evaluate MCP packaging first; web/PostgreSQL only for demonstrated hosted
   requirements.
@@ -1939,7 +2139,8 @@ Defer until evidence requires them:
 - arbitrary project DDL or direct canonical SQL writes;
 - universal ontology or unrestricted rule language;
 - automatic semantic extraction;
-- built-in AI/provider/RAG orchestration;
+- general-purpose AI agent/RAG orchestration beyond the scoped Gate B semantic
+  reviewer;
 - document import/generation/rendering/publishing;
 - custom diff/change-package protocol;
 - incremental semantic validation;

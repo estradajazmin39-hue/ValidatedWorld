@@ -81,6 +81,12 @@ or certify them.
 There is no special diff format. Accepted transaction operations are the direct
 change record; impact analysis supplies the transitive consequences.
 
+After Gate A, ValidatedWorld is planned to own one narrowly scoped AI feature:
+an optional semantic-review workflow over an exact projected transaction and its
+dependency/impact context. The reviewer returns cited concerns and candidate
+links or operations. It never edits canon, generates the finished artifact, or
+turns a model judgment into deterministic proof.
+
 ## Intended uses
 
 - Technical work: definitions, assumptions, requirements, evidence, decisions,
@@ -95,6 +101,35 @@ change record; impact analysis supplies the transitive consequences.
 Despite the name, a “world” is any versioned universe of connected records.
 Fiction is one profile, not the common engine's foundation.
 
+## Planned AI semantic review
+
+The original design's intelligent-review step is still part of the product
+direction. It was intentionally moved out of the Gate A implementation so the
+database, graph, transaction, and impact guarantees can be proven without a
+network, API key, or particular model provider.
+
+If Gate A succeeds, Gate B adds a provider-neutral review plan. The app first
+computes deterministic impact, then gives a bounded AI reviewer the changed
+records, selected dependency chain, applicable constraints, explanation paths,
+and an explicit coverage/omission manifest. The model can flag likely missing
+connections, stale implications, contradictions, terminology drift, missing
+qualifications, or insufficient context. Results are structured `Concern`
+records with cited object IDs.
+
+A policy may require that review to run and require each concern to be repaired,
+rejected with rationale, or acknowledged. The guarantee is that the exact review
+workflow occurred and was dispositioned—not that the AI was right. Provider
+failure is inconclusive, and suggestions become canon only through an explicit
+ValidatedWorld transaction.
+
+The first planned adapter is OpenAI, isolated from the core and replaceable by
+another provider or imported structured review JSON. Local source development
+will use .NET Secret Manager; published processes use `OPENAI_API_KEY`. The
+tracked [`.env.example`](.env.example) lists configuration names, while real
+`.env` files remain ignored and are not loaded implicitly. The normal build and
+test suite never needs a secret or live API call. See [Planned AI semantic
+review](docs/ai_semantic_review.md).
+
 ## Core workflow
 
 ```text
@@ -106,6 +141,7 @@ open project.vw.db and verify its logical head hash
 → compute explained transitive impact
 → repair graph data and disposition policy-selected affected records
 → run complete deterministic validation
+→ optionally run required AI semantic review and disposition its concerns [Gate B]
 → commit all relational changes atomically or roll back everything
 → return versioned JSON results
 ```
@@ -118,6 +154,8 @@ open project.vw.db and verify its logical head hash
   — authoritative metamodel, persistence, and profile design.
 - [Implementation blueprint](docs/implementation_blueprint.md) — exact storage
   schema, algorithms, tests, and work packages.
+- [Planned AI semantic review](docs/ai_semantic_review.md) — post-Gate-A review
+  packets, provider boundary, concerns, secrets, and evaluation.
 - [Testing, fixtures, and agent QA](docs/testing_and_qa.md) — embedded SQLite
   packaging, reusable application-generated scenarios, end-to-end tests, and
   usability walkthroughs.
@@ -212,8 +250,9 @@ Phase 1 ends with WP9's Gate A evaluation. At that point there is deliberately n
 automatic next coding task: Current task becomes `None`, and the agent reports
 whether evidence supports continuing, narrowing, pivoting, or stopping. It asks
 the human whether to declare the current scope complete or request a separate
-later-phase planning task. Planning that phase does not itself authorize
-implementation.
+Gate B AI semantic-review planning task. Planning that phase does not itself
+authorize implementation. Linear narrative, interactive state, and integration
+work follow only through later evidence gates.
 
 If Current task is `None`, an invoked agent makes no changes. It reports that the
 planned work is finished, summarizes the final verification and optional future
@@ -226,7 +265,8 @@ complete and WP1 (the common metamodel) is the Current task. The execution
 plan, rather than this summary, is authoritative if progress changes. Gate A is
 a small technical-project graph backed by SQLite. It must prove useful and
 accurate impact at acceptable modeling cost before narrative or game profiles
-are implemented.
+are implemented. The bounded AI semantic reviewer is preserved as the first
+recommended post-Gate-A phase; it is specified but not implemented in WP1.
 
 Build and test with:
 

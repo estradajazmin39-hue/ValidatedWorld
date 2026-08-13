@@ -71,6 +71,11 @@ application/SQLite operation, not a Git operation.
 Every implementation task through WP8 must be verifiable without human
 inspection, secrets, interactive UI, or mutable remote services.
 
+The separately authorized post-Gate-A AI-review phase follows the same rule for
+its normal suite by using fake providers and scripted HTTP. Its real-provider
+usefulness evaluation is explicitly opt-in and obtains credentials only through
+the secret boundary in `docs/ai_semantic_review.md`.
+
 - Unit tests cover accepted values, local invariants, and rejected inputs.
 - Property/integration tests cover ordering, round trips, graph behavior,
   rollback, and atomicity where required by the blueprint.
@@ -171,7 +176,7 @@ None - the planned Gate A roadmap is complete; human direction required.
 The finishing agent must report the outcome and ask the human whether to:
 
 - call the project complete at its current scope;
-- request a separate planning task for the LinearNarrative phase;
+- request a separate planning task for Gate B AI semantic review;
 - narrow or pivot the design; or
 - stop/archive the experiment.
 
@@ -215,6 +220,11 @@ remaining optional ideas, asks what the human wants next, and stops.
   it on each platform the project advertises.
 - Documentation checks passed: local Markdown links resolve and code fences are
   balanced.
+- Restored the original bounded AI semantic-review concept as the first planned
+  post-Gate-A phase: deterministic dependency/impact packets, provider-neutral
+  structured concerns, no automatic canonical mutation, fake-provider default
+  tests, optional OpenAI adapter, and secret-safe .NET configuration. This does
+  not change WP1 or authorize Gate B implementation.
 - Full restore/build/test passed on 2026-08-12: 0 build warnings; 5 scaffold
   tests passed.
 
@@ -292,9 +302,10 @@ next task under Current task.
 8. WP9 - Gate A evaluation and final roadmap report using accumulated QA
    evidence.
 
-LinearNarrative, InteractiveState, and optional integration/hosting work are
-ideas beyond this roadmap, not authorized implementation tasks. Reaching them
-requires a new human-requested planning task.
+AI semantic review, LinearNarrative, InteractiveState, and optional
+integration/hosting work are beyond this Gate A roadmap and are not authorized
+implementation tasks. The first recommended continuation is a separate Gate B
+AI-review planning task; reaching any later phase requires a new human request.
 
 ## 8. Human report format
 

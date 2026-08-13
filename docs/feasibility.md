@@ -116,6 +116,26 @@ Every result is labeled:
 - **Inconclusive:** missing annotations, unsupported schema/profile data, bounds,
   cancellation, or failure prevented a conclusion.
 
+## Planned heuristic responsibility
+
+The earlier design's AI semantic reviewer remains feasible, but it belongs to a
+separate evidence class and gate. After deterministic projection, validation,
+and impact, a bounded reviewer can inspect changed records and the selected
+dependency chain to flag likely missing links, stale implications,
+contradictions, inconsistent terminology, missing qualifications, or
+insufficient context.
+
+Its findings are **Concerns**. Project policy may require a current review run
+and require every concern to be repaired, rejected with rationale, or
+acknowledged. That makes completion and disposition deterministic workflow
+facts; it does not make the model's judgment correct. Candidate links and
+operations remain noncanonical until explicitly applied through a transaction.
+
+Gate A does not need this feature or an API key. If Gate A succeeds, the planned
+Gate B evaluates scoped, auditable review against known omissions before any
+narrative or interactive-state expansion. See
+[Planned AI semantic review](ai_semantic_review.md).
+
 ## What cannot be guaranteed
 
 ValidatedWorld cannot generally:
@@ -128,6 +148,8 @@ ValidatedWorld cannot generally:
 - generate or render a finished document or game;
 - verify that an external artifact reflects current project state;
 - guarantee an AI correctly applies impact guidance;
+- guarantee an AI semantic reviewer notices every issue or raises only correct
+  concerns;
 - exhaust an unbounded game/campaign state space;
 - decide arbitrary logic in an unrestricted rule language.
 
@@ -243,6 +265,11 @@ It does not require:
 - RDF, a graph database, PostgreSQL, a web app, GUI, or plugin;
 - narrative or interactive-state implementation.
 
+This is a Gate A scope statement, not deletion of intelligent review from the
+product direction. Gate B may add a provider-neutral review workflow and one
+optional dependency-isolated provider adapter without weakening the standalone
+deterministic product.
+
 ## First proof scenario
 
 The `TechnicalProject` sample describes an offline sensor design graph and
@@ -318,21 +345,39 @@ Measure:
 
 If Gate A succeeds, the project has a useful release direction.
 
-### Gate B — Linear narrative profile
+### Gate B — AI semantic review
+
+Evaluate bounded dependency/impact review packets on deliberately omitted links,
+stale implications, contradictions, terminology drift, and unrelated
+distractors. Measure precision, recall against the known issue set,
+false-positive burden, cost, latency, context coverage, and whether the scoped
+workflow materially outperforms an unscoped whole-document prompt.
+
+Use fake/scripted providers for normal tests and one explicitly configured live
+provider only for the opt-in usefulness evaluation. Retain the built-in call
+only if it adds value over exporting a packet and importing structured concerns.
+Never make a provider mandatory in Core or call its findings proof.
+
+### Gate C — Linear narrative profile
 
 Add a reduced mystery schema for chronology, perspective, knowledge, clues, and
 disclosure. Keep manuscripts external. Retain the profile only if it catches
 meaningful structured-state errors at acceptable modeling cost.
 
-### Gate C — Interactive-state profile
+### Gate D — Interactive-state profile
 
-Only after Gate B, add finite typed variables, conditions, effects, invariants,
+Only after Gate C, add finite typed variables, conditions, effects, invariants,
 and bounded exploration.
 
-### Gate D — Integration and optional hosting
+### Gate E — Integration packaging
 
-After the schema/protocol are stable, evaluate MCP/plugin packaging and a thin
-HTTP host. PostgreSQL is considered only if hosted multi-writer needs are proven.
+After the schema/protocol are stable, evaluate MCP/plugin packaging over
+Application use cases.
+
+### Gate F — Optional hosting
+
+Evaluate a thin HTTP host only after packaging. PostgreSQL is considered only if
+hosted multi-writer needs are proven.
 
 ## Stop and scale-down criteria
 
@@ -341,6 +386,10 @@ record/relation catalog. If the proposition/assertion technical profile adds no
 value over generic nodes and links, remove it. If impact/review offers no
 meaningful advantage over Doorstop or ordinary SQL plus review, archive or pivot
 the experiment.
+
+If the in-app AI reviewer adds no measurable value over giving the same context
+packet to an external agent, keep structured packet/result interchange and omit
+the provider adapter. This failure does not invalidate Gate A.
 
 ## Product language
 
