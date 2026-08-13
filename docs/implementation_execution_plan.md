@@ -72,9 +72,9 @@ Every implementation task through WP8 must be verifiable without human
 inspection, secrets, interactive UI, or mutable remote services.
 
 The separately authorized post-Gate-A AI-review phase follows the same rule for
-its normal suite by using fake providers and scripted HTTP. Its real-provider
-usefulness evaluation is explicitly opt-in and obtains credentials only through
-the secret boundary in `docs/ai_semantic_review.md`.
+its normal suite by using a fake client and scripted HTTP. Its one OpenAI live
+evaluation path is explicitly opt-in and obtains credentials only through the
+human-controlled boundary in `docs/ai_semantic_review.md`.
 
 - Unit tests cover accepted values, local invariants, and rejected inputs.
 - Property/integration tests cover ordering, round trips, graph behavior,
@@ -220,11 +220,14 @@ remaining optional ideas, asks what the human wants next, and stops.
   it on each platform the project advertises.
 - Documentation checks passed: local Markdown links resolve and code fences are
   balanced.
-- Restored the original bounded AI semantic-review concept as the first planned
-  post-Gate-A phase: deterministic dependency/impact packets, provider-neutral
-  structured concerns, no automatic canonical mutation, fake-provider default
-  tests, optional OpenAI adapter, and secret-safe .NET configuration. This does
-  not change WP1 or authorize Gate B implementation.
+- Restored and refined the AI semantic-review concept as the first planned
+  post-Gate-A phase: one expensive request contains the whole transaction, all
+  disjoint selected dependency/impact chains, and each selected record's singular
+  lineage to the purpose root; results are structured non-authoritative concerns.
+  The production path is only OpenAI `gpt-5.6-terra`, while normal tests use a
+  fake client. Human secret readiness and per-live-call authorization are hard
+  preconditions, and paid calls have zero automatic retries. This does not
+  authorize Gate B implementation.
 - Full restore/build/test passed on 2026-08-12: 0 build warnings; 5 scaffold
   tests passed.
 
@@ -247,6 +250,10 @@ validation, application, and persistence work.
   definitions and constraints, relation roles, and dependency rules.
 - Project objects, fields, endpoints, tags, extensions, project policy, head,
   and complete snapshot types.
+- A required `PurposeObjectId` on the project snapshot plus model shapes capable
+  of representing one purpose root and singular scope-parent hierarchy. The
+  canonical `core/v1` definitions arrive in WP2 and cross-object tree validation
+  remains WP4.
 - Add/replace/remove transaction operations and the review/disposition/report
   domain records required by the blueprint.
 - Explicit construction-time or factory validation for local invariants.
@@ -255,6 +262,8 @@ validation, application, and persistence work.
 - A realistic technical-design scenario constructed through the public Core API
   to prove the metamodel can express interconnected soft-logic records without
   relying on extensions or test-only escape hatches.
+- That scenario includes one purpose root, at least two sibling scope branches,
+  and one singular parent lineage for every ordinary content record.
 - A short modeling-usability assessment in Completed work and the human report.
 - Removal of `ValidatedWorld.Core/Class1.cs` and empty placeholder tests.
 
@@ -278,7 +287,8 @@ validation, application, and persistence work.
 5. `dotnet test tests/ValidatedWorld.Core.Tests/ValidatedWorld.Core.Tests.csproj`
    passes.
 6. A representative technical-design graph is constructed and asserted through
-   public Core APIs, and modeling friction or missing concepts are reported.
+   public Core APIs, including purpose identity and scope hierarchy shapes, and
+   modeling friction or missing concepts are reported.
 7. The full restore/build/test sequence in Section 1 passes without warnings.
 8. This plan records WP1 under Completed work and replaces Current task with a
    fully specified WP2 task.

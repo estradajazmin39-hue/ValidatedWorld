@@ -48,7 +48,7 @@ inserts through an external SQLite tool.
 Required public workflows include:
 
 ```text
-vw init ...                         create an empty project database
+vw init ... --purpose <text>        create a project with its purpose root
 vw snapshot init ...                create from supported logical JSON
 vw sample list                      list bundled reusable sample scenarios
 vw sample create ...                generate a sample database through the app
@@ -219,11 +219,17 @@ exercised, report it as unverified rather than implying portability.
 AI semantic review adds exploratory intelligence, not a deterministic oracle.
 Its normal test suite must still be self-contained:
 
-- use deterministic fake providers for concern and no-concern workflows;
-- use scripted HTTP handlers for provider-adapter mapping, errors, retries,
-  refusal, truncation, timeout, and cancellation;
-- prove that review plan, packet, cache, and freshness hashes cover every
-  material non-secret input;
+- use a deterministic fake client for concern and no-concern workflows;
+- use scripted HTTP handlers for OpenAI mapping, refusal, truncation, timeout,
+  cancellation, and malformed responses;
+- prove every failure results in exactly one attempted request and zero automatic
+  retries;
+- prove the request preview, cache, and freshness hashes cover every material
+  non-secret input;
+- prove one request includes the whole transaction, every disjoint selected
+  dependency/impact chain, and each selected record's singular upward lineage;
+- prove ancestor-as-context never pulls an unselected sibling into scope, while
+  directly changing the purpose root selects every descendant;
 - prove that malformed or stale results cannot satisfy policy or mutate canon;
 - scan structured output, logs, diagnostics, stored rows, and exception text for
   secret leakage; and
@@ -236,10 +242,14 @@ insufficient-context cases, and unrelated distractors. Expected issue IDs and
 evidence form the evaluation reference set; they are source assets, not
 prepopulated databases.
 
-A real-provider evaluation is a separately invoked, cost-bounded experiment.
-It requires explicit live-test opt-in plus credentials supplied through the
-secret mechanisms in [Planned AI semantic review](ai_semantic_review.md). Record
-provider/model, prompt/profile/schema versions, corpus revision, aggregate
-precision/recall, false-positive burden, cost, latency, and sanitized findings.
-Never record an API key or private chain-of-thought. A live result cannot replace
-the deterministic fake/scripted acceptance suite.
+A real-provider evaluation is a separately invoked, single-request experiment
+using only OpenAI `gpt-5.6-terra` with medium reasoning. An implementation agent
+must see the exact human secret-readiness attestation before coding that path; a
+live run additionally requires the exact per-run authorization. The app first
+writes the complete sanitized request preview for inspection. Record model,
+prompt/profile/schema versions, corpus revision, aggregate precision/recall,
+false-positive burden, cost, latency, and sanitized findings. Never record an API
+key or private chain-of-thought. Never retry a live failure automatically. A live
+result cannot replace the deterministic fake/scripted acceptance suite. The
+timeout setting is simple operational configuration and needs no artificial unit
+test.

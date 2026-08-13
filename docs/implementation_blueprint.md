@@ -2,7 +2,7 @@
 
 **Status:** Coding-agent handoff
 
-**Blueprint version:** 4.1
+**Blueprint version:** 4.2
 
 **Last reviewed:** 2026-08-12
 
@@ -97,6 +97,21 @@ dotnet test ValidatedWorld.slnx --no-build --no-restore
     bodies/arguments, logs, diagnostics, cache keys, or test fixtures.
 28. The default build/test suite uses fake/scripted providers and requires no
     secret or live network.
+29. Every project has exactly one purpose root. Every other scope-bearing content
+    record has exactly one `scope-parent`; repeated parent traversal is acyclic
+    and terminates at the root.
+30. `scope-parent` means child depends on parent, but only direct transaction
+    operation targets seed impact. Context ancestors never become seeds or fan
+    down into siblings. A direct root change, and only that case, deliberately
+    selects the whole project through scope edges.
+31. Gate B sends one whole-transaction request containing every disjoint selected
+    chain and singular purpose lineage. It has no sharding, synthesis, fallback
+    model, or automatic retry.
+32. Gate B has one production client/configuration: OpenAI `gpt-5.6-terra` with
+    medium reasoning. Interfaces exist for isolation and offline fakes, not a
+    provider ecosystem.
+33. AI-review implementation requires an exact human secret-readiness
+    attestation; a paid call requires a second exact per-run authorization.
 
 ## 3. Solution architecture
 
@@ -127,7 +142,7 @@ ValidatedWorld.Cli
   Gate A dependencies: Application, Persistence.Sqlite
   Gate B composition adds: AiReview.OpenAI
 
-ValidatedWorld.AiReview.OpenAI (post-Gate-A optional adapter)
+ValidatedWorld.AiReview.OpenAI (post-Gate-A sole production client)
   dependencies: AiReview, pinned official OpenAI client
 
 ValidatedWorld.Mcp (post-gate)
@@ -164,7 +179,7 @@ ValidatedWorld.Validation.Rules
 ValidatedWorld.Validation.Context
 
 ValidatedWorld.AiReview.Planning
-ValidatedWorld.AiReview.Packets
+ValidatedWorld.AiReview.Requests
 ValidatedWorld.AiReview.Contracts
 ValidatedWorld.AiReview.Concerns
 
@@ -379,6 +394,7 @@ public sealed record ProjectSnapshot(
     string ProtocolVersion,
     ProjectHead Head,
     string Title,
+    ObjectId PurposeObjectId,
     ProjectPolicy Policy,
     ImmutableArray<SchemaPackage> SchemaPackages,
     ImmutableArray<ProjectObject> Objects);
@@ -428,12 +444,15 @@ Unknown newer versions, missing migrations, or checksum mismatches block writes.
 CREATE TABLE projects (
     project_id              TEXT PRIMARY KEY,
     title                   TEXT NOT NULL CHECK(length(title) > 0),
+    purpose_object_id       TEXT NOT NULL UNIQUE,
     head_revision           INTEGER NOT NULL CHECK(head_revision >= 0),
     parent_logical_hash     TEXT NULL,
     logical_hash            TEXT NOT NULL,
     last_commit_id          TEXT NULL,
     policy_json             TEXT NOT NULL CHECK(json_valid(policy_json)),
     created_at_utc          TEXT NOT NULL,
+    FOREIGN KEY(purpose_object_id) REFERENCES graph_objects(object_id)
+        ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
     FOREIGN KEY(last_commit_id) REFERENCES commits(commit_id)
         ON DELETE RESTRICT,
     CHECK(
@@ -473,6 +492,12 @@ CREATE TABLE project_packages (
         ON DELETE RESTRICT
 ) STRICT;
 ```
+
+Initialization is one SQLite transaction: insert the project row, package/type
+rows, the purpose object at `purpose:root`, and its substantive text before
+commit. The deferred foreign key permits the project and root to be created
+atomically. Logical validation additionally proves that the referenced object is
+the sole `core:project-purpose` record.
 
 Gate A permits exactly one row in `projects`; initialization rejects a second.
 
@@ -1068,6 +1093,14 @@ Use breadth-first traversal. Tie between predecessor nodes resolves by object ID
 retain all sorted evidence for the selected hop. Base-only edges preserve impact
 from removed dependencies; projected-only edges include new dependencies.
 
+`changedIds` is exactly the set of direct operation targets after operation
+normalization. Do not add scope ancestors, forward context dependencies, or any
+other review-context record to it. The `scope-parent` edge therefore behaves like
+every other child-depends-on-parent rule: changing a parent reaches its dependent
+children, while merely walking upward from a changed child never turns the parent
+into a second traversal seed. This is what makes leaf, intermediate, and root
+changes produce progressively wider—but controlled—scope.
+
 ## 9. Schema and object validation
 
 ### 9.1 Stored schema package validation
@@ -1106,6 +1139,9 @@ For every object:
 
 Initial validators include:
 
+- exactly one referenced `core:project-purpose` record;
+- exactly one `core:scope-parent` for every non-root scope-bearing record, with
+  an acyclic singular path terminating at that purpose;
 - selected explicit contradictions;
 - minimum support relationships/sources;
 - Tarjan SCC detection for selected dependency relation types;
@@ -1171,7 +1207,7 @@ Gate B adds a separate AI-review freshness fingerprint:
 AiReviewFingerprint = SHA-256(
     base hash + draft revision + change-set hash + projected hash
     + review profile/version + prompt template/hash + review-plan hash
-    + ordered packet hashes + provider/model + material parameters)
+    + exact request hash + provider/model/reasoning + timeout)
 ```
 
 Changing any component makes the run and its concern dispositions stale. API
@@ -1297,6 +1333,8 @@ VW1501 missing required support
 VW1502 forbidden dependency cycle
 VW1503 missing implementation
 VW1504 missing verification
+VW1505 missing, duplicate, or invalid project purpose
+VW1506 missing, ambiguous, cyclic, or disconnected scope-parent lineage
 VW1601 impact bound reached
 VW1602 required impact disposition pending
 VW1603 stale impact disposition
@@ -1353,9 +1391,8 @@ Gate B later adds these Application use cases without changing the Gate A
 contracts:
 
 ```text
-PlanAiSemanticReview
+PreviewAiSemanticReviewRequest
 RunAiSemanticReview
-ImportAiSemanticReviewResult
 GetAiSemanticReviewRun
 ListAiSemanticReviewConcerns
 SetAiSemanticReviewConcernDisposition
@@ -1368,7 +1405,7 @@ ID, base identity, draft revision, and change-set/projected hashes as applicable
 ### 12.2 CLI commands
 
 ```text
-vw init --db <path> --project-id <id> --title <text>
+vw init --db <path> --project-id <id> --title <text> --purpose <text>
 vw verify --db <path> [--full]
 vw status --db <path>
 vw snapshot write --db <path> --output <path-or-stdout>
@@ -1404,9 +1441,8 @@ vw commit verify --db <path> [--through <number>]
 Planned Gate B commands are explicit network/audit operations:
 
 ```text
-vw tx ai-review plan --db <path> --tx <id> --profile <id>
-vw tx ai-review run --db <path> --tx <id> --profile <id>
-vw tx ai-review import --db <path> --tx <id> --input <file-or-stdin>
+vw tx ai-review preview --db <path> --tx <id> --output <path>
+vw tx ai-review run --db <path> --tx <id>
 vw tx ai-review get --db <path> --tx <id> --run <id>
 vw tx ai-review concerns --db <path> --tx <id> --run <id>
 vw tx ai-review disposition --db <path> --tx <id> --run <id>
@@ -1414,9 +1450,10 @@ vw tx ai-review disposition --db <path> --tx <id> --run <id>
     --reason <text> --reviewer <id>
 ```
 
-`plan` never contacts a provider and reports exact scope, coverage, packet
-counts, omissions, and configured limits. `run` is the only in-app provider
-call. Supplying credentials as command arguments or JSON is forbidden.
+`preview` never contacts OpenAI. It writes the exact complete request artifact
+and reports scope, coverage, omissions, hashes, and size. `run` is the only
+network call and sends that single request at most once. Supplying credentials
+as command arguments or JSON is forbidden.
 
 There is no arbitrary `vw sql` write command. Users may open a verified database
 read-only with standard SQLite tools and use documented `vw_*` views.
@@ -1519,17 +1556,19 @@ Priority:
 ```text
 0 seed objects
 1 exact type definitions and applicable constraints
-2 forward dependencies needed to understand seeds
-3 reverse impacted dependents and paths
-4 external anchors bound through relations
-5 additional related objects by increasing graph distance
+2 singular `scope-parent` lineage from each selected record to purpose root
+3 forward dependencies needed to understand seeds
+4 reverse impacted dependents and paths
+5 external anchors bound through relations
+6 additional related objects by increasing graph distance
 ```
 
 Within priority/distance sort by ID. Include each object atomically. Report
 limits and omissions. A required seed/type/constraint that cannot fit produces
-inconclusive output.
+inconclusive output. Walking the scope lineage is upward-only; an included
+ancestor is never treated as a seed and its other children are not selected.
 
-### 13.2 Gate B review plan and packet coverage
+### 13.2 Gate B whole-transaction request and coverage
 
 Gate B reuses context-query primitives but does not equate one convenience
 context query with complete review. For an exact draft it first constructs:
@@ -1543,9 +1582,9 @@ public sealed record AiReviewPlan(
     string ProjectedLogicalHash,
     ImmutableArray<ObjectId> RequiredObjectIds,
     ImmutableArray<DependencyEdge> RequiredEdges,
-    ImmutableArray<AiReviewPacketManifest> Packets,
+    ImmutableArray<ScopeLineage> RequiredScopeLineages,
+    AiReviewRequestManifest Request,
     ImmutableArray<ObjectId> ExcludedObjectIds,
-    bool RequiresSynthesis,
     string PlanHash);
 ```
 
@@ -1555,39 +1594,39 @@ Required scope is the union of:
 direct operation targets
 policy-selected complete reverse impact closure and explanation edges
 forward dependencies needed to understand every changed/impacted object
+singular upward scope-parent lineage for every included content record
 applicable exact type definitions and constraints
 policy-selected bound external anchors
 ```
 
-Sort all sets and hashes canonically. If the plan fits configured provider
-limits, create one packet. Otherwise, only when Gate B measurement justifies the
-complexity, partition deterministically by impacted root/path cluster. Include
-boundary-edge stubs and necessary dependencies in every shard. A coverage matrix
-must prove every required object and edge appears in at least one packet. A
-multi-packet plan requires a synthesis packet containing changed objects,
-cross-shard edges, packet summaries, and concerns.
+Sort all sets and hashes canonically and produce exactly one request. Multiple
+disjoint transaction chains remain together. A coverage matrix proves that every
+required object, dependency edge, constraint, operation, explanation path, and
+scope-parent edge appears in that request. It also proves that context-only
+ancestors did not expand impact into unselected siblings.
 
-The run is complete only when required coverage is exact, every shard succeeded,
-and required synthesis succeeded. Bounds, an oversized indivisible object,
-missing coverage, or any required failed call makes it inconclusive. Coverage
-proves what was presented, not that the model understood it.
+If the complete selected scope exceeds the fixed model/request bound, contains an
+oversized indivisible object, or has missing coverage, planning is inconclusive
+before any network call. Do not shard, summarize, synthesize across calls, drop a
+chain, select a fallback model, or make a second paid request. Coverage proves
+what was presented, not that the model understood it.
 
 ### 13.3 Provider contract, concerns, and freshness
 
 ```csharp
-public interface IProjectSemanticReviewProvider
+public interface IProjectSemanticReviewClient
 {
-    string ProviderId { get; }
     Task<AiReviewResponse> ReviewAsync(
         AiReviewRequest request,
         CancellationToken cancellationToken);
 }
 ```
 
-The request includes the base/draft/change-set/projected hashes, review
-profile/version, prompt template/version/hash, review-plan and packet hashes,
-provider/model, material parameters, strict response-schema version, and packet
-content. The cache/request identity hashes every material non-secret field.
+The request includes the complete ordered operations, base/draft/change-set and
+projected hashes, review profile/version, prompt template/version/hash, review
+plan/request hashes, OpenAI/model/reasoning/timeout values, strict response-schema
+version, purpose statement, required scope lineages, and all selected content.
+The cache/request identity hashes every material non-secret field.
 
 The response is strict versioned JSON containing status, structured concerns,
 insufficient-context observations, and a separate list of candidate
@@ -1602,21 +1641,22 @@ operation. Concern dispositions are `open`, `resolved-by-change`,
 `rejected-with-rationale`, or `acknowledged`; policy decides which are
 acceptable. Changing any request-identity field stales the run and dispositions.
 
-Gate B adds checked migration tables for run metadata, packet manifests, and
+Gate B adds checked migration tables for run metadata, request manifests, and
 concerns. They are draft/audit state and do not enter the logical project hash.
 Accepted receipts retain the exact satisfying run/fingerprints. Persist no
 credential or authorization header. Raw provider bodies are retained only under
 an explicit project-data retention setting; normalized concerns and body hashes
 remain auditable.
 
-### 13.4 Provider isolation and secrets
+### 13.4 OpenAI isolation, secrets, and cost safety
 
-The first optional adapter is `ValidatedWorld.AiReview.OpenAI`. At Gate B
+`ValidatedWorld.AiReview.OpenAI` is the sole production client. At Gate B
 implementation time, pin and audit the current official `OpenAI` NuGet client,
-use the Responses API with strict structured output, require an explicit model
-ID, expose no tools, and record the actual returned model. Re-check the official
-API documentation rather than copying a transient SDK example into this
-blueprint.
+use the Responses API with strict structured output, use only
+`gpt-5.6-terra` with medium reasoning, expose no tools, use a fixed 16,384-token
+maximum output, and record the actual returned model. Re-check the official API
+documentation before implementation. The client interface remains so normal
+tests can use a fake; it does not authorize another provider or model.
 
 Gate B adds `Microsoft.Extensions.Configuration.UserSecrets` to the CLI and
 reads `AiReview:OpenAI:ApiKey` from .NET user-secrets in source development or
@@ -1625,10 +1665,19 @@ reads `AiReview:OpenAI:ApiKey` from .NET user-secrets in source development or
 arguments, project JSON, or the database. `.env` files are ignored but are not
 searched or loaded automatically.
 
-Only `vw tx ai-review run` contacts a provider, before any SQLite write
-transaction. Planning, deterministic validation, impact, commit, and the default
-test suite remain offline. See [Planned AI semantic review](ai_semantic_review.md)
-for the complete security, privacy, cost, failure, and evaluation contract.
+Only `vw tx ai-review run` contacts OpenAI, before any SQLite write transaction.
+It sends exactly one request and has zero automatic retries. Refusal, truncation,
+timeout, cancellation, malformed output, or transport failure is inconclusive.
+Planning, preview, deterministic validation, impact, commit, and the default test
+suite remain offline.
+
+The coding agent may not begin this feature unless the initiating human prompt
+contains the exact standalone line `AI_REVIEW_SECRET_READY: yes`. The agent must
+never find, acquire, list, infer, or set a key. A live call additionally requires
+`AI_REVIEW_LIVE_CALL_AUTHORIZED: yes` in that initiating prompt. Without it the
+agent may produce and inspect the exact request preview, but sends nothing. See
+[Planned AI semantic review](ai_semantic_review.md) for the complete prompt,
+security, privacy, cost, failure, and evaluation contract.
 
 ## 14. Gate A package and sample
 
@@ -1636,16 +1685,18 @@ for the complete security, privacy, cost, failure, and evaluation contract.
 
 Embed canonical package JSON resources for:
 
-- `core/v1`: artifact, anchor, containment, binds/uses/mentions, and generic
-  constraint vocabulary;
+- `core/v1`: project-purpose record, `scope-parent` child-to-parent dependency,
+  artifact, anchor, containment, binds/uses/mentions, and generic constraint
+  vocabulary;
 - `technical-project/v1`: subject, proposition, assertion, source, and technical
   dependency/traceability vocabulary.
 
 Initialization validates the resources, computes their definition hashes, and
-normalizes them into schema tables. The same resources generate documentation
-goldens. Do not duplicate package definitions as C# enum switches and SQL seed
-scripts; one canonical resource plus registered validator identifiers is the
-source.
+normalizes them into schema tables. It requires a substantive purpose string,
+creates `purpose:root`, and stores that ID on the project. The same resources
+generate documentation goldens. Do not duplicate package definitions as C# enum
+switches and SQL seed scripts; one canonical resource plus registered validator
+identifiers is the source.
 
 The CLI also ships a deterministic named sample catalog sourced from the
 reviewed files under `samples/`. `vw sample create` passes those logical inputs
@@ -1665,6 +1716,10 @@ instead.
 The graph contains a quantitative power track:
 
 ```text
+purpose: design and document an offline privacy-preserving sensor product
+scope: purpose -> power, privacy, documentation, accessibility
+       power -> runtime requirement, current, capacity, result, conclusion
+
 requirement: runtime >= 24 hours
 assumption: average current = 20 mA
 assumption: battery capacity = 500 mAh
@@ -1681,8 +1736,10 @@ bindings from semantic objects to relevant anchors
 ```
 
 Changing current to 25 mA must impact the result, conclusion, and relevant
-anchors, not privacy. The engine does not perform arithmetic; fixture operations
-supply the known repaired capacity/runtime values.
+anchors, not privacy or accessibility. The engine includes the changed record's
+power-to-purpose lineage as context without treating those ancestors as new
+impact seeds. It does not perform arithmetic; fixture operations supply the known
+repaired capacity/runtime values.
 
 The same project also contains a soft-logic privacy/offline-design track:
 
@@ -1709,6 +1766,11 @@ set. Expected results include both required paths and unrelated exclusions. This
 corpus is complex enough to expose modeling and diagnostic problems without
 claiming that the engine understands arbitrary prose.
 
+A separate transaction changes `purpose:root`; its reverse `scope-parent`
+closure must include every scope-bearing record. Another Gate B transaction
+changes one power item and one privacy item together so the one review request
+must contain both disjoint impact chains and both singular purpose lineages.
+
 The source fixture includes:
 
 ```text
@@ -1731,6 +1793,8 @@ Include fixtures for:
 - invalid type hierarchy, field, role, or dependency rule;
 - unavailable required validator;
 - duplicate/invalid object ID;
+- missing/duplicate project purpose, multiple scope parents, disconnected scope,
+  and scope-parent cycle;
 - type/kind mismatch;
 - invalid field cardinality/value/reference;
 - invalid relation endpoint/cardinality;
@@ -1795,11 +1859,11 @@ value over ordinary SQL, Gate A fails and the feasibility verdict is updated.
 
 ### 15.1 AI semantic review — Gate B
 
-Implement the provider-neutral review design in Section 13 and
+Implement the one-request OpenAI review design in Section 13 and
 `docs/ai_semantic_review.md`. Evaluate it on the TechnicalProject known-issue
-corpus before giving it narrative-specific prompts. Gate B may be retained with
-only external structured-result import if an in-app provider call does not add
-enough value to justify its privacy, cost, and configuration surface.
+corpus before giving it narrative-specific prompts. If it does not add enough
+value to justify its privacy, cost, and configuration surface, omit Gate B rather
+than adding more providers or import/export machinery.
 
 ### 15.2 Linear narrative — Gate C
 
@@ -1883,8 +1947,8 @@ environment-dependent limits. Scripted scenarios assert structured results and
 exit codes. Skipped, flaky, manually inspected, or tautological tests are not
 completion evidence.
 
-The later Gate B suite preserves this property with fake semantic-review
-providers and scripted `HttpMessageHandler` responses. Live-provider evaluation
+The later Gate B suite preserves this property with a fake semantic-review
+client and scripted `HttpMessageHandler` responses. Live OpenAI evaluation
 is a separate explicitly enabled product experiment, never a default unit,
 integration, end-to-end, or completion test. Absence of credentials must produce
 a deterministic structured configuration result without attempting a network
@@ -1903,8 +1967,13 @@ appears plausible.
 - SQLite file bytes may differ while logical hashes remain equal.
 - Stable IDs and revisions survive round trip.
 - Every normalized reference/endpoint resolves.
+- Exactly one purpose exists and every scope-bearing record has one acyclic
+  parent path to it.
 - Read-view direct edges equal C# extracted edges.
 - Unrelated insertion does not change an existing impact set/path.
+- A leaf change includes its purpose lineage as context without selecting
+  siblings; a directly changed intermediate scope node selects its descendants;
+  a directly changed purpose root selects all descendants.
 - Base/projected union never loses base-only/projected-only impact.
 - Any required bounded-out analysis is inconclusive.
 - Operation changes invalidate stale dispositions.
@@ -1913,6 +1982,8 @@ appears plausible.
 - Extension JSON never creates hidden references.
 - Artifact locators are never dereferenced.
 - No CLI command emits non-JSON stdout.
+- Gate B's preview contains the complete transaction and every disjoint selected
+  chain in one request; each run invokes the live client at most once.
 
 ### 16.3 Fault injection
 
@@ -1991,16 +2062,18 @@ report the evidence to the human, and stop.
 ### WP1 — common metamodel
 
 - Implement IDs, schema packages, type/field/role/dependency definitions, values,
-  objects, snapshots, policies, operations, and review records.
+  objects, snapshots (including `PurposeObjectId`), policies, operations, and
+  review records.
 - Construct a realistic interconnected technical-design scenario through public
-  Core APIs and report modeling friction.
+  Core APIs with one purpose and sibling scope branches; report modeling friction.
 - Acceptance: unit/property tests cover every local valid/rejected shape and the
   realistic graph requires no test-only escape hatch.
 
 ### WP2 — logical JSON and built-in packages
 
 - Implement strict protocol DTOs, canonical writers/hashes, and canonical
-  `core/v1` plus `technical-project/v1` package resources.
+  `core/v1` (including purpose/scope definitions) plus `technical-project/v1`
+  package resources.
 - Materialize the realistic TechnicalProject source corpus and representative
   edit/error variants as reviewed text fixtures.
 - Acceptance: round-trip/order/duplicate/unknown-field/hash goldens pass and an
@@ -2009,7 +2082,8 @@ report the evidence to the human, and stop.
 ### WP3 — SQLite schema and mapping
 
 - Implement connections, v1 migration, repositories, read views, integrity
-  checks, logical snapshot load, initialize, and backup.
+- Make initialization require purpose text and atomically create/store the sole
+  purpose root.
 - Add the first CLI walking skeleton from Section 12.5 and CLI test project.
 - Add `ValidatedWorld.TestKit`, `ValidatedWorld.EndToEnd.Tests`, the bundled
   sample catalog, and `vw sample list/create`.
@@ -2026,6 +2100,7 @@ report the evidence to the human, and stop.
 
 - Validate stored schema packages/objects, build indexes/edges, implement generic
   and technical constraints, diagnostics, and coverage.
+- Enforce exact-one purpose and singular acyclic root-reaching scope lineages.
 - Expose full verify, diagnostics, dependencies/dependents, and explanation reads
   through the CLI walking skeleton.
 - Acceptance: intentional-error fixtures match golden JSON, read views agree,
@@ -2047,8 +2122,10 @@ report the evidence to the human, and stop.
   fingerprints.
 - Expose impact, obligations, and disposition through the CLI.
 - Acceptance: TechnicalProject yields exactly Section 14 impact and unrelated
-  exclusions, and an agent can explain and correctly disposition the soft-logic
-  scenario without guessing hidden dependencies.
+  exclusions; leaf context excludes siblings, an intermediate scope change
+  reaches its descendants, and a direct purpose change reaches the project. An
+  agent can explain and correctly disposition the soft-logic scenario without
+  guessing hidden dependencies.
 
 ### WP7 — atomic accepted commit and replay
 
@@ -2064,6 +2141,8 @@ report the evidence to the human, and stop.
 - Complete remaining handlers, JSON envelopes, commands, exit codes, context,
   backup, limits, and help/read-view documentation; consolidate the incremental
   public surface from Section 12.5.
+- Context queries include singular purpose lineages through upward-only traversal
+  that never fans back down into sibling branches.
 - Acceptance: scripted agent completes init through commit/replay using JSON and
   queries read-only views successfully, and a black-box agent completes both
   quantitative and soft-logic workflows from public documentation.
@@ -2081,12 +2160,17 @@ report the evidence to the human, and stop.
 
 - Authorized only by a successful Gate A outcome and a new human-requested
   planning task.
-- Implement review plans/coverage, packets, structured concerns, freshness,
-  dispositions, persistence, fake/scripted providers, import, CLI, secret-safe
-  configuration, and one optional OpenAI adapter outside the deterministic core.
+- Before any implementation, require the initiating human's exact
+  `AI_REVIEW_SECRET_READY: yes` attestation; never search for, acquire, list, or
+  install the key. Before a paid call also require the exact
+  `AI_REVIEW_LIVE_CALL_AUTHORIZED: yes` attestation.
+- Implement one whole-transaction request/coverage preview, structured concerns,
+  freshness, dispositions, persistence, a fake/scripted test client, CLI, and the
+  sole OpenAI `gpt-5.6-terra` production client outside the deterministic core.
+  Include every disjoint selected chain and singular purpose lineage together;
+  make one call with zero retries.
 - Evaluate known omitted/stale TechnicalProject issues and scoped-versus-unscoped
-  usefulness. Keep only external result interchange if the built-in call adds no
-  material value.
+  usefulness. Omit Gate B if the built-in call adds no material value.
 
 ### WP11 — LinearNarrative profile
 

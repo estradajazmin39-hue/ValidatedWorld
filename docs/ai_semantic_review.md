@@ -3,298 +3,327 @@
 **Status:** Normative post-Gate-A design; not part of the current WP0-WP9
 implementation roadmap.
 
-This document restores the bounded AI-assisted reviewer present in the early
-ValidatedWorld design. It is the first recommended phase after Gate A if the
-deterministic semantic change-control core proves useful. It is not document
-generation, RAG, an autonomous database agent, or a substitute for deterministic
-validation.
+This is the expensive "run the transaction past the lore team" pass. It reviews
+qualitative coherence that the deterministic engine cannot prove. It is not
+document generation, RAG, an autonomous database agent, or a second way to
+mutate canonical state.
 
-## 1. Purpose and evidence boundary
+## 1. Evidence boundary
 
-Deterministic validation can prove only rules expressed in the project model.
-An intelligent reviewer is useful for questions such as:
+The reviewer may identify likely:
 
-- Did this change leave a likely implication stale even though no explicit rule
-  captured it?
-- Is a dependency, qualification, definition, clue, or character reaction
-  probably missing?
-- Do the changed and impacted records still make semantic sense together?
-- Does supplied free-form text contradict structured values or use terminology
-  inconsistently?
-- Is the supplied context insufficient to judge the issue?
+- conflicts with the project's overarching purpose;
+- missing dependencies or consequences;
+- contradictions across otherwise disjoint parts of one transaction;
+- stale values, implications, terminology, or qualifications;
+- implausible character, design, policy, or world reactions; and
+- insufficient context.
 
-The reviewer returns **concerns**, not `Proven` or `Disproven` results. The
-application may guarantee that a required review ran against an exact projected
-state and that every concern was dispositioned. It cannot guarantee that the
-model noticed every problem or that a concern is correct.
+Its output is always a **Concern**, never `Proven` or `Disproven`. The
+application can prove that one exact request covered the required transaction
+scope and that every returned concern was dispositioned. It cannot prove that
+the model noticed every issue or that a concern is correct.
 
-An AI review must never:
+The AI review never writes canonical rows, applies operations, selects impact,
+browses, calls tools, or supplies deterministic evidence. Candidate changes are
+suggestions that a human or agent may separately apply through the normal
+transaction API.
 
-- write canonical rows or apply a transaction operation;
-- turn a proposed record, link, or disposition into canon automatically;
-- convert a provider response into deterministic validation evidence;
-- browse, retrieve external material, or call tools unless a later separately
-  specified review profile explicitly authorizes and audits that capability;
-- run while a SQLite write transaction is open; or
-- expose an API key in a database, snapshot, request packet, log, diagnostic,
-  cache key, test fixture, or command-line argument.
+## 2. Required project purpose root
 
-## 2. Place in the transaction workflow
+Every project has exactly one `core:project-purpose` record. Initialization
+creates it before any ordinary project content and requires an English purpose
+statement. Examples include:
 
-The planned Gate B sequence is:
+- "Define a McDonald's menu for this restaurant and market."
+- "Specify an offline sensor that runs for at least 24 hours without uploading
+  raw readings."
+- "Maintain the canon and disclosure logic of the Harbor mystery."
+
+The project snapshot identifies the purpose record by stable ID. Scope is a
+rooted hierarchy distinct from arbitrary cross-linking domain dependencies:
+
+- every scope-bearing content record except the purpose has exactly one
+  `scope-parent`;
+- one parent may have any number of children;
+- following a record's parent repeatedly must terminate at the one purpose;
+- the hierarchy is acyclic; and
+- relations/constraints are reviewed with their endpoints/targets and those
+  records' lineages rather than acquiring ambiguous multiple parents.
+
+The enforceable rule is:
+
+> Every review-covered content record has exactly one upward scope lineage to
+> the project purpose, and review includes that lineage for each selected record.
+
+`scope-parent` is a canonical typed containment relation whose dependency rule is
+`child depends on parent` with `CreatesReviewImpact = true`. Impact traversal is
+seeded only by actual transaction operation targets. Scope ancestors added later
+for context are never promoted to impact seeds.
+
+Consequently:
+
+- changing a leaf includes its ancestors as context but not its siblings;
+- directly changing an intermediate scope node impacts only its descendant
+  subtree (plus any separately declared semantic dependents); and
+- directly changing the project-purpose root impacts every descendant and is the
+  one ordinary case that requires a full-project review.
+
+Walking upward for context follows only the singular parent direction. Reaching
+an ancestor or the purpose during that walk never causes traversal back down into
+other children.
+
+The semantic dependency graph remains separate and may branch or cross-link.
+Multiple changed/impacted records may therefore contribute different dependency
+closures and different scope lineages, all of which appear together in the one
+transaction review request.
+
+This root and singular lineage prevent disconnected semantic islands and give
+the reviewer global intent without widening scope downward. They do not make
+natural-language brand or thematic knowledge
+deterministic. "Whopper" under a McDonald's-menu purpose is an AI concern unless
+the project also declares an explicit supported-brand constraint, in which case
+the deterministic validator may reject it.
+
+## 3. One whole-transaction review request
+
+One AI review run means exactly one model request containing the entire proposed
+transaction. Disjoint dependency chains are never reviewed in separate calls.
+The request contains, in deterministic order:
+
+1. Project identity, exact purpose record, review rubric, and evidence boundary.
+2. Transaction identity, intent, author, base revision/hash, draft revision,
+   change-set hash, and projected-state hash.
+3. Every transaction operation with the complete base and projected form of its
+   target where applicable.
+4. The complete policy-selected reverse impact closure for all operation targets
+   in the union of the base and projected graphs.
+5. Every forward dependency needed to understand every changed or impacted
+   object.
+6. The singular upward `scope-parent` lineage from every included content record
+   to the project purpose. Ancestor traversal never includes siblings or other
+   descendants.
+7. Applicable type definitions, deterministic constraints, external anchors,
+   impact explanation paths, and current review obligations.
+8. A coverage manifest listing the exact required object/dependency/scope-edge
+   sets and proving
+   that none were omitted.
+9. The strict structured response schema.
+
+All operation targets and all disjoint closures appear together so the model can
+find cross-chain contradictions and aggregate effects. There is no sharding,
+synthesis call, recursive summarization, or per-chain provider call in the
+roadmap.
+
+If the complete request cannot fit the one supported model or any required
+object/edge/purpose path is missing, planning returns `Inconclusive` **before any
+network call**. The product does not trade away whole-transaction reasoning to
+force a result.
+
+## 4. Exact request preview and English prompt
+
+The prompt is a versioned English source resource, initially
+`ai-semantic-review/v1`. Localization is out of scope. It instructs the reviewer
+to:
+
+1. Review the transaction as one change, including interactions among disjoint
+   chains.
+2. Treat the project purpose as global intent and flag likely conflicts with it.
+3. Trace each operation through supplied dependencies, impacts, constraints,
+   and purpose paths.
+4. Distinguish contradictions, missing links, stale consequences, terminology
+   drift, missing qualifications, and insufficient context.
+5. Use only supplied data, clearly label inference, and make no external factual
+   claims.
+6. Cite supplied object IDs plus field, edge, or impact-path evidence for every
+   concern.
+7. Return only the strict response schema and never propose direct canonical
+   mutation.
+
+Before a paid request, the CLI produces the exact secret-free request body:
 
 ```text
-load a durable draft and exact base head
--> project the transaction
--> run deterministic validation and impact analysis
--> build the policy-selected semantic-review scope
--> build deterministic bounded review packets and a coverage manifest
--> call or import results from a provider-neutral reviewer
--> schema-validate and persist cited concerns as draft/audit data
--> repair the draft and rerun, or disposition every policy-required concern
--> recheck review freshness during commit
--> commit atomically, or reject without changing authoritative state
+vw tx ai-review preview --db <path> --tx <id> --output <path>
 ```
 
-Network calls happen before the short SQLite commit transaction. Changing the
-draft, projected hash, review profile, prompt template, packet plan, provider,
-model, or material generation parameters makes the review stale.
+The preview includes the full system/developer instruction text, structured
+payload, response schema, model, reasoning setting, and request hash. The live
+command must send byte-for-byte equivalent semantic content under that hash.
+Authorization headers and credentials are never part of the preview.
 
-By default AI review is opt-in and non-blocking. A project policy may require a
-named review profile for selected object types or change categories, require a
-complete review run, and require every concern to be resolved, rejected with a
-rationale, or explicitly acknowledged before commit.
+Do not dump the full request to ordinary stdout/stderr. CLI stdout must remain
+one bounded JSON result, and project content may be confidential. The user
+chooses the preview path; development QA normally uses an ignored file under
+`artifacts/ai-review/`. Normal logs contain only hashes, counts, sizes, status,
+and provider request ID. A sanitized TechnicalProject request is retained as a
+golden test asset so coding agents can inspect prompt and context completeness
+without spending money.
 
-## 3. Reviewing the dependency chain
+## 5. One supported provider and model
 
-"Review the full dependency chain" must have a finite, testable meaning. It does
-not mean sending an unlimited database or claiming the model understood it.
+The entire planned roadmap supports one production provider:
 
-For a transaction, the application deterministically constructs a `ReviewPlan`:
-
-1. Start with every directly changed object.
-2. Add the complete policy-selected impact closure and its explanation edges.
-3. Add forward dependencies required to understand those objects.
-4. Add applicable type definitions, constraints, and bound external anchors.
-5. Record the exact required object and edge sets, exclusions, limits, and plan
-   hash.
-
-If one request can contain that plan, the application emits one packet. If it
-cannot, it partitions the plan deterministically by impacted root/path cluster:
-
-1. Every shard includes its changed/impacted objects, relevant forward
-   dependencies, constraints, and boundary-edge stubs.
-2. Objects and edges are never cut midway. Every omission is explicit.
-3. A coverage manifest proves that each required object and dependency edge was
-   presented in at least one shard.
-4. A final synthesis packet contains changed objects, cross-shard edges, packet
-   summaries, and all concerns so the reviewer can identify cross-shard issues.
-5. The run is `Complete` only when every required shard and synthesis call
-   succeeds and coverage is complete. Otherwise it is `Inconclusive`.
-
-This makes review coverage auditable. It still does not make model comprehension
-or concern recall deterministic. Gate B should first prove value on review plans
-that fit into one request; sharding is implemented only when measured project
-sizes require it.
-
-## 4. Provider-neutral contracts
-
-The exact immutable types are finalized during the Gate B planning task, but the
-contract must preserve these fields:
-
-```csharp
-public interface IProjectSemanticReviewProvider
-{
-    string ProviderId { get; }
-    Task<AiReviewResponse> ReviewAsync(
-        AiReviewRequest request,
-        CancellationToken cancellationToken);
-}
-
-public sealed record AiReviewRequest(
-    string SchemaVersion,
-    string ProjectId,
-    long BaseRevision,
-    string BaseLogicalHash,
-    string TransactionId,
-    long DraftRevision,
-    string ChangeSetHash,
-    string ProjectedLogicalHash,
-    string ReviewProfileId,
-    string ReviewProfileVersion,
-    string PromptTemplateId,
-    string PromptTemplateVersion,
-    string PromptTemplateHash,
-    string ReviewPlanHash,
-    string ContextPacketHash,
-    string ProviderId,
-    string ModelId,
-    JsonElement Parameters,
-    JsonElement ContextPacket);
+```text
+provider = openai
+model = gpt-5.6-terra
+reasoning.effort = medium
 ```
 
-A versioned response contains:
+The model is chosen because current official OpenAI documentation describes
+GPT-5.6 Terra as balancing intelligence and cost and gives it a 1,050,000-token
+context window. Re-check availability when Gate B begins. If it is unavailable
+or the configured account cannot use it, stop and ask the human; do not silently
+switch models.
 
-- run status: `complete`, `failed`, `canceled`, or `inconclusive`;
-- zero or more structured concerns;
-- explicit insufficient-context observations;
-- candidate records, relationships, or operations in a separate proposal list;
-- the provider/model actually used, provider request ID when available, usage,
-  and finish/refusal information; and
-- request, raw-response, normalized-response, and response-schema hashes.
+`VW_AIREVIEW__PROVIDER` and `VW_AIREVIEW__MODEL` remain visible configuration so
+runs are explicit and auditable, but the roadmap accepts only the exact values
+above. Supporting arbitrary providers/models, dynamic discovery, fallback
+routing, or a plugin ecosystem is out of scope.
+
+`ValidatedWorld.AiReview` contains request planning, concerns, and a small client
+interface so tests can use a fake. `ValidatedWorld.AiReview.OpenAI` is the only
+production implementation. That seam is for dependency isolation and testing,
+not a promise of provider extensibility.
+
+Use the Responses API, strict Structured Outputs, no tools, and no conversation
+state. The adapter sets a fixed non-configurable maximum of 16,384 output tokens;
+the expected output is a bounded list of concerns, not prose. Re-check the
+official [GPT-5.6 Terra model page](https://developers.openai.com/api/docs/models/gpt-5.6-terra),
+[OpenAI .NET quickstart](https://developers.openai.com/api/docs/quickstart), and
+[Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs)
+when implementation begins.
+
+## 6. Human-owned API key prerequisite
+
+The agent assigned the first Gate B coding task **must not edit code, add
+packages, or run implementation commands** until the human's initiating prompt
+contains this exact attestation:
+
+```text
+AI_REVIEW_SECRET_READY: yes
+```
+
+Before sending that prompt, the human—not the coding agent—must obtain their own
+OpenAI API key and store it with:
+
+```powershell
+dotnet user-secrets set "AiReview:OpenAI:ApiKey" "<key>" --project src/ValidatedWorld.Cli/ValidatedWorld.Cli.csproj
+```
+
+The key itself must never be pasted into the prompt. If the attestation is
+missing, the agent reports the command and stops without making changes. If a
+possible key appears in chat or repository content, the agent must not use,
+repeat, move, test, or store it; it tells the human to revoke/rotate it and
+stops.
+
+The coding agent is expressly forbidden to:
+
+- search the web, repository, browser state, environment, shell history, logs,
+  other projects, or credential stores for an API key;
+- create an account, obtain, generate, buy, borrow, infer, or reuse a key;
+- run `dotnet user-secrets set`, edit the secret store, or configure the key on
+  the human's behalf;
+- list or print secret values to verify the attestation; or
+- substitute another credential, provider, endpoint, or model.
+
+The application later verifies only that usable credentials are available when
+an explicit live command begins; it never prints their value. Gate A and the
+normal Gate B fake/scripted suite require no secret.
+
+For source development, the CLI's stable `UserSecretsId` stores
+`AiReview:OpenAI:ApiKey` outside the repository. A published process uses
+`OPENAI_API_KEY`. Secret Manager is development storage, not an encrypted
+production vault. See Microsoft's [.NET Secret Manager
+guidance](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-10.0).
+
+## 7. Paid-call safety
+
+Possessing a key does not authorize spending. A coding or QA agent may make a
+live request only when the same initiating human prompt also contains:
+
+```text
+AI_REVIEW_LIVE_CALL_AUTHORIZED: yes
+```
+
+Paid-call rules:
+
+- `preview` is mandatory and must be inspected before the first live call.
+- The preview reports model, UTF-8 request bytes, a clearly labeled conservative
+  token estimate, the fixed output cap, and the number of objects/edges/paths.
+- One explicit `run` command makes one provider request.
+- There are **zero automatic retries**, including after timeouts or ambiguous
+  transport failures. Failure is `Inconclusive`; another paid attempt requires a
+  new explicit command and human authorization.
+- Builds, unit tests, integration tests, end-to-end tests, and ordinary agent QA
+  never make live calls.
+- A Gate B live smoke/evaluation is one known fixture and one request unless the
+  human separately authorizes more.
+- No background, parallel, recursive, fallback, or tool call is allowed.
+
+The adapter has only three non-secret runtime settings: provider, model, and
+timeout. Input/output/request-count/cost/retry configuration knobs are not part
+of the roadmap. The fixed output cap and zero-retry rule are implementation
+safety invariants rather than user settings.
+
+## 8. Response, persistence, and commit policy
+
+The strict response contains:
+
+- `complete`, `failed`, `canceled`, or `inconclusive` status;
+- structured concerns and explicit insufficient-context findings;
+- actual provider/model, provider request ID, usage, and finish/refusal data;
+  and
+- request, raw-response, normalized-response, schema, and prompt hashes.
 
 Each concern contains a stable run-local ID, `AIxxxx` code, category, severity,
-message, cited object IDs, cited field/edge/path evidence from the supplied
-packet, optional confidence, a suggested follow-up, and a fingerprint. A
-response that cites unknown IDs, fails schema validation, omits required packet
-coverage, is truncated, or is refused becomes a provider failure or
-inconclusive run. Its prose is never loosely parsed into findings.
+message, cited object IDs, cited field/edge/path evidence, optional confidence,
+suggested follow-up, and fingerprint. Unknown citations, schema mismatch,
+refusal, truncation, or malformed content makes the run failed/inconclusive.
+Free-form prose is never loosely parsed into findings.
 
-Concern dispositions are:
+Concern dispositions are `open`, `resolved-by-change`,
+`rejected-with-rationale`, and `acknowledged`. Policy decides which allow commit.
+Non-open dispositions require actor, rationale, time, and exact run/concern
+fingerprints. Changing any operation or any material request input stales the
+review.
 
-- `open`;
-- `resolved-by-change`;
-- `rejected-with-rationale`; and
-- `acknowledged`.
+Gate B adds checked SQLite migrations for review runs and concerns. These are
+draft/audit state, not logical project state. Persist no credentials or
+authorization headers. Raw request/response retention is an explicit project
+data policy because the content may be confidential; normalized concerns and
+hashes remain auditable.
 
-Policy decides which dispositions permit commit. Non-open dispositions require
-actor, rationale, time, and the exact concern/run fingerprint.
+## 9. Testing and acceptance
 
-## 5. Persistence and audit
+The normal suite is offline and deterministic:
 
-Gate B adds a checked SQLite migration for review runs, packet manifests, and
-concerns. These are draft/audit records, not part of the logical project hash.
-An accepted commit receipt retains the review-run identity and concern
-dispositions that satisfied policy.
+- fake clients cover zero, one, and many concerns;
+- scripted HTTP handlers cover request/response mapping, refusal, malformed
+  output, cancellation, and rate limiting without a network;
+- no separate timeout unit test is required; timeout uses standard cancellation
+  plumbing and any live timeout is inconclusive;
+- golden request previews prove the purpose, complete transaction, every
+  disjoint dependency closure, every required singular scope lineage, absence of
+  unselected siblings, constraints, coverage manifest, English prompt, and
+  response schema are present;
+- tests prove one run invokes the client at most once and never retries;
+- tests prove missing attestation/configuration prevents a live call;
+- freshness/hash tests cover every material non-secret input; and
+- persistence/CLI tests prove no secret leakage and no automatic mutation.
 
-Persist at least:
+The usefulness evaluation uses reviewed TechnicalProject transactions that
+change multiple disjoint tracks together and contain known purpose conflicts,
+omitted links, stale values, terminology conflicts, missing qualifications, and
+unrelated distractors. Measure known-issue recall, false-positive burden, cost,
+latency, and whether the whole-transaction prompt identifies cross-chain issues.
 
-- transaction and draft revision;
-- base, change-set, projected-state, review-plan, and packet hashes;
-- review/profile/prompt/schema versions;
-- provider ID, requested model, returned model, non-secret parameters, status,
-  timestamps, provider request ID, usage, and bounded error metadata;
-- normalized concerns, evidence, fingerprints, and dispositions; and
-- hashes of raw request/response bodies when retaining the bodies is disabled.
-
-Never persist credentials, authorization headers, or a configuration dump. Raw
-request/response retention is an explicit project setting because the context
-may contain confidential project data. Hash-only retention must still preserve
-the normalized concerns and enough metadata to audit what policy accepted.
-
-## 6. Provider packages and OpenAI adapter
-
-Provider code is dependency-isolated:
-
-```text
-ValidatedWorld.AiReview             Core, Serialization, Validation
-ValidatedWorld.Application          later adds AiReview for transaction use cases
-ValidatedWorld.Persistence.Sqlite   implements Application review persistence ports
-ValidatedWorld.AiReview.OpenAI      AiReview plus the pinned OpenAI client
-ValidatedWorld.Cli                  composes Application plus an optional provider
-```
-
-Core, Serialization, Validation, Application, and SQLite persistence do not
-reference an OpenAI package. Application owns the transaction use case and
-persistence ports; the review package owns packet planning and provider-neutral
-contracts; SQLite implements the ports; the OpenAI package is one replaceable
-adapter. The product can also import a versioned structured response produced by
-an external human or agent.
-
-The first OpenAI adapter should use the Responses API with a strict JSON Schema
-matching the versioned review response. The model ID is required configuration,
-not a hard-coded "latest" choice, and the run records the actual model returned.
-The adapter supplies only the prepared packet and review rubric, exposes no
-tools, uses bounded retries only for transient failures, honors cancellation and
-timeout, and reports refusal or incomplete output as inconclusive. Re-check the
-current official [OpenAI .NET quickstart](https://developers.openai.com/api/docs/quickstart)
-and [Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs)
-when Gate B begins.
-
-## 7. Secrets and local configuration
-
-Gate A requires no API key. Gate B uses normal .NET configuration rather than a
-custom secret store:
-
-- For source-checkout development, `ValidatedWorld.Cli` carries a stable
-  `UserSecretsId`; store `AiReview:OpenAI:ApiKey` outside the repository. Gate B
-  adds `Microsoft.Extensions.Configuration.UserSecrets` and the runtime
-  configuration provider that consumes it.
-- For a published CLI, CI, or container, read `OPENAI_API_KEY` from the process
-  environment. The OpenAI SDK also recognizes this conventional name.
-- Read non-secret hierarchical settings from the `VW_`-prefixed environment
-  variables documented in [`.env.example`](../.env.example), with `__` as the
-  .NET hierarchy separator.
-- Never accept a secret as a CLI option, JSON request field, project setting, or
-  database value.
-
-The repository ignores `.env` and `.env.*` except `.env.example`. The example is
-a name/template catalog only. ValidatedWorld will not silently search parent or
-working directories for a `.env` file; that behavior is surprising for a CLI
-that may be invoked against untrusted projects. A user's launcher may explicitly
-load a private `.env` into the process environment.
-
-Secret Manager keeps development values outside the project tree but does not
-encrypt them and is not a production vault. See Microsoft's [.NET Secret Manager
-guidance](https://learn.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-10.0)
-and [configuration-provider guidance](https://learn.microsoft.com/en-us/dotnet/core/extensions/configuration-providers).
-
-Configuration precedence for the adapter is:
-
-1. explicit non-secret command/request settings allowed by the contract;
-2. process environment (`OPENAI_API_KEY`, then `VW_...` settings);
-3. .NET user-secrets during local development; and
-4. non-secret application defaults.
-
-There is no default provider or model, and missing credentials fail before any
-network call with a structured configuration error.
-
-## 8. Privacy, cost, and failure behavior
-
-An external review sends selected project content off-machine. The command must
-show the provider, model, packet counts, object/edge coverage, truncation state,
-and configured limits before a call. Network use is explicit; normal
-`verify`, `impact`, and `commit` never contact a provider merely because a key is
-present.
-
-Gate B provides limits for request count, input/output tokens, timeout, retries,
-and—when reliable pricing metadata is configured—estimated cost. Exceeding a
-limit is inconclusive. Provider unavailability, rate limiting, refusal,
-cancellation, malformed output, and secret/configuration errors cannot corrupt a
-draft and never become content-validation failures.
-
-## 9. Testing and Gate B acceptance
-
-The normal restore/build/test suite never needs a secret or live network:
-
-- deterministic fake providers exercise zero/many concerns;
-- scripted HTTP handlers exercise OpenAI request/response mapping without a
-  remote call;
-- malformed, partial, refused, timed-out, canceled, rate-limited, and retry
-  cases are covered;
-- property tests prove request/cache/freshness hashes change for every material
-  input and never include secrets;
-- persistence tests prove stale runs cannot satisfy policy and failed calls
-  cannot change canon;
-- CLI tests prove exactly one JSON result, no secret leakage, and no implicit
-  network use; and
-- live evaluation is separately opt-in and never a default acceptance test.
-
-Gate B's usefulness evaluation uses reviewed TechnicalProject variants with
-deliberately omitted links, stale numbers, inconsistent terminology, missing
-qualifications, and unrelated distractors. Measure concern precision, recall
-against the known issue set, false-positive burden, cost, latency, and whether
-scoped dependency packets outperform an unscoped whole-document prompt.
-
-Gate B succeeds only if it finds useful issues at tolerable cost without
-weakening the deterministic core or implying proof. If the in-app adapter adds
-no material value over exporting a context packet to an external agent, retain
-the provider-neutral import/export contract and remove the built-in call.
+Gate B succeeds only if one expensive review provides useful global scrutiny at
+tolerable cost without weakening the deterministic core. If it does not, remove
+the in-app call while retaining deterministic transaction/impact/context data.
 
 ## 10. Explicit non-goals
 
-This feature does not restore document generation or synchronization. It does
-not author a novel, paper, patent, manual, or game artifact. Candidate semantic
-records or transaction operations are proposals only. External tools remain
-responsible for using accepted project data and transaction impact to update
-finished artifacts.
+This feature does not author or synchronize a novel, paper, patent, manual, or
+game artifact. It does not support other providers/models, multiple reviewer
+calls, sharding, automatic retry, provider fallback, localization, tools, web
+search, external fact-checking, or automatic acceptance of suggestions.

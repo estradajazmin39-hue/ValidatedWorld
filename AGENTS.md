@@ -13,10 +13,19 @@ physical store. The engine validates explicit semantics, computes change impact,
 and can require review of affected records. It does not ingest, generate, render,
 publish, or validate arbitrary finished prose or game assets.
 
+Every project has exactly one purpose root. Every scope-bearing content record
+has one parent, so its upward scope lineage is singular while a parent may have
+many children. Transaction targets alone seed impact: adding ancestors as review
+context never causes traversal back down through their other children. Therefore
+changing a leaf excludes its siblings, changing an intermediate scope node can
+affect its subtree, and directly changing the purpose root affects the project.
+
 If Gate A proves the deterministic core useful, the first planned later phase is
-a bounded AI semantic reviewer. It receives exact dependency/impact context and
-returns cited heuristic concerns. It is provider-neutral, auditable,
-non-authoritative, and cannot mutate canon or turn a model opinion into proof.
+an expensive whole-transaction AI semantic reviewer. One request receives every
+changed item, every selected dependency/impact closure, and each selected item's
+singular lineage to the purpose root, including disjoint chains together. It
+returns cited heuristic concerns. It is auditable, non-authoritative, and cannot
+mutate canon or turn a model opinion into proof.
 
 ## Required reading and authority
 
@@ -92,10 +101,10 @@ mean an application/SQLite operation, not a Git commit.
 - `src/ValidatedWorld.Persistence.Sqlite` — SQLite schema, migrations,
   repositories, transactions, integrity checks, and logical snapshot mapping.
 - `src/ValidatedWorld.Cli` — agent-grade JSON command host and composition root.
-- `src/ValidatedWorld.AiReview` — planned post-Gate-A provider-neutral semantic
-  review packets, concerns, and orchestration; not yet created.
-- `src/ValidatedWorld.AiReview.OpenAI` — planned dependency-isolated optional
-  OpenAI adapter; not yet created.
+- `src/ValidatedWorld.AiReview` — planned post-Gate-A request planning,
+  concerns, review contracts, and fakeable orchestration; not yet created.
+- `src/ValidatedWorld.AiReview.OpenAI` — planned dependency-isolated sole
+  production review client; not yet created.
 - `tests/` — automated tests mirroring production boundaries.
 - `tests/ValidatedWorld.TestKit` — planned reusable app/CLI fixture and process
   helpers; it never writes canonical SQLite rows directly.
@@ -114,6 +123,13 @@ mean an application/SQLite operation, not a Git commit.
 - Use a small opinionated metamodel: logical type definitions, stable-ID records,
   typed relations/endpoints, typed references, constraints, transactions,
   reviews, and commits.
+- Require exactly one project-purpose root. Give each scope-bearing content
+  record exactly one `scope-parent`; following parents must terminate at the
+  root. A parent may have many children.
+- Define `scope-parent` as child-dependent-on-parent, but seed impact traversal
+  only from records directly targeted by transaction operations. Ancestors added
+  as context are never new impact seeds. A root-targeting operation is therefore
+  the deliberate project-wide review mechanism.
 - Keep domain vocabulary profile-driven. Do not force technical claims,
   fictional events, and game state into one domain ontology.
 - Make every graph-relevant reference explicit and typed. Foreign keys prove
@@ -140,6 +156,10 @@ mean an application/SQLite operation, not a Git commit.
 - Keep SQLite, JSON, UI, model-provider, and game-engine dependencies out of Core.
 - Never make a provider call while a SQLite write transaction is open. Normal
   validation, impact, and commit commands never contact a provider implicitly.
+- AI review is one whole-transaction request containing all selected disjoint
+  chains and their singular purpose lineages. Do not shard it, synthesize
+  multiple calls, fan an ancestor back down into siblings, or retry a paid call
+  automatically.
 - Never persist or log provider credentials. Use .NET user-secrets for local
   development and environment variables for published/deployed processes as
   specified in `docs/ai_semantic_review.md`.
@@ -183,10 +203,42 @@ services, secrets, or subjective manual judgment. Use fixed clocks/IDs/seeds,
 temporary app-generated databases, deterministic fault injection, scripted CLI
 scenarios, and structured golden outputs as applicable.
 
-The later AI-review phase follows the same rule for its normal suite: use fake
-providers and scripted HTTP responses. A real-provider evaluation is separately
+The later AI-review phase follows the same rule for its normal suite: use a fake
+client and scripted HTTP responses. A real-provider evaluation is separately
 opt-in, requires an intentionally supplied secret, and is never required for the
-default restore/build/test sequence.
+default restore/build/test sequence. The only planned production configuration
+is OpenAI with `gpt-5.6-terra`, medium reasoning, and the timeout documented in
+`docs/ai_semantic_review.md`; do not add provider/model selection or fallback.
+
+### Gate B secret and spending stop rule
+
+An agent may not begin any AI-review client, provider, prompt-submission, or live
+evaluation implementation unless the human's initiating prompt contains this
+exact separate line:
+
+```text
+AI_REVIEW_SECRET_READY: yes
+```
+
+If it is absent, make no implementation edits for that task. Tell the human to
+set their own key with the command in `docs/ai_semantic_review.md`, report the
+blocked precondition, and stop. Never search the web, repository, browser state,
+environment, shell history, credential stores, or unrelated configuration for a
+key; never obtain, generate, purchase, copy, infer, list, or set one. If a key is
+pasted into a prompt or tracked file, stop and tell the human to remove and
+rotate it.
+
+Even after the readiness attestation, normal development uses fakes. A paid call
+also requires this exact separate line in the initiating human prompt:
+
+```text
+AI_REVIEW_LIVE_CALL_AUTHORIZED: yes
+```
+
+Without it, generate and verify the exact request preview but send nothing. With
+it, send at most one request for the explicitly named evaluation, with zero
+automatic retries. A timeout, refusal, truncation, malformed response, or
+transport failure is an inconclusive run, not permission to spend again.
 
 Testing has three required layers whenever the current product surface supports
 them:

@@ -2,7 +2,7 @@
 
 **Status:** Authoritative product specification
 
-**Specification version:** 5.0
+**Specification version:** 5.1
 
 **Last reviewed:** 2026-08-12
 
@@ -66,14 +66,15 @@ transaction/validation boundary is the product.
 - One portable authoritative SQLite project file.
 - A fixed, migrated, integrity-constrained physical schema.
 - A small logical metamodel for typed records and relationships.
+- One required project-purpose root and a singular rooted scope hierarchy.
 - Exact versioned logical schema packages/profiles.
 - Stable IDs and per-object revisions.
 - Atomic optimistic project transactions.
 - Derived dependency/impact indexes.
 - Deterministic validators and structured diagnostics.
 - Review dispositions for policy-selected impacted objects.
-- A planned provider-neutral AI semantic-review workflow over bounded,
-  hash-addressed dependency/impact context (Gate B).
+- A planned one-request OpenAI semantic-review workflow over the complete
+  selected transaction context (Gate B).
 - Deterministic logical JSON snapshots, commands, and results.
 - Accepted commit operations and audit/replay evidence.
 
@@ -102,7 +103,7 @@ Every semantic validation result is:
   configured bound, cancellation, or failure prevented a conclusion.
 
 A separate Gate B result class is **Concern**: a heuristic reviewer identified a
-possible issue using supplied context. Review completion, freshness, packet
+possible issue using supplied context. Review completion, freshness, request
 coverage, and concern disposition are auditable workflow facts. Concern
 correctness is not deterministic, and a concern is never silently promoted to a
 `Disproven` result.
@@ -128,6 +129,7 @@ does not issue canonical DDL.
 The common domain defines:
 
 - schema packages;
+- one purpose root and rooted scope hierarchy;
 - record/relation type definitions;
 - field and endpoint-role definitions;
 - dependency rules;
@@ -245,7 +247,42 @@ Every addressable record, relation, and constraint has a globally unique stable
 ID within the project and a committed object revision. Names, labels, paths, and
 SQL row IDs are never semantic references.
 
-### 5.2 Records
+### 5.2 Project purpose and scope hierarchy
+
+Every project contains exactly one `core:project-purpose` record, identified by
+`ProjectSnapshot.PurposeObjectId`. Project initialization requires a substantive
+plain-English purpose and creates this record before ordinary content. Its
+conventional stable ID is `purpose:root`; it is ordinary canonical data and may
+be changed only through a transaction.
+
+Every scope-bearing content record other than the purpose has exactly one
+`core:scope-parent` relation. A parent may have many children. Repeatedly
+following a child's parent must be acyclic and terminate at the purpose root.
+Relations and constraints obtain scope context through their endpoints or
+targets rather than acquiring multiple parents of their own. Profiles explicitly
+declare which record categories are scope-bearing; Gate A's ordinary technical
+content is scope-bearing.
+
+`scope-parent` declares the child dependent on the parent and creates review
+impact. This does **not** turn every leaf edit into whole-project impact:
+
+- impact traversal is seeded only by actual transaction operation targets;
+- ancestors included later for review context never become impact seeds;
+- changing a leaf includes its single upward lineage but not sibling branches;
+- directly changing an intermediate scope node can impact its descendant subtree;
+- directly changing the purpose root impacts every descendant and is the
+  deliberate full-project-review operation.
+
+An upward walk never goes back down. The separate semantic dependency graph may
+branch and cross-link normally; the scope hierarchy exists to make contextual
+ownership and purpose explicit, not to replace those domain dependencies.
+
+The purpose is meaningful context for deterministic and AI review, but arbitrary
+natural-language conflict with it is not deterministically decidable. For
+example, a `Whopper` under a McDonald's-menu purpose becomes a cited AI concern
+unless a profile also supplies a closed deterministic vocabulary rule.
+
+### 5.3 Records
 
 A record contains:
 
@@ -260,7 +297,7 @@ Examples in the technical profile include subjects, propositions, assertions,
 sources, artifacts, and anchors. They are profile types, not hardcoded physical
 tables.
 
-### 5.3 Relations
+### 5.4 Relations
 
 A relation is first-class and contains:
 
@@ -274,7 +311,7 @@ A relation is first-class and contains:
 First-class relation identity allows evidence, provenance, review, and future
 relations-about-relations without treating an edge as an anonymous pair.
 
-### 5.4 Constraints
+### 5.5 Constraints
 
 Gate A uses a closed constraint catalog whose instances select objects by type,
 field, tag, lifecycle state, or relation kind. Initial generic/technical kinds
@@ -286,10 +323,11 @@ cover:
 - unique active definitions;
 - required implementation and verification coverage;
 - required impact dispositions.
+- exactly one purpose and singular acyclic scope lineage to it.
 
 There is no arbitrary SQL, expression, trigger, or scripting constraint language.
 
-### 5.5 External artifacts and anchors
+### 5.6 External artifacts and anchors
 
 Artifact and anchor are logical profile record types. They may store opaque
 external locators and observed external version/hash claims. Anchors may form an
@@ -297,7 +335,7 @@ acyclic ordered hierarchy and bind to semantic objects using typed relations.
 
 The engine never follows a locator or verifies external bytes.
 
-### 5.6 Open-world default
+### 5.7 Open-world default
 
 Missing information is unknown or unmodeled, not false. Negative assertions are
 explicit. A profile may declare a finite closed-world rule, and diagnostics must
@@ -370,7 +408,7 @@ not an ORM.
 
 SQLite physical bytes are not semantic identity. The logical snapshot includes:
 
-- project head metadata and policy;
+- project head metadata, policy, and `purposeObjectId`;
 - selected complete schema package definitions;
 - all current graph objects, values, endpoints, and constraints;
 - exact deterministic ordering.
@@ -418,6 +456,7 @@ Edges are derived from:
 
 - reference-valued fields whose field definitions declare dependency behavior;
 - relation endpoints interpreted by relation-type dependency rules;
+- the built-in `scope-parent` child-to-parent dependency rule;
 - containment and definition rules declared by profiles;
 - constraint and understood profile references.
 
@@ -431,6 +470,12 @@ review-impact edges in the union of base and projected dependency graphs:
 
 - base edges retain impact from removed/redirected dependencies;
 - projected edges include impact from new dependencies.
+
+Only direct operation targets seed traversal. Records added afterward as
+contextual ancestors, including the purpose root, are never fed back into impact
+traversal. Consequently a leaf's upward purpose lineage cannot accidentally
+select siblings; the root selects the full project only when the transaction
+directly changes it.
 
 Results contain changed IDs, impacted IDs, shortest deterministic explanation
 paths, relation/field evidence, completeness/bounds, and statistics.
@@ -451,22 +496,22 @@ changes invalidate stale dispositions.
 ### 7.6 Planned AI semantic review — Gate B
 
 After deterministic projection, validation, impact, and obligation construction,
-a project policy may require a named AI semantic-review profile for selected
-changes. The application builds an exact review plan from changed objects, the
-policy-selected impact closure, explanation edges, required forward
-dependencies, applicable constraints, and anchors. It then supplies bounded,
-versioned context packets to a provider-neutral reviewer.
+a project policy may require AI semantic review for selected changes. The
+application builds one exact request from the complete transaction, every
+policy-selected impact closure and explanation edge, required forward
+dependencies, applicable constraints and anchors, and the singular upward scope
+lineage from every included content record to the project purpose. All disjoint
+chains remain together in the same request.
 
 The reviewer returns structured concerns with cited object/field/edge evidence,
 insufficient-context observations, and separately identified candidate records,
 relationships, or operations. Candidates never become canonical automatically.
 Policy may require a complete fresh run and a disposition for every concern.
 
-If the full selected dependency chain cannot fit one request, the later phase
-uses deterministic sharding plus a coverage manifest and synthesis call. A run
-is complete only if every required object and dependency edge was presented and
-all required calls completed. This guarantees review coverage, not model
-comprehension or correctness.
+The request has an exact preview and coverage manifest. If all required context
+cannot fit the selected model's input, the run is inconclusive before any paid
+call. There is no sharding, synthesis, fallback model, or automatic retry. This
+guarantees which context was offered, not model comprehension or correctness.
 
 Provider refusal, timeout, cancellation, malformed output, unavailable
 credentials, or incomplete coverage makes the review failed or inconclusive; it
@@ -571,10 +616,10 @@ or legal correctness.
 ### 10.2 AI semantic review — Gate B
 
 Gate B is a cross-profile review service, not another domain ontology. It adds
-review plans, bounded context-packet coverage, provider-neutral structured
-concerns, freshness and disposition policy, a fake provider, and one optional
-dependency-isolated OpenAI adapter. It is evaluated first against deliberately
-omitted or stale TechnicalProject semantics.
+one-request coverage plans, structured concerns, freshness and disposition
+policy, a fake test client, and one dependency-isolated OpenAI production client
+using `gpt-5.6-terra` with medium reasoning. It is evaluated first against
+deliberately omitted or stale TechnicalProject semantics.
 
 ### 10.3 Linear narrative profile — Gate C
 
@@ -616,16 +661,18 @@ operates on immutable logical snapshots and indexes, not SQL connections. This
 keeps semantics backend-neutral without pretending all database engines have the
 same operational behavior.
 
-During Gate B, Application adds a reference to the provider-neutral AiReview
-assembly and review persistence ports; SQLite implements those ports, and the
-CLI alone composes an optional OpenAI adapter. No deterministic-core project
-references a provider SDK.
+During Gate B, Application adds a reference to the provider-independent internal
+review contracts and persistence ports; SQLite implements those ports, and the
+CLI alone composes the sole OpenAI production client. The interface exists for
+offline testing and dependency isolation, not to promise multiple providers. No
+deterministic-core project references a provider SDK.
 
 ## 12. Gate A proof of concept
 
-The `TechnicalProject` fixture includes an offline sensor design with external
-anchors for requirements, power budget, architecture, privacy, verification,
-manuals, and unrelated accessibility material.
+The `TechnicalProject` fixture starts with one plain-English purpose and a rooted
+scope hierarchy, then includes an offline sensor design with external anchors for
+requirements, power budget, architecture, privacy, verification, manuals, and
+unrelated accessibility material.
 
 The initial graph contains a 24-hour runtime requirement, a 20 mA current
 assumption, a 500 mAh capacity assumption, a 25-hour runtime result, and a
@@ -636,6 +683,11 @@ battery decision, and power/architecture/verification anchors, but not the
 privacy or accessibility tracks.
 A valid transaction repairs structured capacity/runtime values and all required
 dispositions together.
+
+The changed power leaf's ancestors are included as context without selecting
+their privacy/accessibility children. A separate transaction that directly
+changes the purpose root must impact every descendant, demonstrating the one
+intentional full-project-review operation.
 
 The fixture also includes a realistic soft-logic design track: no-upload and
 retention requirements, definitions, assumptions, privacy claims, architecture
@@ -653,18 +705,21 @@ Gate A must prove:
 3. Deterministic database-to-logical-JSON round trip and hash.
 4. Stable-ID transaction projection and optimistic preconditions.
 5. Exact complete impact with explainable paths.
-6. Deterministic validation and coverage.
-7. Pending obligations block commit.
-8. Rejected/stale commits roll back every database row.
-9. Accepted operations replay to the recorded logical hash.
-10. Documented read views and JSON results are deterministic.
-11. A lower-cost agent can query and repair the project without direct writes.
-12. Synthetic 100,000-record/1,000,000-edge performance stays within documented
+6. Exact-one purpose and singular, acyclic, root-reaching scope validation.
+7. Context-only ancestor ascent never selects siblings, while a direct root
+   change selects the full project.
+8. Deterministic validation and coverage.
+9. Pending obligations block commit.
+10. Rejected/stale commits roll back every database row.
+11. Accepted operations replay to the recorded logical hash.
+12. Documented read views and JSON results are deterministic.
+13. A lower-cost agent can query and repair the project without direct writes.
+14. Synthetic 100,000-record/1,000,000-edge performance stays within documented
     budgets.
-13. Starting with the first database/CLI walking skeleton, each usable work
+15. Starting with the first database/CLI walking skeleton, each usable work
     package has a replayable realistic end-to-end scenario and an actual
     AI-agent black-box QA walkthrough through public commands.
-14. Agent QA findings become regression tests when deterministic and are
+16. Agent QA findings become regression tests when deterministic and are
     reported to the human when they expose friction, misleading behavior,
     excessive modeling burden, or a questionable product direction.
 
@@ -701,24 +756,31 @@ requests a separate planning task. It must:
 
 1. Preserve all deterministic behavior when the AI-review assemblies and
    configuration are absent.
-2. Build hash-addressed review plans/packets with explicit object/edge coverage,
-   omissions, bounds, and freshness.
+2. Build one hash-addressed whole-transaction request with explicit object/edge
+   coverage, all disjoint selected chains, singular purpose lineages, omissions,
+   bounds, and freshness.
 3. Accept only versioned schema-valid concerns that cite supplied IDs and
    evidence.
 4. Keep candidate links/operations noncanonical until explicitly applied.
 5. Enforce required run/concern dispositions without calling the concerns true.
-6. Make every provider failure, refusal, bound, and cancellation auditable and
-   inconclusive.
+6. Make every client failure, refusal, bound, and cancellation auditable and
+   inconclusive, with zero automatic retries.
 7. Keep secrets outside the project/database/protocol and never invoke a
    provider implicitly.
-8. Pass its normal suite with fake providers and scripted HTTP—no key or live
+8. Pass its normal suite with one fake client and scripted HTTP—no key or live
    network.
-9. Evaluate an explicitly enabled real provider on known missing/stale issues,
-   false positives, cost, latency, and scoped-versus-unscoped usefulness.
+9. Support exactly one production configuration: OpenAI `gpt-5.6-terra` with
+   medium reasoning; do not add provider or model alternatives.
+10. Refuse implementation unless the initiating human has personally installed
+    the key and supplied the exact readiness attestation in the AI-review design.
+11. Require a second exact human attestation before one live call; preview the
+    complete request first and never retry automatically.
+12. Evaluate that explicitly enabled path on known missing/stale issues, false
+    positives, cost, latency, and scoped-versus-unscoped usefulness.
 
-If the built-in call does not outperform exporting the same packet to an
-external reviewer and importing structured results, retain interchange and omit
-the adapter. Gate A remains useful independently.
+If the built-in call does not add enough measurable value, omit Gate B rather
+than broadening into provider selection or general AI orchestration. Gate A
+remains useful independently.
 
 ## 14. Success and stop criteria
 

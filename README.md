@@ -48,6 +48,8 @@ record was reviewed.
 Instead, the physical database has a small fixed metamodel:
 
 - stable-ID records with versioned logical types and typed fields;
+- one required project-purpose root and a singular `scope-parent` lineage from
+  each scope-bearing content record to that root;
 - first-class typed relationships with named endpoints and impact semantics;
 - extracted record references with foreign-key integrity;
 - closed deterministic constraint kinds;
@@ -82,10 +84,11 @@ There is no special diff format. Accepted transaction operations are the direct
 change record; impact analysis supplies the transitive consequences.
 
 After Gate A, ValidatedWorld is planned to own one narrowly scoped AI feature:
-an optional semantic-review workflow over an exact projected transaction and its
-dependency/impact context. The reviewer returns cited concerns and candidate
-links or operations. It never edits canon, generates the finished artifact, or
-turns a model judgment into deterministic proof.
+an optional semantic review of one complete projected transaction. Its single
+request contains all selected dependency/impact chains—even when disjoint—and
+each included record's singular lineage to the project-purpose root. The
+reviewer returns cited concerns and candidate links or operations. It never edits
+canon, generates the finished artifact, or turns a model judgment into proof.
 
 ## Intended uses
 
@@ -108,27 +111,36 @@ direction. It was intentionally moved out of the Gate A implementation so the
 database, graph, transaction, and impact guarantees can be proven without a
 network, API key, or particular model provider.
 
-If Gate A succeeds, Gate B adds a provider-neutral review plan. The app first
-computes deterministic impact, then gives a bounded AI reviewer the changed
-records, selected dependency chain, applicable constraints, explanation paths,
-and an explicit coverage/omission manifest. The model can flag likely missing
-connections, stale implications, contradictions, terminology drift, missing
-qualifications, or insufficient context. Results are structured `Concern`
-records with cited object IDs.
+If Gate A succeeds, Gate B adds an expensive "lore-team" review. The app first
+computes deterministic impact, then makes one request containing the entire
+transaction, all selected dependency and impact closures, applicable
+constraints, explanation paths, an explicit coverage/omission manifest, and the
+singular upward scope lineage for every included record. Disjoint chains remain
+together so the reviewer can detect cross-change conflicts. The model can flag
+likely missing connections, stale implications, contradictions, terminology
+drift, missing qualifications, or insufficient context. Results are structured
+`Concern` records with cited object IDs.
+
+Scope ascent is contextual, not a new impact seed. A leaf change includes its
+ancestors but not their other children. Directly changing an intermediate scope
+node can affect its descendant subtree. Only directly changing the purpose root
+deliberately triggers project-wide review.
 
 A policy may require that review to run and require each concern to be repaired,
 rejected with rationale, or acknowledged. The guarantee is that the exact review
 workflow occurred and was dispositioned—not that the AI was right. Provider
-failure is inconclusive, and suggestions become canon only through an explicit
-ValidatedWorld transaction.
+failure is inconclusive, a paid request is never retried automatically, and
+suggestions become canon only through an explicit ValidatedWorld transaction.
 
-The first planned adapter is OpenAI, isolated from the core and replaceable by
-another provider or imported structured review JSON. Local source development
-will use .NET Secret Manager; published processes use `OPENAI_API_KEY`. The
+Gate B deliberately supports one production path: OpenAI using
+`gpt-5.6-terra` with medium reasoning. Tests use a fake client and scripted HTTP,
+not alternative providers. Local source development uses .NET Secret Manager;
+published processes use `OPENAI_API_KEY`. Before an agent may begin that feature,
+the human must personally install the key and explicitly attest readiness as
+specified in [Planned AI semantic review](docs/ai_semantic_review.md). The
 tracked [`.env.example`](.env.example) lists configuration names, while real
 `.env` files remain ignored and are not loaded implicitly. The normal build and
-test suite never needs a secret or live API call. See [Planned AI semantic
-review](docs/ai_semantic_review.md).
+test suite never needs a secret or live API call.
 
 ## Core workflow
 
@@ -155,7 +167,7 @@ open project.vw.db and verify its logical head hash
 - [Implementation blueprint](docs/implementation_blueprint.md) — exact storage
   schema, algorithms, tests, and work packages.
 - [Planned AI semantic review](docs/ai_semantic_review.md) — post-Gate-A review
-  packets, provider boundary, concerns, secrets, and evaluation.
+  whole-transaction request, scope, concerns, secrets, and evaluation.
 - [Testing, fixtures, and agent QA](docs/testing_and_qa.md) — embedded SQLite
   packaging, reusable application-generated scenarios, end-to-end tests, and
   usability walkthroughs.
@@ -265,7 +277,7 @@ complete and WP1 (the common metamodel) is the Current task. The execution
 plan, rather than this summary, is authoritative if progress changes. Gate A is
 a small technical-project graph backed by SQLite. It must prove useful and
 accurate impact at acceptable modeling cost before narrative or game profiles
-are implemented. The bounded AI semantic reviewer is preserved as the first
+are implemented. The whole-transaction AI semantic reviewer is preserved as the first
 recommended post-Gate-A phase; it is specified but not implemented in WP1.
 
 Build and test with:

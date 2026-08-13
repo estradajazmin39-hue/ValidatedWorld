@@ -50,6 +50,10 @@ deterministic validators, not arbitrary physical DDL.
 
 Every project contains:
 
+- **One purpose root:** a required record stating what the whole project is for.
+- **A rooted scope hierarchy:** each ordinary scope-bearing content record has
+  exactly one parent; following parents terminates at the purpose root, while a
+  parent may have many children.
 - **Schema package selections:** exact versions of the logical profiles that
   define allowed record and relation types.
 - **Records:** stable-ID typed nodes with revisions and typed field values.
@@ -94,6 +98,8 @@ supported profiles, properties such as:
 
 - logical type definitions and field values are valid;
 - relationship endpoint roles and kinds are compatible;
+- exactly one purpose root exists and every required scope lineage is singular,
+  acyclic, and reaches it;
 - every graph-relevant reference was extracted and indexed;
 - selected accepted assertions explicitly contradict;
 - a requirement or conclusion has declared support/traceability;
@@ -120,10 +126,17 @@ Every result is labeled:
 
 The earlier design's AI semantic reviewer remains feasible, but it belongs to a
 separate evidence class and gate. After deterministic projection, validation,
-and impact, a bounded reviewer can inspect changed records and the selected
-dependency chain to flag likely missing links, stale implications,
-contradictions, inconsistent terminology, missing qualifications, or
-insufficient context.
+and impact, one expensive request can inspect the whole transaction, every
+policy-selected dependency/impact closure—even when those closures are
+disjoint—and each included record's singular lineage to the purpose root. It can
+flag likely missing links, stale implications, contradictions, inconsistent
+terminology, missing qualifications, or insufficient context.
+
+The purpose hierarchy does not make every leaf change project-wide. Impact is
+seeded only by direct transaction targets. Ancestors added to explain a leaf do
+not become new seeds and do not fan back down through siblings. Directly changing
+an intermediate scope node can affect its descendants; directly changing the
+purpose root is the explicit operation that affects the entire project.
 
 Its findings are **Concerns**. Project policy may require a current review run
 and require every concern to be repaired, rejected with rationale, or
@@ -245,6 +258,7 @@ It supports:
 - one authoritative `project.vw.db`;
 - a fixed SQLite schema with migrations and integrity checks;
 - a small logical record/relation metamodel;
+- one required purpose root and singular scope hierarchy;
 - one versioned built-in technical profile;
 - stable IDs, revisions, typed values, references, and relation endpoints;
 - deterministic logical JSON serialization and hashing;
@@ -266,20 +280,21 @@ It does not require:
 - narrative or interactive-state implementation.
 
 This is a Gate A scope statement, not deletion of intelligent review from the
-product direction. Gate B may add a provider-neutral review workflow and one
-optional dependency-isolated provider adapter without weakening the standalone
-deterministic product.
+product direction. Gate B may add the one-request OpenAI review workflow without
+weakening the standalone deterministic product.
 
 ## First proof scenario
 
-The `TechnicalProject` sample describes an offline sensor design graph and
+The `TechnicalProject` sample starts with one plain-English purpose record and a
+scope hierarchy, then describes an offline sensor design graph and
 external anchors for requirements, power budget, architecture, privacy,
 verification, manuals, and unrelated accessibility material.
 
 Changing average current from 20 mA to 25 mA must impact the runtime result,
 battery decision, and relevant anchors. A valid transaction repairs the affected
 structured values and dispositions together. The privacy anchors must not appear
-for that power-only change.
+for that power-only change. Power-scope ancestors are context only and must not
+pull sibling privacy or accessibility branches into impact.
 
 A second soft-logic track models no-upload and data-retention requirements,
 definitions, assumptions, evidence, privacy claims, architecture decisions,
@@ -290,7 +305,9 @@ evidence and explicit-contradiction variants must produce actionable diagnostics
 
 The same scenario must demonstrate why raw foreign keys are insufficient: the
 engine follows declared semantic dependency rules, not every relational
-reference, and explains every selected path.
+reference, and explains every selected path. A separate root-changing
+transaction must select the entire project, proving that full-project review is
+available only when the purpose itself is directly changed.
 
 ## Implementation proof discipline
 
@@ -347,16 +364,18 @@ If Gate A succeeds, the project has a useful release direction.
 
 ### Gate B — AI semantic review
 
-Evaluate bounded dependency/impact review packets on deliberately omitted links,
-stale implications, contradictions, terminology drift, and unrelated
-distractors. Measure precision, recall against the known issue set,
-false-positive burden, cost, latency, context coverage, and whether the scoped
-workflow materially outperforms an unscoped whole-document prompt.
+Evaluate one complete transaction request on deliberately omitted links, stale
+implications, contradictions, terminology drift, disjoint change chains, and
+unrelated siblings. Measure precision, recall against the known issue set,
+false-positive burden, cost, latency, exact scope coverage, and whether the
+structured workflow materially outperforms an unscoped whole-document prompt.
 
-Use fake/scripted providers for normal tests and one explicitly configured live
-provider only for the opt-in usefulness evaluation. Retain the built-in call
-only if it adds value over exporting a packet and importing structured concerns.
-Never make a provider mandatory in Core or call its findings proof.
+Use a fake client and scripted HTTP for normal tests. The sole production/live
+path is OpenAI with `gpt-5.6-terra` and medium reasoning. A human must personally
+install the secret and provide both readiness and per-run authorization before
+any live request. Send the entire review in one request and never retry it
+automatically. Never make this client mandatory in Core or call its findings
+proof.
 
 ### Gate C — Linear narrative profile
 
@@ -387,9 +406,8 @@ value over generic nodes and links, remove it. If impact/review offers no
 meaningful advantage over Doorstop or ordinary SQL plus review, archive or pivot
 the experiment.
 
-If the in-app AI reviewer adds no measurable value over giving the same context
-packet to an external agent, keep structured packet/result interchange and omit
-the provider adapter. This failure does not invalidate Gate A.
+If the in-app AI reviewer adds no measurable value, omit Gate B rather than
+growing a provider ecosystem. This failure does not invalidate Gate A.
 
 ## Product language
 
