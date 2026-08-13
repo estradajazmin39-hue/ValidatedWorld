@@ -36,8 +36,12 @@ ScaffoldingReadMe.txt
 # NuGet Symbol Packages
 *.snupkg
 
-# dotenv environment variables file
+# Local environment/secrets files. `.env.example` contains names only and is
+# deliberately tracked; real values belong in .NET user-secrets or the process
+# environment and must never be committed.
 .env
+.env.*
+!.env.example
 
 # Others
 ~$*

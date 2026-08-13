@@ -5,6 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UserSecretsId>ValidatedWorld.Cli-b64c52d4-ec2c-4d22-9647-d0e3c9bb8ed7</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

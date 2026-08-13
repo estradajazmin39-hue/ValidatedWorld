@@ -2,7 +2,7 @@
 
 **Status:** Architectural research record
 
-**Last reviewed:** 2026-08-11
+**Last reviewed:** 2026-08-13
 
 ## Purpose
 
@@ -26,7 +26,8 @@ review or clear them.
 This is close to ValidatedWorld's technical-project use case. ValidatedWorld is
 not justified as merely “Doorstop with JSON/SQLite.” Its distinct hypothesis is:
 
-- one general typed graph rather than a document hierarchy;
+- one general typed node/edge graph with a spanning scope tree rather than a
+  document hierarchy;
 - explicit relationship-specific impact direction;
 - transitive base-plus-projected impact paths;
 - commit-blocking dispositions over the whole proposed transaction;
@@ -128,6 +129,29 @@ ValidatedWorld is not RAG:
 A ValidatedWorld context query can feed a RAG or authoring agent. That is an
 integration relationship, not product duplication.
 
+## AI agents, MCP, and OpenAI plugins
+
+OpenAI's current [plugin architecture](https://developers.openai.com/plugins/concepts/plugins)
+packages reusable skills, an optional MCP server, or both; custom UI is optional.
+Its [MCP guidance](https://developers.openai.com/plugins/build/mcp-server)
+recommends focused goal-oriented tools with explicit schemas and structured
+results. This matches ValidatedWorld's intended external packaging, but it is not
+the internal semantic architecture.
+
+ValidatedWorld first owns a strict Application tool contract for search,
+navigation, drafts, validation, impact, review, guarded commit, and audit. The
+built-in authoring agent, CLI, and later MCP server are adapters over that one
+contract. A plugin then packages the MCP tools plus workflow guidance so a user
+can conversationally operate a graph much larger than the model's current
+context without a required visual editor.
+
+The distinguishing claim is not generic tool calling. It is that every agent
+mutation remains a stale-checked durable draft, deterministic whole-graph rules
+and declared dependency impact run outside the model, required independent
+review is auditable, and conversational approval authorizes only the exact
+current commit. Existing agent/MCP frameworks provide orchestration and
+packaging; they do not supply those project semantics.
+
 ## Persistence decision
 
 [SQLite](https://www.sqlite.org/appfileformat.html) is specifically suitable as
@@ -138,6 +162,20 @@ queries over trees and graphs.
 SQLite therefore owns physical integrity and persistence for Gate A. JSON remains
 the versioned protocol and deterministic logical snapshot. The C# engine owns
 semantic meaning and commit policy.
+
+The v1 storage deliberately avoids reproducing a full property-graph database
+inside SQLite. Nine tables cover migration/project metadata, canonical package
+and type definitions, graph entities/edge endpoints, drafts, validation runs,
+and commits. Scalar property maps remain canonical JSON and are validated by C#.
+This sacrifices arbitrary indexed SQL over every property and native hyperedges;
+higher-arity relations are reified as nodes. Those features are not needed to
+test transaction impact, review, or Gate B context completeness. Add a property
+index or specialized graph store only after measurement demonstrates a failure.
+
+SQLite is embedded and serverless. ValidatedWorld deploys a pinned native bundle
+through NuGet and owns database creation/backup, so a separate SQLite install,
+server, administration tool, or Docker environment is not part of the user or QA
+workflow. See [testing_and_qa.md](testing_and_qa.md).
 
 ## Product survival test
 
@@ -150,7 +188,19 @@ Continue only if Gate A demonstrates all of the following:
 4. A stable small metamodel that supports materially different profiles without
    arbitrary physical schemas.
 5. Deterministic behavior that RAG/LLM extraction cannot provide.
+6. Repeated black-box agent walkthroughs can complete realistic soft-logic tasks
+   from public documentation without source knowledge or direct canonical SQL.
+7. The later conversational authoring agent materially reduces graph-entry
+   burden on projects larger than its working context without creating duplicate
+   or unrelated state or bypassing guarded commit.
 
 If it only becomes a database schema, use an existing database directly. If it
 only becomes a requirements-link tool, use or extend an existing requirements
 tool. If it only becomes context retrieval, use a RAG/knowledge-graph system.
+
+WP9 records the reproducible comparison evidence and resulting Gate A outcome in
+[implementation_execution_plan.md](implementation_execution_plan.md). Narrative,
+provider-backed authoring, interactive-state, and integration work is outside the
+current roadmap. It requires a conclusive outcome supported by the applicable
+criteria above and a new human-requested planning task. The evaluating agent
+reports the choices and stops; it does not infer permission to continue.

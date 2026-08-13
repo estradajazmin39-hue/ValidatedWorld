@@ -2,23 +2,25 @@
 
 **Status:** Accepted product boundary
 
-**Last reviewed:** 2026-08-11
+**Last reviewed:** 2026-08-13
 
 ## Verdict
 
 ValidatedWorld is feasible if it is built as a **semantic change-control engine
-over a small relational metamodel**, not as a monolithic JSON document, a generic
+over one typed property graph**, not as a monolithic JSON document, a generic
 database, or an exhortation for AIs to write careful SQL.
 
 One SQLite application file is the authoritative workspace. JSON is the
 deterministic command/result and logical-snapshot format. The C# engine owns the
-semantics that ordinary database constraints do not express: typed dependency
+semantics that ordinary database constraints do not express: typed edge impact
 direction, transitive impact across old and projected state, review obligations,
 profile constraints, coverage, and inconclusive outcomes.
 
-ValidatedWorld is not a document system. It does not read or rewrite a novel,
-patent application, whitepaper, manual, or game project. External tools may use
-its data and impact results, but that workflow remains outside its guarantee.
+Gate A is not a document system. A later AI-first authoring gate may accept
+explicit user-supplied text/images and convert intent into proposed graph
+operations, but finished novels, patent applications, whitepapers, manuals, and
+games remain external. Extraction and generation stay heuristic rather than part
+of the deterministic guarantee.
 
 ## Why not arbitrary AI-authored tables
 
@@ -32,51 +34,74 @@ itself, specify:
 - whether impact flows forward, backward, both ways, or not at all;
 - whether a relationship is evidence, definition, contradiction, chronology,
   implementation, knowledge, or presentation order;
-- which endpoint types and lifecycle states make the relation authoritative;
+- which endpoint types and lifecycle states make an edge authoritative;
 - which changes require review;
 - whether missing data means false, unknown, or outside coverage;
-- how a changed schema affects existing records;
+- how a changed schema affects existing nodes and edges;
 - what evidence explains a validation result.
 
 An AI could infer those meanings heuristically from table/column names, but then
 ValidatedWorld could not promise repeatable impact or validation across models.
 That would reduce the product to a prompt and database convention.
 
-The product therefore owns a small fixed physical schema and logical metamodel.
-Profiles add vocabulary through versioned type definitions and registered
-deterministic validators, not arbitrary physical DDL.
+The product therefore owns a small fixed physical schema and one logical
+node/edge model. Profiles add vocabulary through versioned node/edge type
+definitions and registered deterministic validators, not arbitrary physical DDL.
 
-## The common metamodel
+## The common graph metamodel
 
 Every project contains:
 
-- **Schema package selections:** exact versions of the logical profiles that
-  define allowed record and relation types.
-- **Records:** stable-ID typed nodes with revisions and typed field values.
-- **Relationships:** stable-ID first-class relations with named endpoints,
-  provenance, fields, and declared impact semantics.
-- **References:** record-valued fields extracted into indexed foreign-key rows.
-- **Constraints:** instances of a closed deterministic constraint catalog.
-- **External artifacts and anchors:** ordinary profile records that point to
-  locations outside the database without loading their bytes.
+- **Nodes:** every authored concept is a stable-ID typed node with revision,
+  scalar properties, tags, and extensions.
+- **Edges:** every graph-relevant connection is a stable-ID typed binary edge
+  with source, target, scalar properties, provenance, and declared impact mode.
+- **One purpose root and spanning scope tree:** every node except the purpose has
+  exactly one `scope-parent` edge; a parent may have many children.
+- **A semantic multigraph:** all non-scope edges may cross branches, form cycles
+  unless their type forbids it, and create zero, one, or two directed dependency
+  arcs according to their type.
+- **Schema package selections:** exact versions of profiles defining allowed node
+  and edge types, properties, endpoint types, constraints, and validators.
+- **Constraints and external anchors:** ordinary typed nodes connected to their
+  targets by explicit edges. A relationship needing more than two roles is
+  reified as a node with edges.
 - **Transactions:** draft add/replace/remove operations against an exact head.
-- **Reviews:** dispositions tied to exact projected records and impact paths.
+- **Reviews:** dispositions tied to exact projected nodes and impact paths.
 - **Commits:** accepted operations, hashes, author/intent, and audit evidence.
 
-The common engine need not know that a record is a character or an electrical
-quantity. It must know its logical type, field schema, references, and applicable
-relationship/constraint semantics. Profiles provide the domain interpretation.
+The common engine need not know that a node is a character or an electrical
+quantity. It must know its logical type, scalar property schema, explicit edges,
+and applicable constraints. Profiles provide the domain interpretation.
+
+Schema packages and the draft/validation/commit ledger are not forced into the
+content graph. Doing so would make implementation metadata look like project
+meaning. They are the small control plane around one canonical content graph.
+
+## What the simplification deliberately trades away
+
+Gate A stores scalar property maps as canonical JSON rather than normalizing one
+row per property value. SQLite therefore enforces entity identity, type
+existence, edge endpoint existence, uniqueness, JSON validity, and transaction
+atomicity; C# enforces dynamic property types/cardinality and profile rules.
+
+This gives up some ad hoc SQL property indexing and property-level SQL constraints. It
+also replaces native named-role hyperedges with an explicit relation node when a
+binary edge is insufficient. Neither loss affects deterministic graph impact,
+atomic commits, logical hashing, or Gate B context construction. Add a
+materialized property index only if Gate A measurements demonstrate a real query
+bottleneck; do not prepay that complexity.
 
 ## Persistence responsibilities
 
 SQLite guarantees and indexes structural facts such as:
 
-- globally unique project record and relation IDs;
-- existing project/type/endpoint/target rows;
+- globally unique graph-entity IDs;
+- existing node/edge types and edge endpoint nodes;
 - non-null and simple check constraints;
 - restricted deletes;
 - atomic multi-table writes;
-- indexed lookup by ID, type, endpoint, and revision;
+- indexed lookup by entity ID, type, source, target, and revision;
 - durable storage of drafts, reviews, commits, and diagnostics.
 
 The application must enable and verify foreign-key enforcement on every
@@ -92,14 +117,16 @@ deterministically ordered logical JSON snapshot derived from the database.
 The C# engine can deterministically prove or disprove, within explicit data and
 supported profiles, properties such as:
 
-- logical type definitions and field values are valid;
-- relationship endpoint roles and kinds are compatible;
-- every graph-relevant reference was extracted and indexed;
+- node/edge type definitions and scalar properties are valid;
+- edge source/target types and impact modes are compatible;
+- exactly one purpose root exists and every required scope lineage is singular,
+  acyclic, and reaches it;
+- every graph-relevant connection is an explicit edge;
 - selected accepted assertions explicitly contradict;
 - a requirement or conclusion has declared support/traceability;
 - selected dependency kinds contain no forbidden cycle;
 - a transaction's impact is complete over every declared dependency rule;
-- every policy-selected impacted record has a current disposition;
+- every policy-selected impacted node has a current disposition;
 - a stale transaction cannot commit;
 - a rejected transaction leaves all authoritative database rows unchanged;
 - accepted operations replay from the recorded base to the same logical hash.
@@ -116,11 +143,65 @@ Every result is labeled:
 - **Inconclusive:** missing annotations, unsupported schema/profile data, bounds,
   cancellation, or failure prevented a conclusion.
 
+## Planned heuristic responsibility
+
+The earlier design's AI semantic reviewer remains feasible, but it belongs to a
+separate evidence class and gate. After deterministic projection, validation,
+and impact, one expensive request can inspect the whole transaction, every
+policy-selected dependency/impact closure—even when those closures are
+disjoint—and each included node's singular lineage to the purpose root. It can
+flag likely missing links, stale implications, contradictions, inconsistent
+terminology, missing qualifications, or insufficient context.
+
+The purpose hierarchy does not make every leaf change project-wide. Impact is
+seeded only by direct transaction targets. Ancestors added to explain a leaf do
+not become new seeds and do not fan back down through siblings. Directly changing
+an intermediate scope node can affect its descendants; directly changing the
+purpose root is the explicit operation that affects the entire project.
+
+Its findings are **Concerns**. Project policy may require a current review run
+and require every concern to be repaired, rejected with rationale, or
+acknowledged. That makes completion and disposition deterministic workflow
+facts; it does not make the model's judgment correct. Candidate links and
+operations remain noncanonical until explicitly applied through a transaction.
+
+Gate A does not need this feature or an API key. If Gate A succeeds, the planned
+Gate B evaluates scoped, auditable review against known omissions before any
+narrative or interactive-state expansion. See
+[Planned AI semantic review](ai_semantic_review.md).
+
+## Planned AI-first authoring responsibility
+
+The mature product is intended to let a user describe a new project or desired
+alteration in ordinary language and optionally supply explicit text/image inputs.
+A conversational authoring agent then searches and reads bounded graph context,
+asks focused questions, and calls validated draft tools until the proposed
+transaction is ready for review and explicit user confirmation.
+
+This is feasible because the agent does not need the entire project in model
+context. SQLite is persistent memory; deterministic search, tree navigation,
+dependency queries, projection, and whole-graph validators provide the working
+surface. The agent may resume from the durable draft after pausing for user
+input. This is the product's central purpose: a user can converse naturally with
+an AI that safely updates a project far larger than any one context window by
+repeatedly retrieving the relevant working set. Deterministic checks still cover
+the whole explicitly modeled graph; a required heuristic review that cannot fit
+its selected scope reports inconclusive instead of silently omitting context.
+
+The authoring model has no SQL or unguarded canonical-write capability. It uses
+explicit Application-level operations. The user may approve the exact preview in
+conversation; the host binds that approval to the head, draft revision,
+change-set hash, projected hash, and review state, and the agent calls the guarded
+commit tool. Gate B remains a fresh tool-free reviewer rather than letting the
+author approve its own work. See
+[AI-first authoring and intake](ai_authoring_agent.md).
+
 ## What cannot be guaranteed
 
 ValidatedWorld cannot generally:
 
 - recover every fact or dependency from unrestricted prose;
+- guarantee complete/correct extraction from a supplied text or image;
 - detect a relationship that was never modeled;
 - infer reliable semantics from arbitrary user-created SQL tables;
 - prove a scientific claim, design, citation, patent, or legal argument correct;
@@ -128,6 +209,8 @@ ValidatedWorld cannot generally:
 - generate or render a finished document or game;
 - verify that an external artifact reflects current project state;
 - guarantee an AI correctly applies impact guidance;
+- guarantee an AI semantic reviewer notices every issue or raises only correct
+  concerns;
 - exhaust an unbounded game/campaign state space;
 - decide arbitrary logic in an unrestricted rule language.
 
@@ -152,12 +235,34 @@ The flow is:
 There is no separate semantic diff. The accepted operations are the direct
 change record; impact is the transitive consequence record.
 
+## Authoring ergonomics without implicit canon
+
+Requiring explicit graph links does not require typing every repeated edge by
+hand. A transaction may carry a noncanonical focus node and accept a batch of new
+nodes/edges. New nodes without an explicit scope parent inherit the focus; the
+application expands that shorthand into ordinary `scope-parent` edge operations
+and returns the expansion before validation. Creating a cluster is the same
+operation with a new scope node as the batch focus.
+
+Profile helpers may expand common deterministic patterns, but the resulting
+nodes and edges are always previewed and stored explicitly. The app never guesses
+semantic dependency edges from prose. This separates input convenience from the
+authoritative graph and lets an agent work locally without losing traceability.
+
+Gate A also needs deterministic agent discovery primitives: exact lookup,
+bounded search by type/tag/searchable property/scope, scope children and
+ancestors, bounded subtrees, neighbors, dependencies, dependents, and context
+queries. These are ordinary indexed Application queries, not embeddings,
+natural-language SQL, or RAG. The later authoring model translates user intent
+into these tools and may propose semantic edges, but the proposal remains an
+explicit inspectable operation.
+
 ## Relationship to external documents
 
-Profile records may identify an external manuscript, design, patent workspace,
-source tree, Unity project, or dataset. Anchor records identify locations such as
-chapters, sections, components, tests, or scenes. Typed relations bind those
-anchors to semantic records.
+Profile nodes may identify an external manuscript, design, patent workspace,
+source tree, Unity project, or dataset. Anchor nodes identify locations such as
+chapters, sections, components, tests, or scenes. Typed edges bind those anchors
+to semantic nodes.
 
 When a fact changes, impact analysis can report affected anchors. That is
 guidance, not synchronization. An anchor disposition proves only that the graph
@@ -179,7 +284,7 @@ The existence of those systems narrows the product claim. ValidatedWorld must no
 become another database or generic trace-link UI. Its candidate novelty is the
 combination of:
 
-- profile-independent typed semantic records;
+- profile-independent typed semantic nodes and edges;
 - relationship-specific deterministic impact;
 - impact over both base and projected graph;
 - mandatory explained review before atomic commit;
@@ -191,10 +296,17 @@ combination of:
 SQLite is sufficient for the initial scale, supports foreign keys, indexes,
 recursive queries, and atomic transactions, and preserves a one-file portable
 project. Hundreds of pages will normally produce thousands or tens of thousands
-of semantic records, not a database-scale challenge.
+of semantic nodes, not a database-scale challenge.
+
+SQLite is an embedded in-process library, not a service. The pinned NuGet native
+bundle is deployed with ValidatedWorld, so users and agents do not install or
+administer SQLite, use the standalone `sqlite3` tool, or run Docker. The
+application creates, migrates, verifies, samples, backs up, and opens its own
+files. Documented SQL views are optional advanced inspection; all ordinary
+workflows exist through the app.
 
 The likely bottleneck is graph density and full validation, not storage bytes.
-Gate A includes synthetic performance tests at 100,000 records and 1,000,000
+Gate A includes synthetic performance tests at 100,000 nodes and 1,000,000
 derived dependency edges.
 
 A web/PostgreSQL host is authorized only when real requirements include multiple
@@ -202,6 +314,10 @@ concurrent writers, centralized authorization, multi-tenancy, or remote service
 operations. A specialized graph store is authorized only when measured
 traversal/query workloads exceed the indexed relational implementation and its
 operational cost is justified.
+
+If publish/runtime testing shows that the bundled native provider cannot support
+an intended platform, stop and discuss the exact platform with the human. Do not
+quietly add a system dependency or Docker requirement.
 
 ## Smallest useful product
 
@@ -211,9 +327,10 @@ It supports:
 
 - one authoritative `project.vw.db`;
 - a fixed SQLite schema with migrations and integrity checks;
-- a small logical record/relation metamodel;
+- one small typed node/edge graph model;
+- one required purpose root and singular scope hierarchy;
 - one versioned built-in technical profile;
-- stable IDs, revisions, typed values, references, and relation endpoints;
+- stable IDs, revisions, typed scalar properties, and edge endpoints;
 - deterministic logical JSON serialization and hashing;
 - durable application-level draft transactions;
 - full projected-state validation;
@@ -232,20 +349,69 @@ It does not require:
 - RDF, a graph database, PostgreSQL, a web app, GUI, or plugin;
 - narrative or interactive-state implementation.
 
+This is a Gate A scope statement, not deletion of the AI-first product direction.
+Gate B may add the one-request OpenAI review workflow and Gate C may add
+conversational authoring/intake without weakening the standalone deterministic
+product.
+
 ## First proof scenario
 
-The `TechnicalProject` sample describes an offline sensor design graph and
-external anchors for requirements, power budget, architecture, verification, and
-privacy.
+The `TechnicalProject` sample starts with one plain-English purpose node and a
+scope hierarchy, then describes an offline sensor design graph and
+external anchors for requirements, power budget, architecture, privacy,
+verification, manuals, and unrelated accessibility material.
 
 Changing average current from 20 mA to 25 mA must impact the runtime result,
 battery decision, and relevant anchors. A valid transaction repairs the affected
-structured values and dispositions together. The unrelated privacy anchor must
-not appear.
+structured values and dispositions together. The privacy anchors must not appear
+for that power-only change. Power-scope ancestors are context only and must not
+pull sibling privacy or accessibility branches into impact.
+
+A second soft-logic track models no-upload and data-retention requirements,
+definitions, assumptions, evidence, privacy claims, architecture decisions,
+implementation/configuration, verification, and document anchors. Changing
+retention or permitting diagnostic upload must select its exact modeled
+consequences while excluding power and accessibility distractors. Missing
+evidence and explicit-contradiction variants must produce actionable diagnostics.
 
 The same scenario must demonstrate why raw foreign keys are insufficient: the
 engine follows declared semantic dependency rules, not every relational
-reference, and explains every selected path.
+reference, and explains every selected path. A separate root-changing
+transaction must select the entire project, proving that full-project review is
+available only when the purpose itself is directly changed.
+
+## Implementation proof discipline
+
+Gate A is built in the ordered work packages in the implementation blueprint.
+WP0-WP8 are accepted only by deterministic repository checks that an agent can
+run without human inspection, external secrets, interactive UI, or subjective
+approval. Generated fixtures, fixed inputs, fault injection, structured goldens,
+and full restore/build/test results are the evidence.
+
+Those checks are supplemented—not replaced—by actual AI-agent black-box
+walkthroughs from the first coherent database/CLI slice onward. The agent uses a
+new disposable database, public documentation and commands, and realistic
+soft-logic goals. Scripted scenarios preserve reproducibility; the agent pass
+evaluates discoverability, burden, diagnostics, and confidence. Deterministic
+findings become regression tests, and significant usability/product concerns are
+reported to the human before the roadmap advances.
+
+The living
+[implementation execution plan](implementation_execution_plan.md) records the
+completed evidence, one Current task, and the remaining roadmap order.
+Agents update it with the code. A work package whose tests pass but whose plan and
+handoff remain stale is not complete.
+
+Each agent run is started by a human and ends after one assignment with a report
+back to that human. It does not start the recorded next assignment or manage Git.
+After Gate A evaluation, Current task becomes `None`; the agent reports the
+evidence and asks whether to call the roadmap complete, request a separate later
+planning task, narrow, pivot, or stop.
+
+Routine implementation failures are repaired autonomously. Repeating the same
+failure without new evidence is not progress: the agent leaves Current task
+unchanged, reports the attempts, and stops rather than looping or weakening an
+acceptance criterion.
 
 ## Staged proof plan
 
@@ -255,46 +421,99 @@ Measure:
 
 - expected versus actual impact sets and explanation paths;
 - missed and irrelevant impacts;
-- modeling cost of types, records, and relationships;
+- modeling cost of types, nodes, and edges;
 - schema/database integrity versus semantic-validator findings;
 - whether atomic commits prevent internally stale state;
 - whether lower-cost agents can inspect/query/repair transactions;
+- accumulated black-box agent task completion, friction, semantic mistakes, and
+  confidence at each usable work package;
 - deterministic logical snapshots, reports, hashes, and replay;
 - performance at the expected and synthetic upper-bound fixtures;
 - usefulness compared with Doorstop and a plain relational schema.
 
 If Gate A succeeds, the project has a useful release direction.
 
-### Gate B — Linear narrative profile
+### Gate B — AI semantic review
+
+Evaluate one complete transaction request on deliberately omitted links, stale
+implications, contradictions, terminology drift, disjoint change chains, and
+unrelated siblings. Measure precision, recall against the known issue set,
+false-positive burden, cost, latency, exact scope coverage, and whether the
+structured workflow materially outperforms an unscoped whole-document prompt.
+
+Use a fake client and scripted HTTP for normal tests. The sole production/live
+path is OpenAI with `gpt-5.6-terra` and medium reasoning. A human must personally
+install the secret and provide both readiness and per-run authorization before
+any live request. Send the entire review as one background response with a
+1,200-second deadline and never retry it automatically. Polling that response is
+not another model call. Never make this client mandatory in Core or call its
+findings proof.
+
+`VW_AIREVIEW__LIVETESTS=true` opts only a separately invoked live Gate B smoke or
+evaluation harness into network use. Normal tests ignore it. Real project policy
+independently declares review disabled, optional, or required; an optional
+transaction may record an explicit reviewed skip, but an environment variable
+can never bypass a required review.
+
+### Gate C — AI-first authoring and intake
+
+Evaluate conversational creation and alteration through strict tools, including
+text/image intake, deterministic search/navigation, durable drafts, user
+questions, Gate B handoff, and exact final confirmation. The author may never use
+raw SQL, mutate canon directly, or approve its own semantic review. Measure
+operation correctness, duplicates/unrelated changes, questions, user effort,
+tool calls, cost, latency, and honest stopping on missing context.
+
+Add one reviewed compact `catalog/v1` profile so the restaurant-menu intake proof
+uses meaningful node/edge types. Ordinary authoring may select installed profiles
+but not silently invent schema packages; custom profile creation remains a
+separate reviewed workflow.
+
+### Gate D — MCP/plugin packaging
+
+Expose the same stable Application tools through a headless MCP server and
+package it with workflow skills using the then-current OpenAI plugin format.
+Keep custom UI optional and keep the tools useful without it.
+
+### Gate E — Linear narrative profile
 
 Add a reduced mystery schema for chronology, perspective, knowledge, clues, and
 disclosure. Keep manuscripts external. Retain the profile only if it catches
 meaningful structured-state errors at acceptable modeling cost.
 
-### Gate C — Interactive-state profile
+### Gate F — Interactive-state profile
 
-Only after Gate B, add finite typed variables, conditions, effects, invariants,
+Only after Gate E, add finite typed variables, conditions, effects, invariants,
 and bounded exploration.
 
-### Gate D — Integration and optional hosting
+### Gate G — Optional hosting
 
-After the schema/protocol are stable, evaluate MCP/plugin packaging and a thin
-HTTP host. PostgreSQL is considered only if hosted multi-writer needs are proven.
+Evaluate a thin HTTP host only after packaging. PostgreSQL is considered only if
+hosted multi-writer needs are proven.
 
 ## Stop and scale-down criteria
 
 If the general logical type system is too burdensome, freeze a smaller fixed
-record/relation catalog. If the proposition/assertion technical profile adds no
+node/edge catalog. If the proposition/assertion technical profile adds no
 value over generic nodes and links, remove it. If impact/review offers no
 meaningful advantage over Doorstop or ordinary SQL plus review, archive or pivot
 the experiment.
+
+If the in-app AI reviewer adds no measurable value, omit Gate B rather than
+growing a provider ecosystem. This failure does not invalidate Gate A.
+
+If AI authoring does not materially reduce graph-entry burden or frequently makes
+plausible but incorrect/unrelated changes, keep the deterministic CLI/MCP tools
+and omit the built-in authoring loop. Do not weaken confirmation or validation to
+make the demo appear successful.
 
 ## Product language
 
 Prefer:
 
 > ValidatedWorld atomically versions an explicit semantic project graph and
-> explains which modeled records must be reconsidered when it changes.
+> gives AI agents safe tools to change it while explaining which modeled nodes
+> must be reconsidered before the user commits.
 
 Avoid:
 
