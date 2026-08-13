@@ -1379,6 +1379,31 @@ Exactly one JSON document goes to stdout. Operational logs go to stderr.
 9  internal failure
 ```
 
+### 12.5 Incremental public walking skeleton
+
+Do not defer all public-interface and usability evidence until WP8. Deliver the
+CLI progressively so realistic black-box use starts with the first database
+slice:
+
+```text
+WP3  init/status/structural verify/snapshot read plus object/relation reads;
+     generated TechnicalProject database and documented read-only views
+WP4  full verify, diagnostics, dependencies/dependents, and explanation reads
+WP5  tx begin/show/apply/validate/abort
+WP6  tx impact/obligations/disposition
+WP7  tx commit plus commit get/verify/replay
+WP8  context, backup, remaining query/help contracts, limits, and polish
+```
+
+WP3 adds `ValidatedWorld.Cli.Tests`. A checked-in fixture builder may create the
+realistic database for early read-only QA before public mutation is available;
+it is development infrastructure, not a canonical-write escape hatch. Commands
+must label validation phases that are not yet implemented as inconclusive rather
+than implying the whole project is valid.
+
+Each WP3-WP8 slice retains deterministic CLI contract tests and is followed by
+an actual agent-operated black-box walkthrough described in Section 16.4.
+
 ## 13. Deterministic context queries
 
 A context query selects logical JSON for a human, AI, or RAG consumer. It does
@@ -1439,7 +1464,7 @@ initialization/transaction scripts. Never commit or hand-edit its binary bytes.
 Check in the canonical `project.snapshot.json`, scripts, expected result goldens,
 and fixture-building command instead.
 
-The graph contains:
+The graph contains a quantitative power track:
 
 ```text
 requirement: runtime >= 24 hours
@@ -1461,6 +1486,40 @@ Changing current to 25 mA must impact the result, conclusion, and relevant
 anchors, not privacy. The engine does not perform arithmetic; fixture operations
 supply the known repaired capacity/runtime values.
 
+The same project also contains a soft-logic privacy/offline-design track:
+
+```text
+requirement: raw observations must not leave the device
+definition: raw observation versus aggregated diagnostic
+assumption: normal operation has no network transport
+assumption: raw readings are retained locally for 7 days
+decision: use an encrypted local ring buffer
+claim: the architecture satisfies the offline/privacy requirement
+evidence: threat-model review and offline integration-test result
+implementation: transport-disabled production configuration
+verification: no-upload and retention-bound checks
+
+anchors: privacy requirements, threat model, architecture decision record,
+         storage design, verification plan, user manual
+unrelated distractors: battery enclosure color and accessibility copy
+```
+
+All dependencies are explicit. Scenarios include changing retention from 7 to
+30 days, permitting a narrowly scoped diagnostic upload, removing evidence,
+introducing an explicit contradiction, and repairing the resulting impact/review
+set. Expected results include both required paths and unrelated exclusions. This
+corpus is complex enough to expose modeling and diagnostic problems without
+claiming that the engine understands arbitrary prose.
+
+The source fixture includes:
+
+```text
+revision-zero logical snapshot/package inputs
+ordered transaction/repair scripts
+expected structured results and logical hashes
+agent-facing scenario goals that do not reveal the expected repair
+```
+
 ### 14.3 Intentional-error corpus
 
 Include fixtures for:
@@ -1481,7 +1540,7 @@ Include fixtures for:
 - unreviewed or stale impacted object;
 - stale project/draft/object precondition;
 - impact/context bound reached;
-- unrelated privacy false-positive regression;
+- unrelated cross-track/distractor false-positive regression;
 - writer conflict and injected commit failure;
 - relational/logical mapping mismatch;
 - replay mismatch;
@@ -1519,9 +1578,14 @@ Gate A passes only if:
 8. Accepted commit yields expected rows and logical hash.
 9. Replay reproduces recorded hashes.
 10. Read views and C# edge extraction agree.
-11. Lower-cost agent evaluation succeeds using JSON plus read-only SQL views.
-12. Modeling burden and performance are documented.
-13. Comparison with Doorstop/plain SQLite identifies material additional value.
+11. Accumulated WP3-WP8 agent walkthroughs complete realistic goals through
+    public commands without source knowledge or direct canonical SQL.
+12. A fresh lower-cost-agent evaluation succeeds over the full workflow using
+    JSON plus documented read-only SQL views.
+13. Deterministic defects found during agent QA have replayable regression tests.
+14. Modeling burden, usability friction, agent confidence, and performance are
+    documented.
+15. Comparison with Doorstop/plain SQLite identifies material additional value.
 
 If useful impact requires near-complete connectivity or the metamodel adds no
 value over ordinary SQL, Gate A fails and the feasibility verdict is updated.
@@ -1635,6 +1699,47 @@ endpoint mutation, audit insert, hash verification, head update, and before
 SQLite commit. Every failure before commit must roll back the entire SQL
 transaction.
 
+### 16.4 Realistic end-to-end and agent usability testing
+
+Deterministic tests are necessary but do not establish usability. Every work
+package exercises the largest TechnicalProject scenario its layer supports. WP1
+constructs it through Core APIs; WP2 serializes it; WP3 materializes the first
+real database and public read workflow. WP3-WP8 each add a replayable scripted
+end-to-end scenario and an actual AI-agent black-box walkthrough.
+
+The QA agent receives:
+
+- the built CLI and its public README/help;
+- a newly generated temporary database or documented initialization command;
+- a realistic user goal, such as changing retention policy or diagnosing why a
+  privacy claim cannot be accepted; and
+- no expected command sequence, private repository API, or permission to mutate
+  canonical tables directly.
+
+It records:
+
+```text
+work package and build identity
+scenario goal and supplied artifacts
+commands/public views used
+completion or exact stopping point
+semantic result and unrelated-record exclusions
+confusing terminology, missing feedback, unnecessary steps, and mistakes
+confidence in the outcome and recommended changes
+```
+
+Keep the concise report at `docs/qa/wpN-agent-walkthrough.md`; do not check in
+model chain-of-thought or an unbounded transcript. Preserve commands/inputs and
+structured expected outputs in the scripted scenario so the workflow is
+replayable without another model call.
+
+If the agent cannot complete a documented workflow, requires source knowledge,
+misreads success, misses a required semantic consequence, or changes unrelated
+data, the work package fails. Add a regression test for deterministic defects,
+repair the interface/diagnostic, and rerun. Record lesser friction and concrete
+recommendations. A finding that challenges product usefulness or modeling cost
+is reported to the human before the plan advances.
+
 ## 17. Ordered work packages
 
 Implement one package at a time. Do not add later-host dependencies early.
@@ -1663,57 +1768,83 @@ report the evidence to the human, and stop.
 
 - Implement IDs, schema packages, type/field/role/dependency definitions, values,
   objects, snapshots, policies, operations, and review records.
-- Acceptance: unit/property tests cover every local valid/rejected shape.
+- Construct a realistic interconnected technical-design scenario through public
+  Core APIs and report modeling friction.
+- Acceptance: unit/property tests cover every local valid/rejected shape and the
+  realistic graph requires no test-only escape hatch.
 
 ### WP2 — logical JSON and built-in packages
 
 - Implement strict protocol DTOs, canonical writers/hashes, and canonical
   `core/v1` plus `technical-project/v1` package resources.
-- Acceptance: round-trip/order/duplicate/unknown-field/hash goldens pass.
+- Materialize the realistic TechnicalProject source corpus and representative
+  edit/error variants as reviewed text fixtures.
+- Acceptance: round-trip/order/duplicate/unknown-field/hash goldens pass and an
+  agent can inspect/author the documented JSON without hidden conventions.
 
 ### WP3 — SQLite schema and mapping
 
 - Implement connections, v1 migration, repositories, read views, integrity
   checks, logical snapshot load, initialize, and backup.
+- Add the first CLI walking skeleton from Section 12.5 and CLI test project.
+- Generate a real TechnicalProject `.vw.db` in a temporary directory and run the
+  first black-box agent read/query/structural-verification walkthrough.
 - Acceptance: migration/constraint/mutation-detection/mapping/backup integration
-  tests pass.
+  tests, CLI scenario, and agent QA pass; unimplemented semantic phases are
+  explicitly inconclusive.
 
 ### WP4 — indexes and semantic validation
 
 - Validate stored schema packages/objects, build indexes/edges, implement generic
   and technical constraints, diagnostics, and coverage.
-- Acceptance: intentional-error fixtures match golden JSON; read views agree.
+- Expose full verify, diagnostics, dependencies/dependents, and explanation reads
+  through the CLI walking skeleton.
+- Acceptance: intentional-error fixtures match golden JSON, read views agree,
+  and an agent can diagnose realistic missing-evidence/contradiction cases from
+  public output.
 
 ### WP5 — durable drafts and projection
 
 - Implement draft repository, operations, preconditions, projection, hashes,
   validation runs, and disposition invalidation.
-- Acceptance: concurrent draft edits and stale operation cases are deterministic.
+- Expose begin/show/apply/validate/abort through the CLI.
+- Acceptance: concurrent draft edits and stale operation cases are deterministic,
+  and an agent can author and repair a realistic proposed transaction without
+  direct canonical SQL.
 
 ### WP6 — impact and mandatory review
 
 - Implement base/projected union BFS, explanation paths, bounds, obligations, and
   fingerprints.
-- Acceptance: TechnicalProject yields exactly Section 14 impact and no privacy
-  false positive.
+- Expose impact, obligations, and disposition through the CLI.
+- Acceptance: TechnicalProject yields exactly Section 14 impact and unrelated
+  exclusions, and an agent can explain and correctly disposition the soft-logic
+  scenario without guessing hidden dependencies.
 
 ### WP7 — atomic accepted commit and replay
 
 - Implement short SQLite write session, ordered row mutations, integrity/hash
   recheck, accepted audit, rollback fault handling, and replay.
-- Acceptance: every fault rolls back; accepted replay matches.
+- Expose commit get/verify/replay through the CLI.
+- Acceptance: every fault rolls back, accepted replay matches, and agent QA
+  demonstrates successful commit plus understandable recovery from a rejected or
+  injected-failure scenario.
 
 ### WP8 — queries and CLI
 
-- Implement handlers, JSON envelopes, commands, exit codes, context, snapshot,
-  backup, and help/read-view documentation.
+- Complete remaining handlers, JSON envelopes, commands, exit codes, context,
+  backup, limits, and help/read-view documentation; consolidate the incremental
+  public surface from Section 12.5.
 - Acceptance: scripted agent completes init through commit/replay using JSON and
-  queries read-only views successfully.
+  queries read-only views successfully, and a black-box agent completes both
+  quantitative and soft-logic workflows from public documentation.
 
 ### WP9 — Gate A evaluation
 
-- Run correctness, modeling-cost, lower-cost-agent, comparison, and performance
-  evaluations.
+- Run correctness, modeling-cost, lower-cost-agent, comparison, performance, and
+  accumulated WP3-WP8 usability evaluations. Run the complete public workflow
+  from a fresh QA-user perspective without relying on earlier implementation
+  context.
 - Acceptance: explicitly approve, narrow, replace components, or stop before
   narrative work.
 
@@ -1739,6 +1870,8 @@ Every implementation change states:
 - changed physical migration or logical JSON contract;
 - schema package/validator version changes;
 - tests and database/snapshot/golden changes;
+- realistic scenario and actual agent-QA outcome, including usability findings
+  when applicable;
 - guarantees and remaining inconclusive behavior;
 - exact assignment-specific and full restore/build/test results;
 - any failed repair attempts that caused the agent to stop.

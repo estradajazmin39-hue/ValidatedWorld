@@ -556,17 +556,27 @@ same operational behavior.
 ## 12. Gate A proof of concept
 
 The `TechnicalProject` fixture includes an offline sensor design with external
-anchors for requirements, power budget, architecture, verification, and
-unrelated privacy material.
+anchors for requirements, power budget, architecture, privacy, verification,
+manuals, and unrelated accessibility material.
 
 The initial graph contains a 24-hour runtime requirement, a 20 mA current
 assumption, a 500 mAh capacity assumption, a 25-hour runtime result, and a
 battery-sufficiency conclusion with explicit dependencies.
 
 A transaction changes current to 25 mA. It must impact the runtime result,
-battery decision, and power/architecture/verification anchors, but not privacy.
+battery decision, and power/architecture/verification anchors, but not the
+privacy or accessibility tracks.
 A valid transaction repairs structured capacity/runtime values and all required
 dispositions together.
+
+The fixture also includes a realistic soft-logic design track: no-upload and
+retention requirements, definitions, assumptions, privacy claims, architecture
+decisions, evidence, implementation/configuration, verification, document
+anchors, explicit contradictions, missing-information variants, and unrelated
+distractors. Transactions change retention or narrowly permit diagnostic upload
+and must surface the exact modeled privacy, architecture, verification, and
+documentation consequences without pulling in unrelated power/accessibility
+records.
 
 Gate A must prove:
 
@@ -583,6 +593,12 @@ Gate A must prove:
 11. A lower-cost agent can query and repair the project without direct writes.
 12. Synthetic 100,000-record/1,000,000-edge performance stays within documented
     budgets.
+13. Starting with the first database/CLI walking skeleton, each usable work
+    package has a replayable realistic end-to-end scenario and an actual
+    AI-agent black-box QA walkthrough through public commands.
+14. Agent QA findings become regression tests when deterministic and are
+    reported to the human when they expose friction, misleading behavior,
+    excessive modeling burden, or a questionable product direction.
 
 No document import/rendering, arbitrary DDL, AI provider, web server, RDF store,
 graph database, narrative timeline, or game exploration is required.
@@ -592,6 +608,13 @@ engineering package has deterministic automated acceptance and full-solution
 verification; passing behavior is established by repository evidence rather than
 manual human inspection. Completion evidence and the next authorized assignment
 must be recorded in the execution plan before another package begins.
+
+Automated tests and agent QA serve different purposes. Scripted tests prove
+repeatability and prevent regressions. A real agent using a disposable database
+and only the public CLI/help tests discoverability, diagnostic usefulness,
+workflow burden, and whether the structured graph is practically usable. Both
+are required from the first coherent database/CLI slice onward; usability is not
+deferred until the final Gate A evaluation.
 
 A human invokes each agent run. The agent completes the Current task or reports
 why it failed, then stops; it does not perform Git workflow operations or

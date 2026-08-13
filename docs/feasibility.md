@@ -235,13 +235,20 @@ It does not require:
 ## First proof scenario
 
 The `TechnicalProject` sample describes an offline sensor design graph and
-external anchors for requirements, power budget, architecture, verification, and
-privacy.
+external anchors for requirements, power budget, architecture, privacy,
+verification, manuals, and unrelated accessibility material.
 
 Changing average current from 20 mA to 25 mA must impact the runtime result,
 battery decision, and relevant anchors. A valid transaction repairs the affected
-structured values and dispositions together. The unrelated privacy anchor must
-not appear.
+structured values and dispositions together. The privacy anchors must not appear
+for that power-only change.
+
+A second soft-logic track models no-upload and data-retention requirements,
+definitions, assumptions, evidence, privacy claims, architecture decisions,
+implementation/configuration, verification, and document anchors. Changing
+retention or permitting diagnostic upload must select its exact modeled
+consequences while excluding power and accessibility distractors. Missing
+evidence and explicit-contradiction variants must produce actionable diagnostics.
 
 The same scenario must demonstrate why raw foreign keys are insufficient: the
 engine follows declared semantic dependency rules, not every relational
@@ -254,6 +261,14 @@ WP0-WP8 are accepted only by deterministic repository checks that an agent can
 run without human inspection, external secrets, interactive UI, or subjective
 approval. Generated fixtures, fixed inputs, fault injection, structured goldens,
 and full restore/build/test results are the evidence.
+
+Those checks are supplemented—not replaced—by actual AI-agent black-box
+walkthroughs from the first coherent database/CLI slice onward. The agent uses a
+new disposable database, public documentation and commands, and realistic
+soft-logic goals. Scripted scenarios preserve reproducibility; the agent pass
+evaluates discoverability, burden, diagnostics, and confidence. Deterministic
+findings become regression tests, and significant usability/product concerns are
+reported to the human before the roadmap advances.
 
 The living
 [implementation execution plan](implementation_execution_plan.md) records the
@@ -284,6 +299,8 @@ Measure:
 - schema/database integrity versus semantic-validator findings;
 - whether atomic commits prevent internally stale state;
 - whether lower-cost agents can inspect/query/repair transactions;
+- accumulated black-box agent task completion, friction, semantic mistakes, and
+  confidence at each usable work package;
 - deterministic logical snapshots, reports, hashes, and replay;
 - performance at the expected and synthetic upper-bound fixtures;
 - usefulness compared with Doorstop and a plain relational schema.

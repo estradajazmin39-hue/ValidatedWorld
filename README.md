@@ -139,7 +139,8 @@ does not automatically begin the next task or launch another agent.
 Every completed assignment must leave behind:
 
 - production behavior for its bounded scope;
-- meaningful deterministic tests and generated fixtures/goldens;
+- meaningful unit, integration, and scripted end-to-end tests using realistic
+  connected project data and generated fixtures/goldens;
 - passing assignment-specific checks plus the complete solution build and test
   suite;
 - an execution-plan entry containing the exact verification evidence, known
@@ -157,6 +158,30 @@ skipping ahead.
 Agents do not manage Git. They may inspect status or diffs, but they do not
 create branches, stage, commit, merge, rebase, reset, stash, pull, push, or open
 pull requests. All local edits are left for the human to review and manage.
+
+## Testing actual usefulness
+
+Passing unit tests does not establish that ValidatedWorld is usable. The
+TechnicalProject fixture grows into realistic soft-logic data: requirements,
+definitions, assumptions, evidence, decisions, implementations, verification,
+document anchors, contradictions, missing information, and unrelated material.
+
+Each work package exercises as much of that scenario as its layer supports. WP3
+delivers the first real database/CLI walking skeleton. From WP3 onward, every
+work package requires both:
+
+- a replayable scripted end-to-end test that asserts resulting data,
+  diagnostics, impact/review evidence, rollback/commit behavior, and unrelated
+  exclusions available at that stage; and
+- an actual AI-agent black-box walkthrough against a newly generated temporary
+  database, beginning from public documentation and supported commands as a QA
+  user would.
+
+The agent reports whether it could accomplish the realistic goal, what was
+confusing or misleading, and whether the product seems useful—not merely whether
+commands exited successfully. Deterministic defects become regression tests. A
+serious usability or product-direction concern is reported immediately to the
+human and prevents silently advancing the roadmap.
 
 ## Completion and later phases
 

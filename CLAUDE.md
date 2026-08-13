@@ -17,5 +17,9 @@ restore, build, and test commands from `/AGENTS.md`. Do not substitute manual
 inspection for automated acceptance. If repair attempts keep cycling through the
 same failure, report the evidence to the human and stop.
 
+Use the realistic TechnicalProject scenario required by the plan. From WP3
+onward, perform and report an actual black-box agent walkthrough through the
+built public CLI against a disposable database in addition to scripted tests.
+
 If Current task is `None`, make no changes. Report that the planned work is
 finished, ask what the human wants next, and stop.

@@ -82,6 +82,61 @@ If a requirement lacks an automated oracle, creating that oracle is part of the
 task. If it cannot be automated reliably, report it as inconclusive and do not
 claim the task is done.
 
+Automated correctness is necessary but not sufficient. Development also uses a
+realistic TechnicalProject corpus and actual agent-operated usability checks.
+
+### Realistic scenario requirement
+
+Do not validate the product only with isolated records or toy arithmetic. The
+checked-in source fixtures must grow into a plausible technical design containing
+requirements, definitions, assumptions, evidence, claims, decisions,
+implementations, verification, external document anchors, relevant dependency
+paths, unrelated distractors, missing information, and explicit contradictions.
+
+Every work package uses the largest realistic scenario its layer can support:
+
+- WP1 constructs a representative graph through the public Core API and records
+  any modeling awkwardness; no database or end-to-end product exists yet.
+- WP2 represents the corpus as strict logical JSON and exercises realistic edits,
+  malformed inputs, deterministic round trips, and package usability.
+- WP3 creates the first real disposable `.vw.db`, exposes a minimal CLI walking
+  skeleton, and begins black-box agent QA.
+- WP4-WP8 repeat and expand the same workflows as validation, drafts, impact,
+  review, commit/replay, query, and context features become public.
+- WP9 performs the final comparison and product-value evaluation; it is not the
+  first time usability is examined.
+
+### Actual agent usability check
+
+Starting with WP3, the implementing AI must perform at least one black-box QA
+walkthrough as a user after deterministic tests pass. This is an actual agent
+operating the built CLI against a newly generated temporary database, not merely
+another unit test. It must:
+
+1. Begin from public README/CLI help and scenario instructions, not internal
+   repositories or direct canonical SQL writes.
+2. Attempt a realistic goal using soft-logic data, including relevant and
+   irrelevant records rather than a preselected minimal graph.
+3. Use only supported public commands and documented read-only SQLite views.
+4. Record commands, structured results, whether the goal was completed, errors,
+   confusing concepts, unnecessary steps, missing diagnostics, and confidence in
+   what would happen next.
+5. Convert every deterministic defect found into an automated regression test.
+6. Summarize usability findings in Completed work and the human report.
+
+The same locally running implementation agent performs a clearly separated
+black-box QA-user pass; no parallel agent is needed. A scripted end-to-end test
+remains required so later agents can replay the workflow exactly. WP9 supplies a
+fresh whole-product perspective because it is a later human-invoked task.
+
+An inability to finish the documented scenario, silent semantic mistakes,
+source-code knowledge required to proceed, or misleading success output means
+the task is not done. Fix the problem and rerun the scenario, or leave Current
+task unchanged and report failure. Lesser friction may be recorded with a
+specific recommendation, but must be reported to the human rather than hidden by
+passing tests. If the finding calls the product direction or modeling burden into
+question, stop and ask the human before advancing the plan.
+
 ## 4. Definition of done
 
 ### One task is done when
@@ -90,6 +145,9 @@ claim the task is done.
 - its executable acceptance criteria pass;
 - the full restore/build/test sequence passes without warnings;
 - fixtures, goldens, documentation, and guarantees agree with the behavior;
+- the realistic scenario for the current layer passes;
+- when WP3 or later, an agent-operated black-box walkthrough and replayable
+  scripted end-to-end test pass, with usability findings reported;
 - this plan records the completed evidence and the next task; and
 - the agent reports the result to the human and stops.
 
@@ -138,6 +196,11 @@ remaining optional ideas, asks what the human wants next, and stops.
 - Established this one-agent-at-a-time plan, automated acceptance requirements,
   no-agent-Git rule, mandatory human report, failure stop rule, and final-roadmap
   behavior.
+- Required realistic TechnicalProject scenario testing at every layer and actual
+  agent-operated black-box QA from WP3 onward, with deterministic findings
+  converted to regression tests and usability/product concerns reported.
+- Moved the first database/CLI walking skeleton to WP3 so end-to-end usability is
+  exercised progressively instead of waiting for WP8/WP9.
 - Documentation checks passed: local Markdown links resolve and code fences are
   balanced.
 - Full restore/build/test passed on 2026-08-12: 0 build warnings; 5 scaffold
@@ -167,6 +230,10 @@ validation, application, and persistence work.
 - Explicit construction-time or factory validation for local invariants.
 - Comprehensive Core tests for accepted and rejected shapes, equality,
   immutability, invalid default/empty values, and lack of silent normalization.
+- A realistic technical-design scenario constructed through the public Core API
+  to prove the metamodel can express interconnected soft-logic records without
+  relying on extensions or test-only escape hatches.
+- A short modeling-usability assessment in Completed work and the human report.
 - Removal of `ValidatedWorld.Core/Class1.cs` and empty placeholder tests.
 
 **Out of scope:**
@@ -188,24 +255,29 @@ validation, application, and persistence work.
    case-folded, or guessed.
 5. `dotnet test tests/ValidatedWorld.Core.Tests/ValidatedWorld.Core.Tests.csproj`
    passes.
-6. The full restore/build/test sequence in Section 1 passes without warnings.
-7. This plan records WP1 under Completed work and replaces Current task with a
+6. A representative technical-design graph is constructed and asserted through
+   public Core APIs, and modeling friction or missing concepts are reported.
+7. The full restore/build/test sequence in Section 1 passes without warnings.
+8. This plan records WP1 under Completed work and replaces Current task with a
    fully specified WP2 task.
-8. The agent reports the result to the human and stops without starting WP2.
+9. The agent reports correctness and modeling-usability results to the human and
+   stops without starting WP2.
 
 ## 7. Remaining roadmap order
 
 After each successful task, move it to Completed work and fully specify only the
 next task under Current task.
 
-1. WP2 - logical JSON and built-in packages.
-2. WP3 - SQLite schema and mapping.
-3. WP4 - indexes and semantic validation.
-4. WP5 - durable drafts and projection.
-5. WP6 - impact and mandatory review.
-6. WP7 - atomic accepted commit and replay.
-7. WP8 - queries and CLI.
-8. WP9 - Gate A evaluation and final roadmap report.
+1. WP2 - logical JSON, built-in packages, and realistic source corpus.
+2. WP3 - SQLite schema/mapping plus the first init/status/verify/query CLI
+   walking skeleton and agent QA.
+3. WP4 - indexes/semantic validation plus agent diagnosis/repair QA.
+4. WP5 - durable drafts/projection plus agent transaction-authoring QA.
+5. WP6 - impact/review plus agent impact-understanding and disposition QA.
+6. WP7 - atomic commit/replay plus failure-recovery and audit QA.
+7. WP8 - remaining queries/context/CLI polish plus full workflow agent QA.
+8. WP9 - Gate A evaluation and final roadmap report using accumulated QA
+   evidence.
 
 LinearNarrative, InteractiveState, and optional integration/hosting work are
 ideas beyond this roadmap, not authorized implementation tasks. Reaching them
@@ -219,6 +291,7 @@ End every run with a concise report:
 Task: <completed or failed>
 Delivered: <important observable results and files>
 Verification: <commands and pass/fail counts>
+Agent QA: <scenario, outcome, and friction/defects>
 Unverified/inconclusive: <none or exact limits>
 Plan: <next task, unchanged task after failure, or None>
 Human action: <invoke the next task when ready, or one focused question>

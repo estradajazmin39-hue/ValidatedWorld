@@ -150,6 +150,8 @@ Continue only if Gate A demonstrates all of the following:
 4. A stable small metamodel that supports materially different profiles without
    arbitrary physical schemas.
 5. Deterministic behavior that RAG/LLM extraction cannot provide.
+6. Repeated black-box agent walkthroughs can complete realistic soft-logic tasks
+   from public documentation without source knowledge or direct canonical SQL.
 
 If it only becomes a database schema, use an existing database directly. If it
 only becomes a requirements-link tool, use or extend an existing requirements
