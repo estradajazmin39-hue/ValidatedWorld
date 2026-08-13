@@ -2,7 +2,7 @@
 
 **Status:** Architectural research record
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-13
 
 ## Purpose
 
@@ -129,6 +129,29 @@ ValidatedWorld is not RAG:
 A ValidatedWorld context query can feed a RAG or authoring agent. That is an
 integration relationship, not product duplication.
 
+## AI agents, MCP, and OpenAI plugins
+
+OpenAI's current [plugin architecture](https://developers.openai.com/plugins/concepts/plugins)
+packages reusable skills, an optional MCP server, or both; custom UI is optional.
+Its [MCP guidance](https://developers.openai.com/plugins/build/mcp-server)
+recommends focused goal-oriented tools with explicit schemas and structured
+results. This matches ValidatedWorld's intended external packaging, but it is not
+the internal semantic architecture.
+
+ValidatedWorld first owns a strict Application tool contract for search,
+navigation, drafts, validation, impact, review, guarded commit, and audit. The
+built-in authoring agent, CLI, and later MCP server are adapters over that one
+contract. A plugin then packages the MCP tools plus workflow guidance so a user
+can conversationally operate a graph much larger than the model's current
+context without a required visual editor.
+
+The distinguishing claim is not generic tool calling. It is that every agent
+mutation remains a stale-checked durable draft, deterministic whole-graph rules
+and declared dependency impact run outside the model, required independent
+review is auditable, and conversational approval authorizes only the exact
+current commit. Existing agent/MCP frameworks provide orchestration and
+packaging; they do not supply those project semantics.
+
 ## Persistence decision
 
 [SQLite](https://www.sqlite.org/appfileformat.html) is specifically suitable as
@@ -167,6 +190,9 @@ Continue only if Gate A demonstrates all of the following:
 5. Deterministic behavior that RAG/LLM extraction cannot provide.
 6. Repeated black-box agent walkthroughs can complete realistic soft-logic tasks
    from public documentation without source knowledge or direct canonical SQL.
+7. The later conversational authoring agent materially reduces graph-entry
+   burden on projects larger than its working context without creating duplicate
+   or unrelated state or bypassing guarded commit.
 
 If it only becomes a database schema, use an existing database directly. If it
 only becomes a requirements-link tool, use or extend an existing requirements
@@ -174,7 +200,7 @@ tool. If it only becomes context retrieval, use a RAG/knowledge-graph system.
 
 WP9 records the reproducible comparison evidence and resulting Gate A outcome in
 [implementation_execution_plan.md](implementation_execution_plan.md). Narrative,
-interactive-state, and integration work is outside the current roadmap. It
-requires a conclusive outcome supported by the criteria above and a new
-human-requested planning task. The evaluating agent reports the choices and
-stops; it does not infer permission to continue.
+provider-backed authoring, interactive-state, and integration work is outside the
+current roadmap. It requires a conclusive outcome supported by the applicable
+criteria above and a new human-requested planning task. The evaluating agent
+reports the choices and stops; it does not infer permission to continue.

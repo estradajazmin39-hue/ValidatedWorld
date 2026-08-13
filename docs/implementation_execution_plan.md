@@ -1,6 +1,6 @@
 # ValidatedWorld Implementation Plan
 
-**Last updated:** 2026-08-12
+**Last updated:** 2026-08-13
 
 **Current task:** WP1 - common graph domain
 
@@ -75,6 +75,10 @@ The separately authorized post-Gate-A AI-review phase follows the same rule for
 its normal suite by using a fake client and scripted HTTP. Its one OpenAI live
 evaluation path is explicitly opt-in and obtains credentials only through the
 human-controlled boundary in `docs/ai_semantic_review.md`.
+
+The later AI-authoring/intake phase likewise uses fake/scripted model clients for
+normal acceptance. Its provider path, text/image disclosure, tool limits, Gate B
+handoff, and final commit confirmation follow `docs/ai_authoring_agent.md`.
 
 - Unit tests cover accepted values, local invariants, and rejected inputs.
 - Property/integration tests cover ordering, round trips, graph behavior,
@@ -239,8 +243,24 @@ remaining optional ideas, asks what the human wants next, and stops.
   B live harness. It is ignored by normal tests and cannot bypass project policy;
   optional transaction skips are explicit/auditable and required review cannot
   be skipped.
-- Full restore/build/test passed on 2026-08-12: 0 build warnings; 5 scaffold
-  tests passed.
+- Established AI-first authoring as the authoritative mature-product direction:
+  users state intent or supply supported text/images; an agent searches and
+  navigates the graph, asks focused questions, and changes only a durable draft
+  through strict Application tools. It has no SQL or unguarded write tool; Gate B
+  remains an independent reviewer. The user approves the exact preview in
+  conversation, then the agent calls the hash-bound guarded commit tool and
+  completes the workflow.
+- Added Gate A deterministic search/navigation requirements so later agents can
+  find existing nodes before mutation without embeddings or natural-language
+  SQL. Defined the stable tool-contract → in-app authoring → headless MCP →
+  OpenAI plugin sequence, with visual UI optional.
+- Raised planned review/authoring provider deadlines to 1,200 seconds and require
+  Responses background mode. Polling one response is not a retry; automatic paid
+  retries remain forbidden.
+- Documentation redesign verification passed on 2026-08-13: all relative
+  Markdown link targets exist, all Markdown code fences are balanced, full
+  restore/build/test passed, the build produced 0 warnings and 0 errors, and all
+  5 scaffold tests passed.
 
 ## 6. Current task
 
@@ -322,14 +342,18 @@ next task under Current task.
 4. WP5 - durable drafts/projection plus agent transaction-authoring QA.
 5. WP6 - impact/review plus agent impact-understanding and disposition QA.
 6. WP7 - atomic commit/replay plus failure-recovery and audit QA.
-7. WP8 - remaining queries/context/CLI polish plus full workflow agent QA.
+7. WP8 - deterministic search, scope/neighbor navigation, remaining
+   queries/context/CLI polish, and full workflow agent QA.
 8. WP9 - Gate A evaluation and final roadmap report using accumulated QA
    evidence.
 
-AI semantic review, LinearNarrative, InteractiveState, and optional
-integration/hosting work are beyond this Gate A roadmap and are not authorized
-implementation tasks. The first recommended continuation is a separate Gate B
-AI-review planning task; reaching any later phase requires a new human request.
+AI semantic review, AI-first authoring/intake, MCP/plugin packaging,
+LinearNarrative, InteractiveState, and optional hosting are beyond this Gate A
+roadmap and are not authorized implementation tasks. The recommended sequence is
+Gate B independent review, Gate C authoring/intake, then Gate D headless
+MCP/plugin packaging. Gate C requires a successful Gate A result and an explicit
+decision to retain or omit Gate B; a failed/omitted reviewer does not erase the
+AI-first authoring vision. Every phase requires a new human request.
 
 ## 8. Human report format
 

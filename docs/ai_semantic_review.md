@@ -3,12 +3,20 @@
 **Status:** Normative post-Gate-A design; not part of the current WP0-WP9
 implementation roadmap.
 
+**Last reviewed:** 2026-08-13
+
 This is the expensive "run the transaction past the lore team" pass. It reviews
 qualitative coherence that the deterministic engine cannot prove. Canonical
 content arrives as the project's one node/edge graph; type packages and the
 transaction ledger are supporting metadata. It is not
 document generation, RAG, an autonomous database agent, or a second way to
 mutate canonical state.
+
+This reviewer is deliberately separate from the later AI authoring agent in
+[AI-first authoring and intake](ai_authoring_agent.md). The authoring agent uses
+tools to propose and repair a draft. The reviewer receives one fresh,
+tool-free, whole-transaction request and cannot rely on the author's conversation
+or approve its own work.
 
 ## 1. Evidence boundary
 
@@ -187,12 +195,15 @@ interface so tests can use a fake. `ValidatedWorld.AiReview.OpenAI` is the only
 production implementation. That seam is for dependency isolation and testing,
 not a promise of provider extensibility.
 
-Use the Responses API, strict Structured Outputs, no tools, and no conversation
-state. The adapter sets a fixed non-configurable maximum of 16,384 output tokens;
-the expected output is a bounded list of concerns, not prose. Re-check the
+Use the Responses API, background mode, strict Structured Outputs, no tools, and
+no conversation state. Polling the same response object is transport/status
+handling, not another model request or retry. The adapter sets a fixed
+non-configurable maximum of 16,384 output tokens; the expected output is a
+bounded list of concerns, not prose. Re-check the
 official [GPT-5.6 Terra model page](https://developers.openai.com/api/docs/models/gpt-5.6-terra),
 [OpenAI .NET quickstart](https://developers.openai.com/api/docs/quickstart), and
-[Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs)
+[Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs),
+plus [Background mode](https://developers.openai.com/api/docs/guides/background)
 when implementation begins.
 
 ## 6. Human-owned API key prerequisite
@@ -260,12 +271,16 @@ Paid-call rules:
   never make live calls.
 - A Gate B live smoke/evaluation is one known fixture and one request unless the
   human separately authorizes more.
-- No background, parallel, recursive, fallback, or tool call is allowed.
+- Background execution and polling of that one response are required for
+  long-running reasoning. No parallel, recursive, fallback, or tool call is
+  allowed.
 
 The adapter has only three non-secret runtime settings: provider, model, and
-timeout. Input/output/request-count/cost/retry configuration knobs are not part
-of the roadmap. The fixed output cap and zero-retry rule are implementation
-safety invariants rather than user settings.
+timeout. The timeout defaults to 1,200 seconds and is an end-to-end deadline for
+the background response to reach a terminal state, not a request-retry interval.
+Input/output/request-count/cost/retry configuration knobs are not part of the
+roadmap. The fixed output cap and zero-retry rule are implementation safety
+invariants rather than user settings.
 
 `VW_AIREVIEW__LIVETESTS=false` is a fourth setting belonging only to the
 separately invoked live smoke/evaluation harness. Unit, integration, and ordinary
@@ -319,8 +334,9 @@ The normal suite is offline and deterministic:
 - fake clients cover zero, one, and many concerns;
 - scripted HTTP handlers cover request/response mapping, refusal, malformed
   output, cancellation, and rate limiting without a network;
-- no separate timeout unit test is required; timeout uses standard cancellation
-  plumbing and any live timeout is inconclusive;
+- scripted polling tests cover queued/in-progress/terminal transitions and
+  cancellation; no wall-clock 1,200-second test is required, and any live
+  deadline expiry is inconclusive;
 - golden request previews prove the purpose, complete transaction, every
   disjoint dependency closure, every required singular scope lineage, absence of
   unselected siblings, constraints, coverage manifest, English prompt, and

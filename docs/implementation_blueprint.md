@@ -2,9 +2,9 @@
 
 **Status:** Coding-agent handoff
 
-**Blueprint version:** 5.0
+**Blueprint version:** 6.0
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-13
 
 **Target:** .NET 10 / C#
 
@@ -24,6 +24,11 @@ Read first:
 3. [prior_art_and_positioning.md](prior_art_and_positioning.md)
 4. This blueprint
 5. [testing_and_qa.md](testing_and_qa.md)
+
+For Gate B planning/implementation also read
+[ai_semantic_review.md](ai_semantic_review.md). For Gate C or MCP/plugin work also
+read [ai_authoring_agent.md](ai_authoring_agent.md). These files define later
+gates and do not authorize pulling them into Gate A.
 
 After reading this blueprint, read
 [implementation_execution_plan.md](implementation_execution_plan.md). The
@@ -123,6 +128,24 @@ dotnet test ValidatedWorld.slnx --no-build --no-restore
 37. Authoring focus, cluster, and template expansion are noncanonical input
     conveniences. They must expand to explicit node/edge operations before
     hashing, validation, or commit.
+38. The mature authoring surface is AI-first and headless. CLI, in-app function
+    tools, and later MCP expose the same Application semantics and versioned
+    schemas; no adapter writes SQL or reimplements graph rules.
+39. An AI authoring agent may mutate only a durable draft through bounded tools.
+    It has no direct canonical-write, schema-mutation, rule-suppression, or
+    unguarded commit capability.
+40. Final AI-authored commit confirmation is a user action bound to the exact
+    project head, draft revision, change-set hash, projected hash, and satisfied
+    review state. The user may approve in ordinary conversation; the agent then
+    calls the guarded commit tool. Model text alone is not confirmation.
+41. The authoring agent and Gate B reviewer are independent. The reviewer is
+    tool-free and receives no authoring conversation; authoring repairs stale its
+    review.
+42. A project may be far larger than any model context. The agent works safely by
+    repeatedly searching/retrieving relevant bounded working sets while
+    transactions, impact traversal, and deterministic validation operate over
+    the full explicitly modeled graph. Unmodeled qualitative completeness remains
+    a separate heuristic evidence question.
 
 ## 3. Solution architecture
 
@@ -155,6 +178,12 @@ ValidatedWorld.Cli
 
 ValidatedWorld.AiReview.OpenAI (post-Gate-A sole production client)
   dependencies: AiReview, pinned official OpenAI client
+
+ValidatedWorld.AiAuthoring (post-Gate-A Gate C)
+  dependencies: Application plus versioned tool contracts
+
+ValidatedWorld.AiAuthoring.OpenAI (post-Gate-A sole production client)
+  dependencies: AiAuthoring, pinned official OpenAI client
 
 ValidatedWorld.Mcp (post-gate)
   dependencies: Application plus selected persistence composition
@@ -194,6 +223,11 @@ ValidatedWorld.AiReview.Requests
 ValidatedWorld.AiReview.Contracts
 ValidatedWorld.AiReview.Concerns
 
+ValidatedWorld.AiAuthoring.Sessions
+ValidatedWorld.AiAuthoring.Tools
+ValidatedWorld.AiAuthoring.Confirmation
+ValidatedWorld.AiAuthoring.Intake
+
 ValidatedWorld.Application.Projects
 ValidatedWorld.Application.Transactions
 ValidatedWorld.Application.Commits
@@ -210,6 +244,9 @@ ValidatedWorld.Persistence.Sqlite.AiReview
 
 ValidatedWorld.AiReview.OpenAI.Responses
 ValidatedWorld.AiReview.OpenAI.Configuration
+
+ValidatedWorld.AiAuthoring.OpenAI.Responses
+ValidatedWorld.AiAuthoring.OpenAI.Configuration
 ```
 
 ### 3.3 Injected services
@@ -1201,8 +1238,13 @@ BackupProject
 
 GetNode
 ListNodes
+SearchNodes
 GetEdge
 ListEdges
+GetScopeChildren
+GetScopeAncestors
+GetScopeSubtree
+GetNeighbors
 GetDependencies
 GetDependents
 ExplainDependencyPath
@@ -1255,8 +1297,14 @@ vw sample create --sample <name> --variant <name> --db <new-path>
 
 vw node get --db <path> --id <id>
 vw node list --db <path> [--type <id>] [--tag <value>]
+vw node search --db <path> --query <text> [--type <id>] [--tag <value>]
+               [--scope <id>] [--limit <n>] [--cursor <token>]
 vw edge get --db <path> --id <id>
 vw edge list --db <path> [--type <id>] [--source <id>] [--target <id>]
+vw scope children --db <path> --id <id> [--limit <n>] [--cursor <token>]
+vw scope ancestors --db <path> --id <id>
+vw scope subtree --db <path> --id <id> --max-nodes <n> [--cursor <token>]
+vw neighbors --db <path> --id <id> [--edge-type <id>] [--limit <n>]
 vw dependencies --db <path> --id <id> [--transitive]
 vw dependents --db <path> --id <id> [--transitive]
 vw explain path --db <path> --from <id> --to <id>
@@ -1384,6 +1432,16 @@ an actual agent-operated black-box walkthrough described in Section 16.4.
 A context query selects logical JSON for a human, AI, or RAG consumer. It does
 not generate content.
 
+AI-first authoring also depends on deterministic discovery. `SearchNodes`
+matches only type-declared display/search scalar text after invariant
+case-normalization and may filter by exact type, tag, lifecycle property, and
+scope subtree. Results sort by exact-ID match, normalized display text, then
+entity ID, with an opaque cursor bound to project revision/hash and query. Scope
+children/ancestors/subtree and semantic-neighbor queries use the same bounded,
+stable pagination contract. No query uses embeddings, natural-language SQL, or
+provider calls. If property scanning is too slow at measured Gate A scale, add a
+checked materialized search index in a later migration; do not alter canon.
+
 ```csharp
 public sealed record ContextQueryResult(
     string SchemaVersion,
@@ -1502,8 +1560,9 @@ remain auditable.
 implementation time, pin and audit the current official `OpenAI` NuGet client,
 use the Responses API with strict structured output, use only
 `gpt-5.6-terra` with medium reasoning, expose no tools, use a fixed 16,384-token
-maximum output, and record the actual returned model. Re-check the official API
-documentation before implementation. The client interface remains so normal
+maximum output, set background mode, treat the configured timeout as an
+end-to-end deadline (default 1,200 seconds), and record the actual returned
+model. Re-check the official API documentation before implementation. The client interface remains so normal
 tests can use a fake; it does not authorize another provider or model.
 
 Gate B adds `Microsoft.Extensions.Configuration.UserSecrets` to the CLI and
@@ -1522,8 +1581,11 @@ Required blocks commit without a fresh successful review and concern
 dispositions. No environment value can override Required.
 
 Only `vw tx ai-review run` contacts OpenAI, before any SQLite write transaction.
-It sends exactly one request and has zero automatic retries. Refusal, truncation,
-timeout, cancellation, malformed output, or transport failure is inconclusive.
+It starts exactly one background response and polls that same response until a
+terminal state or a 1,200-second end-to-end deadline. Polling is not a retry or
+additional model request. There are zero automatic retries. Refusal, truncation,
+deadline expiry, cancellation, malformed output, or transport failure is
+inconclusive.
 Planning, preview, deterministic validation, impact, commit, and the default test
 suite remain offline.
 
@@ -1534,6 +1596,45 @@ never find, acquire, list, infer, or set a key. A live call additionally require
 agent may produce and inspect the exact request preview, but sends nothing. See
 [Planned AI semantic review](ai_semantic_review.md) for the complete prompt,
 security, privacy, cost, failure, and evaluation contract.
+
+### 13.5 Planned AI authoring tool loop
+
+Gate C composes an OpenAI Responses client with a strict host whose tools map
+one-to-one to Application read, draft, validation, impact, and review use cases.
+The same versioned schemas later back MCP. The model can begin/resume a draft,
+search/navigate, expand batches, apply operations, validate, inspect impact, and
+prepare confirmation. It cannot execute SQL, mutate packages/canon, suppress
+rules, disposition concerns for the user, or call commit directly.
+
+New-project intake first creates a noncanonical proposal from the user's
+description and explicit text/image inputs. After the user confirms purpose and
+profile in conversation, the agent calls a guarded normal initialization tool to
+create the database/root and authors all other content as a draft.
+Existing-project sessions search before creating,
+retrieve bounded context, ask questions for materially different
+interpretations, and preserve unresolved assumptions/coverage.
+
+The Gate C proof adds a reviewed `catalog/v1` package for menu/catalog, section,
+item, option/variant, ingredient/attribute, availability, and source anchors plus
+their explicit containment/classification/provenance/dependency edges. The agent
+may select installed exact package versions but cannot invent or mutate logical
+schema packages during an ordinary authoring session. Unsupported vocabulary is
+a user question or structured stop, not an extension-JSON escape hatch.
+
+The host presents a final preview. The user may approve it in the conversation,
+which creates a short-lived authorization bound to exact
+head/draft/change-set/projected hashes and review state. The agent passes that
+authorization to the guarded `CommitTransaction` tool; changed state invalidates
+it. Gate B is independently authorized and tool-free. Author repairs stale its
+run.
+
+Provider responses run in background mode with a 1,200-second end-to-end
+deadline and zero automatic paid retries. Tool-result continuations within an
+authoring turn are expected orchestration, not retries. Fixed limits bound calls,
+operations, context, and repair loops; hitting one preserves the draft and asks
+the user whether to resume. See
+[AI-first authoring and intake](ai_authoring_agent.md) for the normative feature,
+approval, secret, intake, plugin, and evaluation design.
 
 ## 14. Gate A package and sample
 
@@ -1727,7 +1828,24 @@ corpus before giving it narrative-specific prompts. If it does not add enough
 value to justify its privacy, cost, and configuration surface, omit Gate B rather
 than adding more providers or import/export machinery.
 
-### 15.2 Linear narrative — Gate C
+### 15.2 AI-first authoring and intake — Gate C
+
+Implement the strict tool-using workflow in Section 13.5 and
+`docs/ai_authoring_agent.md`. Evaluate creation from description/text/image and
+existing-project changes on known TechnicalProject/menu fixtures. The agent must
+materially reduce graph-entry burden without direct writes, unrelated changes,
+automatic review disposition, or unconfirmed commit. If it does not, omit the
+built-in orchestrator while retaining the deterministic tool contracts.
+
+### 15.3 MCP/plugin packaging — Gate D
+
+After Application tools and Gate C workflows are stable, expose the same bounded
+tools through a headless MCP server and add workflow skills. Package them using
+the then-current OpenAI plugin format. Custom UI is optional and must not be
+required for model operation. No provider or packaging type enters Core or
+canonical state.
+
+### 15.4 Linear narrative — Gate E
 
 Add package types/validators for story events, fictional intervals, participants,
 effects, belief/knowledge states, clues, and disclosure. No new physical tables
@@ -1737,18 +1855,13 @@ inadequate.
 Keep project revision, fictional time, narrative order, canon truth, and
 perspective separate.
 
-### 15.3 Interactive state — Gate D
+### 15.5 Interactive state — Gate F
 
 Add finite typed variables, expression AST records, transition effects,
 invariants, and traces. Bounded BFS explores canonical state encodings and
 returns shortest counterexamples. Reaching state/depth limits is inconclusive.
 
-### 15.4 Integration packaging — optional Gate E
-
-After protocol stability, expose Application use cases through MCP/Codex/plugin
-packaging. No provider or packaging type enters Core or canonical state.
-
-### 15.5 Hosted service — optional Gate F
+### 15.6 Hosted service — optional Gate G
 
 Only demonstrated multiple-writer/remote requirements authorize:
 
@@ -1845,6 +1958,8 @@ appears plausible.
 - Scalar properties and extension JSON never create hidden references.
 - Artifact locators are never dereferenced.
 - No CLI command emits non-JSON stdout.
+- Search, scope navigation, neighbor queries, pagination, and cursors are
+  deterministic and bound to the queried project revision/hash.
 - Gate B's preview contains the complete transaction and every disjoint selected
   chain in one request; each run invokes the live client at most once.
 - Focus/cluster batch expansion is deterministic, always returns explicit
@@ -2007,8 +2122,9 @@ report the evidence to the human, and stop.
 ### WP8 — queries and CLI
 
 - Complete remaining handlers, JSON envelopes, commands, exit codes, context,
-  backup, limits, and help/read-view documentation; consolidate the incremental
-  public surface from Section 12.5.
+  deterministic node search, scope/neighbor navigation, backup, limits, and
+  help/read-view documentation; consolidate the incremental public surface from
+  Section 12.5.
 - Context queries include singular purpose lineages through upward-only traversal
   that never fans back down into sibling branches.
 - Acceptance: scripted agent completes init through commit/replay using JSON and
@@ -2036,22 +2152,40 @@ report the evidence to the human, and stop.
   freshness, dispositions, persistence, a fake/scripted test client, CLI, and the
   sole OpenAI `gpt-5.6-terra` production client outside the deterministic core.
   Include every disjoint selected chain and singular purpose lineage together;
-  make one call with zero retries.
+  make one background response with a 1,200-second deadline and zero retries.
 - Evaluate known omitted/stale TechnicalProject issues and scoped-versus-unscoped
   usefulness. Omit Gate B if the built-in call adds no material value.
 
-### WP11 — LinearNarrative profile
+### WP11 — AI-first authoring and intake (separate post-Gate-A plan)
 
-- Authorized only by Gate B outcome.
+- Authorized only by a successful Gate A outcome, an explicit Gate B decision
+  (implemented or omitted), and a new human-requested planning task.
+- Require the authoring secret/live-call attestations in
+  `docs/ai_authoring_agent.md` before applicable implementation or evaluation.
+- Implement strict Application tools, search/navigation use, durable sessions,
+  text/image initialization proposals, reviewed `catalog/v1`, multi-turn draft
+  repair, Gate B handoff, exact user confirmation, fake/scripted clients, and the
+  sole OpenAI client.
+- Evaluate TechnicalProject and restaurant-menu tasks; omit the built-in
+  orchestrator if it does not reduce burden without weakening guarantees.
 
-### WP12 — InteractiveState profile
+### WP12 — MCP/plugin packaging
 
-- Authorized only by Gate C outcome.
+- Authorized only after stable Gate C tool contracts. Expose those contracts
+  through a headless MCP server, add workflow skills, and package them using the
+  then-current OpenAI plugin format; custom UI remains optional.
 
-### WP13 — optional host/integration gates
+### WP13 — LinearNarrative profile
 
-- Evaluate MCP packaging first; web/PostgreSQL only for demonstrated hosted
-  requirements.
+- Authorized only by the preceding evidence gates.
+
+### WP14 — InteractiveState profile
+
+- Authorized only by the narrative gate outcome.
+
+### WP15 — optional hosted-service gate
+
+- Evaluate web/PostgreSQL only for demonstrated hosted requirements.
 
 ## 18. Implementation handoff checklist
 
@@ -2090,9 +2224,9 @@ Defer until evidence requires them:
 - user-authored schema packages;
 - arbitrary project DDL or direct canonical SQL writes;
 - universal ontology or unrestricted rule language;
-- automatic semantic extraction;
-- general-purpose AI agent/RAG orchestration beyond the scoped Gate B semantic
-  reviewer;
+- automatic canonical acceptance of semantic extraction;
+- general-purpose AI agent/RAG orchestration beyond the scoped Gate B reviewer
+  and Gate C authoring/intake workflow;
 - document import/generation/rendering/publishing;
 - custom diff/change-package protocol;
 - incremental semantic validation;
@@ -2102,7 +2236,7 @@ Defer until evidence requires them:
 - rich visual graph editor;
 - game-engine runtime;
 - dynamic extension loading;
-- public plugin packaging.
+- a rich visual graph editor or UI-dependent authoring flow.
 
 The scaled-down product remains useful only if it beats ordinary SQLite plus
 manual review: a deterministic semantic transaction layer that explains

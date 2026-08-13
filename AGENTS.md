@@ -28,6 +28,14 @@ singular lineage to the purpose root, including disjoint chains together. It
 returns cited heuristic concerns. It is auditable, non-authoritative, and cannot
 mutate canon or turn a model opinion into proof.
 
+The authoritative mature-product direction is AI-first authoring over that core.
+A user describes a new project or alteration and may supply supported text/images;
+an authoring agent searches the graph, asks focused questions, and uses bounded
+Application tools to construct/repair a durable draft. It has no SQL or
+unguarded canonical-write tool. After the user approves the exact current draft
+in conversation, the agent calls a hash-bound guarded commit tool and completes
+the workflow. Gate B remains an independent reviewer.
+
 ## Required reading and authority
 
 Before making architectural, product, schema, persistence, or public API
@@ -44,9 +52,10 @@ decisions, read these files in order:
 5. `docs/implementation_execution_plan.md` — completed work, the one current
    task, and the remaining roadmap order.
 
-Before making AI-review, provider, prompt, network-disclosure, or secret-storage
-decisions, also read `docs/ai_semantic_review.md`. It is a post-Gate-A design,
-not authorization to pull that work into the current roadmap.
+Before making AI-review, AI-authoring, provider, prompt, tool, intake,
+network-disclosure, plugin/MCP, or secret-storage decisions, also read
+`docs/ai_semantic_review.md` and `docs/ai_authoring_agent.md`. They define later
+evidence gates; they do not authorize pulling that work into the current roadmap.
 
 `docs/prior_art_and_positioning.md` records relevant existing systems and should
 be consulted before broadening the product.
@@ -106,6 +115,10 @@ mean an application/SQLite operation, not a Git commit.
   concerns, review contracts, and fakeable orchestration; not yet created.
 - `src/ValidatedWorld.AiReview.OpenAI` — planned dependency-isolated sole
   production review client; not yet created.
+- `src/ValidatedWorld.AiAuthoring` — planned Gate C tool orchestration,
+  durable sessions, intake proposals, and confirmation boundary; not yet created.
+- `src/ValidatedWorld.AiAuthoring.OpenAI` — planned sole production authoring
+  client; not yet created.
 - `tests/` — automated tests mirroring production boundaries.
 - `tests/ValidatedWorld.TestKit` — planned reusable app/CLI fixture and process
   helpers; it never writes canonical SQLite rows directly.
@@ -173,6 +186,25 @@ mean an application/SQLite operation, not a Git commit.
   end-to-end tests ignore it. Whether a real transaction requires, runs, or
   explicitly skips AI review is recorded transaction/project policy, never an
   environment-variable bypass.
+- `VW_AIAUTHORING__LIVETESTS` likewise opts only the separately invoked Gate C
+  live authoring evaluation into network use. Normal tests ignore it, and it
+  never authorizes provider spending, project initialization, Gate B review, or
+  a commit.
+- Treat the authoring model as an untrusted client. It may search/read and alter
+  only a durable draft through strict Application tools. Never expose raw SQL,
+  canonical mutation, package mutation, rule suppression, automatic concern
+  disposition, or unguarded commit.
+- Bind final AI-authored commit confirmation to the exact head, draft revision,
+  change-set hash, projected hash, and satisfied review state. The user may
+  approve in ordinary conversation; the agent then passes the resulting opaque
+  authorization to the guarded commit tool. Model output is not user approval.
+- Keep the authoring and reviewing roles independent. Gate B is a fresh
+  whole-transaction, tool-free request without authoring conversation state;
+  authoring repairs stale prior review evidence.
+- Provide deterministic bounded search and navigation suitable for agents:
+  exact/type/tag/searchable-property/scope search, scope tree traversal,
+  neighbors, dependencies, dependents, and context. Do not substitute embeddings
+  or natural-language SQL for these contracts.
 - Keep the web host optional. Gate A is local/embedded; PostgreSQL or a service is
   justified only by demonstrated multi-user requirements.
 - Do not substitute a graph database, RAG index, or arbitrary AI-generated SQL
@@ -221,9 +253,10 @@ scenarios, and structured golden outputs as applicable.
 The later AI-review phase follows the same rule for its normal suite: use a fake
 client and scripted HTTP responses. A real-provider evaluation is separately
 opt-in, requires an intentionally supplied secret, and is never required for the
-default restore/build/test sequence. The only planned production configuration
-is OpenAI with `gpt-5.6-terra`, medium reasoning, and the timeout documented in
-`docs/ai_semantic_review.md`; do not add provider/model selection or fallback.
+default restore/build/test sequence. The only planned production provider/model
+for review and authoring is OpenAI `gpt-5.6-terra` with medium reasoning and the
+deadlines documented in the two AI design files; do not add provider/model
+selection or fallback.
 
 ### Gate B secret and spending stop rule
 
@@ -254,6 +287,29 @@ Without it, generate and verify the exact request preview but send nothing. With
 it, send at most one request for the explicitly named evaluation, with zero
 automatic retries. A timeout, refusal, truncation, malformed response, or
 transport failure is an inconclusive run, not permission to spend again.
+
+### Gate C authoring secret, spending, and confirmation stop rule
+
+An agent may not begin the AI-authoring client, provider tool loop, or multimodal
+intake implementation unless the initiating human prompt contains this exact
+separate line:
+
+```text
+AI_AUTHORING_SECRET_READY: yes
+```
+
+The same prohibition on finding, acquiring, listing, or setting a key applies.
+A live authoring evaluation additionally requires:
+
+```text
+AI_AUTHORING_LIVE_CALL_AUTHORIZED: yes
+```
+
+Normal tests use fake/scripted model clients. A product user may explicitly start
+or resume a bounded authoring session, but Gate B spending and final commit each
+retain their own explicit confirmation. Provider responses use background mode,
+a 1,200-second end-to-end deadline, and zero automatic paid retries. Polling a
+single response and returning requested tool results are not retries.
 
 Testing has three required layers whenever the current product surface supports
 them:
@@ -330,11 +386,12 @@ functions, and agent-friendly JSON/read-only SQL query surfaces.
 
 Avoid arbitrary project DDL, direct canonical SQL mutation, universal ontologies,
 unrestricted rules languages, natural-language query parsers, automatic
-acceptance of AI suggestions, general-purpose AI agent/RAG orchestration,
+acceptance of AI suggestions, general-purpose AI agent/RAG orchestration outside
+the scoped authoring/reviewer roles,
 document generation, premature incremental validation, a graph database, a web
-platform, plugin packaging, and visual editors until an evidence gate authorizes
-them. The scoped post-Gate-A semantic-review design is not general AI
-orchestration.
+platform, premature plugin packaging, and visual editors until an evidence gate
+authorizes them. The authoring agent, reviewer, and later headless MCP/plugin are
+specific interfaces over Application contracts, not general AI orchestration.
 
 ## Definition of done
 
@@ -352,7 +409,9 @@ The current roadmap is done after WP0-WP9 and the Gate A evidence are complete.
 Then set Current task to `None - the planned Gate A roadmap is complete; human
 direction required`, report the result, and ask whether to call the project
 complete, request a separate Gate B AI semantic-review planning task,
-narrow/pivot, or stop.
+narrow/pivot, or stop. Gate C AI authoring/intake is the intended product
+continuation after Gate A and an explicit Gate B decision (implemented or
+omitted), but it still requires a later human planning request.
 Do not plan or implement more work without a new human prompt.
 
 When Current task is `None`, do not invent work. Report that the planned work is

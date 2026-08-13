@@ -2,7 +2,7 @@
 
 **Status:** Normative development policy
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-13
 
 This document defines how ValidatedWorld proves correctness and usability. It is
 read with the [implementation blueprint](implementation_blueprint.md) and the
@@ -266,3 +266,39 @@ uses focused batches and clusters; golden expansion tests prove inherited scope
 parents become explicit edges and that no semantic dependency edge is guessed.
 The black-box agent must be able to add several nodes under one focus without
 repeating identical parent data or directly editing SQLite.
+
+## 8. Planned Gate C AI-authoring evidence
+
+AI authoring is the intended primary user workflow, but its normal evidence must
+remain deterministic and offline. Fake/scripted model clients drive complete
+multi-turn sessions in which the agent:
+
+- creates a project proposal from a description and reviewed text/image menu
+  fixtures, reports uncertain/unreadable/unmodeled content, obtains purpose
+  confirmation, and builds the remaining graph through draft tools;
+- searches a project much larger than its supplied working context, follows
+  scope/dependency paths, and changes the correct existing nodes without
+  duplicates or unrelated edits;
+- adds a complete branch such as a pasta menu section using focused batches and
+  explicit semantic edges;
+- pauses for questions, resumes from durable state, handles stale heads and
+  bounds, and never holds a SQLite write transaction while waiting;
+- repairs deterministic validation/impact failures without weakening rules;
+- invokes the independent fake Gate B workflow when policy requires it and
+  stales old review evidence after repairs; and
+- presents the exact preview, receives scripted conversational user approval,
+  calls the guarded commit tool, and proves that missing/stale approval rejects.
+
+Contract tests prove the CLI, in-app function tools, and later MCP adapter invoke
+the same Application use cases and schemas. No adapter exposes raw SQL or
+unguarded canonical writes. Secret/private-source scans include tool calls,
+provider state, logs, persisted session metadata, diagnostics, and fixtures.
+
+`VW_AIAUTHORING__LIVETESTS` is ignored by unit, integration, and ordinary
+end-to-end tests. A separately invoked live evaluation still requires the exact
+secret/live-call attestations, uses background Responses with a 1,200-second
+deadline, and never retries a paid failure automatically. Measure graph accuracy,
+duplicate/unrelated change rate, question quality, validation repairs, task
+completion, tool calls, context bytes, tokens, time, cost, and user effort. The
+feature fails its gate if it cannot reliably make the AI—not the user—perform the
+graph work through conversation.

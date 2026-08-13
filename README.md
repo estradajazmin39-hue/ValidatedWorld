@@ -13,6 +13,12 @@ project file. It validates proposed transactions, calculates their downstream
 impact, requires selected affected nodes to be reviewed, and commits the complete
 new state or nothing at all.
 
+The mature product is intended to be **AI-first and headless**: a user describes
+what they want, optionally supplies text or images, and an authoring agent uses
+bounded search and transaction tools to build or change the graph. The agent asks
+questions when meaning is genuinely ambiguous, while ValidatedWorld—not model
+memory—enforces the final graph and commit rules.
+
 ## Storage and protocol
 
 The authoritative workspace is one portable SQLite application file:
@@ -99,12 +105,48 @@ or certify them.
 There is no special diff format. Accepted transaction operations are the direct
 change record; impact analysis supplies the transitive consequences.
 
-After Gate A, ValidatedWorld is planned to own one narrowly scoped AI feature:
-an optional semantic review of one complete projected transaction. Its single
-request contains all selected dependency/impact chains—even when disjoint—and
-each included node's singular lineage to the project-purpose root. The
-reviewer returns cited concerns and candidate links or operations. It never edits
-canon, generates the finished artifact, or turns a model judgment into proof.
+After Gate A, the roadmap has two deliberately separate AI roles. Gate B is an
+optional semantic reviewer of one complete projected transaction. Gate C is a
+conversational authoring/intake agent that can search the project and call
+validated draft tools. The reviewer never edits canon; the author never approves
+its own work; and neither turns model judgment into deterministic proof.
+
+## AI-first authoring direction
+
+The intended everyday flow is:
+
+```text
+user describes a new project or desired alteration
+→ authoring agent searches/reads the existing graph or interprets supplied text/image
+→ agent asks focused questions and creates explicit draft node/edge operations
+→ deterministic projection, validation, impact, and review obligations run
+→ independent Gate B review runs when enabled or required
+→ agent repairs the draft or discusses concerns with the user
+→ app shows the exact final operation/impact/hash preview
+→ user approves that exact draft in the conversation
+→ authoring agent calls the guarded commit tool
+→ normal atomic ValidatedWorld commit succeeds or rejects safely
+```
+
+The authoring agent never receives raw SQL or unguarded canonical mutation. It
+does receive a guarded commit tool, which succeeds only after the user has
+approved the exact current preview in ordinary conversation. It works through
+the same versioned Application/JSON contracts as the CLI. A
+later headless MCP server can expose those contracts to ChatGPT, Codex, or other
+compatible agents; an OpenAI plugin can package that MCP server plus workflow
+skills. A custom visual interface is optional, not the primary authoring model.
+
+This is the central product promise: the AI can safely and meaningfully work on a
+project far larger than one context window. The full state persists in SQLite;
+the AI repeatedly searches and retrieves the relevant working set, while
+transactions, dependency traversal, impact, and deterministic validation operate
+over the authoritative graph. No step requires loading a WoW-sized world into
+one prompt.
+
+The first authoring proof will use the built-in technical profile and a small
+reviewed catalog/menu profile. The AI may select installed profiles but will not
+silently invent schema semantics; unsupported vocabulary becomes a question to
+the user and, eventually, a separate reviewed profile-authoring workflow.
 
 ## Intended uses
 
@@ -165,6 +207,10 @@ Gate B project policy declares AI review `disabled`, `optional`, or `required`.
 An optional transaction can record an explicit skip with actor and reason; a
 required review cannot be bypassed by an environment variable.
 
+Long-running provider responses use Responses background mode and a 1,200-second
+end-to-end deadline. Polling one response is not a retry. Gate B still makes one
+model request with zero automatic paid retries.
+
 ## Core workflow
 
 ```text
@@ -196,6 +242,12 @@ Only the scope-parent convenience is automatic. Semantic dependency edges are
 never guessed silently. This keeps the canonical graph inspectable while letting
 an agent work within one local branch of the project at a time.
 
+Gate A also provides deterministic node search and tree/graph navigation before
+the in-app authoring agent is added: filters by ID/type/tag/searchable property
+and scope, scope children/ancestors/subtrees, semantic neighbors, dependencies,
+dependents, and bounded context. This is a tool surface, not natural-language SQL
+or an embedding/RAG dependency.
+
 ## Start here
 
 - [Feasibility and limits](docs/feasibility.md) — guarantee boundary and proof
@@ -206,6 +258,8 @@ an agent work within one local branch of the project at a time.
   schema, algorithms, tests, and work packages.
 - [Planned AI semantic review](docs/ai_semantic_review.md) — post-Gate-A review
   whole-transaction request, scope, concerns, secrets, and evaluation.
+- [Planned AI-first authoring](docs/ai_authoring_agent.md) — conversational
+  text/image intake, safe tool loop, confirmation boundary, and MCP/plugin path.
 - [Testing, fixtures, and agent QA](docs/testing_and_qa.md) — embedded SQLite
   packaging, reusable application-generated scenarios, end-to-end tests, and
   usability walkthroughs.
@@ -301,8 +355,8 @@ automatic next coding task: Current task becomes `None`, and the agent reports
 whether evidence supports continuing, narrowing, pivoting, or stopping. It asks
 the human whether to declare the current scope complete or request a separate
 Gate B AI semantic-review planning task. Planning that phase does not itself
-authorize implementation. Linear narrative, interactive state, and integration
-work follow only through later evidence gates.
+authorize implementation. AI-first authoring/intake, MCP/plugin packaging,
+linear narrative, and interactive state follow only through later evidence gates.
 
 If Current task is `None`, an invoked agent makes no changes. It reports that the
 planned work is finished, summarizes the final verification and optional future
@@ -314,9 +368,11 @@ The repository is a .NET 10 scaffold plus an implementation-ready design. WP0 is
 complete and WP1 (the common graph domain) is the Current task. The execution
 plan, rather than this summary, is authoritative if progress changes. Gate A is
 a small technical-project graph backed by SQLite. It must prove useful and
-accurate impact at acceptable modeling cost before narrative or game profiles
-are implemented. The whole-transaction AI semantic reviewer is preserved as the first
-recommended post-Gate-A phase; it is specified but not implemented in WP1.
+accurate impact at acceptable modeling cost before provider-backed authoring or
+domain profiles are implemented. Gate B is the smaller recommended post-Gate-A
+review experiment; after an explicit decision to retain or omit it, Gate C
+implements the primary AI authoring/intake experience. Neither is implemented in
+WP1.
 
 Build and test with:
 

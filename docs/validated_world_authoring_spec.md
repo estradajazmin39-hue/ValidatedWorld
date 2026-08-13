@@ -2,9 +2,9 @@
 
 **Status:** Authoritative product specification
 
-**Specification version:** 6.0
+**Specification version:** 7.0
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-13
 
 **Primary implementation:** .NET 10 / C#
 
@@ -34,8 +34,10 @@ meaning:
 - game transitions depend on state and alter future possibilities.
 
 ValidatedWorld maintains the explicitly modeled, continuity-critical portion of
-that graph as one authoritative typed property graph. It is a **semantic
-change-control engine**, not a document author, generic database, or RAG system.
+that graph as one authoritative typed property graph. Its deterministic core is
+a **semantic change-control engine**, and its intended mature experience is an
+AI-first authoring client over that engine—not a generic database, RAG system, or
+unconstrained document generator.
 
 The workflow is:
 
@@ -55,9 +57,22 @@ open and integrity-check project.vw.db
 → return a versioned JSON result
 ```
 
-An external AI may query the relational state and is expected to be competent
-with databases. It still cannot write authoritative rows directly: the
-transaction/validation boundary is the product.
+Gate A exposes this as headless JSON tools. After the deterministic foundation
+and independent semantic reviewer prove useful, a user can state an intent or
+supply supported text/images; an authoring agent searches the project, asks
+questions, and calls those same validated draft tools. An AI may be competent
+with databases, but it never writes authoritative rows directly: the
+transaction/validation/confirmation boundary is the product.
+
+The project is explicitly expected to grow far beyond a single model context.
+Persistent indexed state, bounded search and traversal, durable drafts, explained
+impact, and whole-graph deterministic validation give the conversational agent a
+safe working method without loading the entire world at once.
+
+AI-first means the agent owns graph mechanics: searches, IDs, types, properties,
+edge directions, batching, validation repairs, impact inspection, review handoff,
+and the guarded commit call. The user supplies intent and material decisions, not
+JSON operation lists or database commands.
 
 ## 2. Product boundary and evidence
 
@@ -76,6 +91,8 @@ transaction/validation boundary is the product.
 - Review dispositions for policy-selected impacted nodes.
 - A planned one-request OpenAI semantic-review workflow over the complete
   selected transaction context (Gate B).
+- A planned conversational AI authoring/intake workflow that uses bounded
+  Application tools and exact user confirmation (Gate C).
 - Deterministic logical JSON snapshots, commands, and results.
 - Accepted commit operations and audit/replay evidence.
 
@@ -83,15 +100,18 @@ transaction/validation boundary is the product.
 
 - Manuscripts, papers, patent applications, manuals, source trees, games, and
   media.
-- Extracting meaning from those artifacts.
+- Deterministically extracting meaning from those artifacts.
 - Updating, rendering, or publishing them.
-- General-purpose AI agent, RAG, composition, generation, and arbitrary prompt
-  workflows outside the scoped semantic reviewer.
+- General-purpose autonomous agents, RAG, arbitrary browsing/research, and
+  finished-artifact generation outside the scoped reviewer and authoring agent.
 - Arbitrary user-owned relational schemas.
 - Hosted identity, authorization, collaboration, and multi-tenancy.
 
 External artifact and anchor nodes may point to external material, but the
-engine does not dereference, parse, edit, or certify it.
+Gate A does not dereference, parse, edit, or certify it. Gate C may send explicit
+user-supplied text/image bytes to the configured model as noncanonical intake;
+raw sources remain external by default, and extraction is never deterministic
+proof.
 
 ### 2.3 Evidence classes
 
@@ -108,6 +128,12 @@ possible issue using supplied context. Review completion, freshness, request
 coverage, and concern disposition are auditable workflow facts. Concern
 correctness is not deterministic, and a concern is never silently promoted to a
 `Disproven` result.
+
+AI-authoring output is a **Proposal**: explicit draft operations, questions,
+assumptions, and extraction-coverage claims. The application can prove which
+tools ran and whether the resulting graph validates. It cannot prove the model
+captured every source fact or chose the intended meaning. A proposal becomes
+canon only through exact user confirmation and normal commit.
 
 Database constraint success is structural evidence, not proof of semantic
 validity. An incomplete semantic phase is never a pass.
@@ -454,6 +480,11 @@ templates, and shorthand never enter canonical state or create semantic
 dependency edges by inference. Once expanded, the stored draft and change-set
 hash contain only ordinary explicit node/edge operations.
 
+A later AI authoring agent may infer and propose semantic edges from user intent
+or supplied source material. Those are still ordinary explicit operations shown
+in the draft; the deterministic Application layer itself never silently invents
+them.
+
 ### 7.3 Projection
 
 The Application layer loads the base graph, applies draft operations to isolated
@@ -545,7 +576,41 @@ review cannot be skipped. `VW_AIREVIEW__LIVETESTS` controls only whether the
 separate live-provider test harness is eligible to run. It is ignored by unit and
 ordinary end-to-end tests and never overrides project/transaction policy.
 
-### 7.8 Commit
+### 7.8 Planned AI-first authoring and intake — Gate C
+
+Gate C adds a conversational, tool-using authoring agent after Gate A and an
+explicit Gate B decision. If Gate B is retained it remains an independent
+semantic-review boundary. For an existing project the authoring agent
+must search/read before mutation, create or resume one durable draft, apply
+explicit operations through Application tools, run validation/impact repeatedly,
+ask the user when materially different interpretations remain, and prepare an
+exact final confirmation.
+
+For a new project it may accept a user description plus explicit supported UTF-8
+text/image inputs. Before creating the database it proposes the title, project
+ID, purpose, built-in profile versions, top-level scope, source inventory,
+unresolved questions, and initial batches. The user confirms the purpose; normal
+initialization creates the valid root, and the remaining graph is authored in a
+draft transaction. Source names/media types/hashes and available line/region
+citations may be represented as provenance anchors, but raw input bytes are not
+canonical project data by default.
+
+The authoring agent uses strict read/draft/validation tools and never receives raw
+SQL, direct canonical mutation, schema-package mutation, or an unguarded commit
+tool. It prepares the exact preview; the user may approve it in ordinary
+conversation; the host binds that approval to the head, draft revision,
+change-set hash, projected hash, operation/impact summary, and satisfied review
+state; and the agent calls the guarded commit tool. New-project initialization
+uses the same pattern: after the user confirms the proposed purpose/profile, the
+agent calls the guarded initialization tool and continues authoring. No separate
+visual UI or manual command is required.
+
+If review is enabled or required, the app invokes Gate B only after separately
+showing review scope/cost and obtaining authorization. The reviewer is a fresh
+tool-free request without the authoring conversation. Repairs stale the old run.
+The complete contract is [AI-first authoring and intake](ai_authoring_agent.md).
+
+### 7.9 Commit
 
 After an apparently valid reviewed draft, commit:
 
@@ -591,6 +656,9 @@ Required use cases:
 
 - initialize, inspect, verify, and snapshot a project;
 - get/list/query logical nodes and edges;
+- search nodes deterministically by ID/type/tag/searchable scalar text/scope with
+  bounded stable pagination;
+- list scope children, ancestors, and bounded subtrees plus semantic neighbors;
 - inspect dependencies/dependents and explanation paths;
 - begin/show/apply/validate/commit/abort transactions;
 - list and disposition review obligations;
@@ -647,7 +715,23 @@ policy, a fake test client, and one dependency-isolated OpenAI production client
 using `gpt-5.6-terra` with medium reasoning. It is evaluated first against
 deliberately omitted or stale TechnicalProject semantics.
 
-### 10.3 Linear narrative profile — Gate C
+### 10.3 AI-first authoring and intake — Gate C
+
+Adds text/image intake, strict function-tool orchestration, deterministic
+search/navigation, durable authoring sessions, user questions, exact confirmation,
+the reviewed `catalog/v1` proof profile, and a fake/scripted test client plus one
+OpenAI production client. The authoring agent performs the draft operations and
+guarded commit call; it cannot write canon directly, approve its own Gate B
+review, or commit without exact conversational user confirmation.
+
+### 10.4 MCP/plugin packaging — Gate D
+
+Exposes the stable headless Application tool contract through MCP and packages
+the server with workflow skills using the current OpenAI plugin format. Custom UI
+is optional; the server must remain fully useful through structured/model-readable
+results.
+
+### 10.5 Linear narrative profile — Gate E
 
 Adds fictional time, temporally scoped assertions, events, character
 knowledge/belief, narrative order, clues, and explicit disclosure/deduction
@@ -656,7 +740,7 @@ rules. Manuscripts remain external.
 Keep canon truth, character perspective, fictional time, narrative order, and
 authoring revision separate.
 
-### 10.4 Interactive-state profile — Gate D
+### 10.6 Interactive-state profile — Gate F
 
 Adds finite typed state variables, conditions, effects, transitions, invariants,
 and reachability constraints. Runtime state is a derived valuation after an
@@ -678,7 +762,9 @@ ValidatedWorld.Cli                  Application, Persistence.Sqlite
 
 ValidatedWorld.AiReview             later; Core + Serialization + Validation
 ValidatedWorld.AiReview.OpenAI      later; AiReview + pinned OpenAI client
-ValidatedWorld.Mcp                  later; Application + selected persistence
+ValidatedWorld.AiAuthoring          later; Application + shared tool contracts
+ValidatedWorld.AiAuthoring.OpenAI   later; AiAuthoring + pinned OpenAI client
+ValidatedWorld.Mcp                  later; Application + shared tool contracts
 ValidatedWorld.Web                  later; Application + selected persistence
 ```
 
@@ -692,6 +778,11 @@ review contracts and persistence ports; SQLite implements those ports, and the
 CLI alone composes the sole OpenAI production client. The interface exists for
 offline testing and dependency isolation, not to promise multiple providers. No
 deterministic-core project references a provider SDK.
+
+During Gate C, `AiAuthoring` orchestrates only a strict Application tool host;
+the OpenAI adapter converts Responses function calls to that host. The CLI and
+later MCP adapter reuse the same versioned request/result contracts. Neither the
+authoring nor MCP assembly implements graph semantics or persistence directly.
 
 ## 12. Gate A proof of concept
 
@@ -755,6 +846,8 @@ Gate A must prove:
     normalized property-value or relation-role subsystem.
 18. Focused batch expansion produces explicit deterministic operations and makes
     realistic graph entry practical for a lower-cost agent.
+19. Bounded deterministic search and tree/graph navigation let an agent find
+    existing nodes before authoring without direct SQL or embeddings.
 
 No document import/rendering, arbitrary DDL, AI provider, web server, RDF store,
 graph database, narrative timeline, or game exploration is required.
@@ -810,12 +903,50 @@ requests a separate planning task. It must:
     complete request first and never retry automatically.
 12. Evaluate that explicitly enabled path on known missing/stale issues, false
     positives, cost, latency, and scoped-versus-unscoped usefulness.
+13. Run the single response in background mode with a 1,200-second end-to-end
+    deadline; polling is status retrieval, not a retry or second model request.
 
 If the built-in call does not add enough measurable value, omit Gate B rather
 than broadening into provider selection or general AI orchestration. Gate A
 remains useful independently.
 
-## 14. Success and stop criteria
+## 14. Gate C AI-authoring proof
+
+Gate C begins only after a successful Gate A outcome, an explicit Gate B decision
+(implemented or omitted), and a new human-requested planning task. It must:
+
+1. Preserve normal offline operation and make all default tests use fake/scripted
+   model clients.
+2. Expose one strict, versioned tool contract shared by CLI, in-app authoring,
+   and later MCP adapters.
+3. Search/read existing state before mutation and avoid duplicate or unrelated
+   operations in reviewed fixtures.
+4. Create/resume durable drafts, ask focused questions, and survive cancellation
+   or context/tool bounds without losing canonical integrity.
+5. Accept explicit text/image inputs for new-project proposals while reporting
+   uncertain, unreadable, inferred, duplicate, and unmodeled content.
+6. Keep raw inputs and conversation evidence noncanonical by default while
+   retaining safe source hashes/citations and tool receipts.
+7. Never expose SQL, direct canonical mutation, rule suppression, automatic
+   concern disposition, or an unguarded model-callable commit.
+8. Bind final user confirmation to the exact head, draft revision, change-set
+   hash, projected hash, and satisfied review state.
+9. Keep Gate B independent; authoring repairs stale prior review evidence.
+10. Use only OpenAI and the evaluated model/configuration, background responses,
+    fixed safety limits, 1,200-second per-response deadlines, and no automatic
+    paid retries.
+11. Require the exact secret-readiness/live-evaluation attestations in the
+    authoring design before implementation or provider use.
+12. Demonstrate material reduction in graph-entry burden on TechnicalProject and
+    restaurant-menu text/image fixtures without weakening deterministic commit
+    guarantees.
+
+If the authoring agent frequently creates plausible but incorrect/unrelated
+state, cannot use the tool surface reliably, or does not reduce user effort,
+omit the built-in loop. The validated CLI and later headless MCP tools may remain
+useful to external agents.
+
+## 15. Success and stop criteria
 
 Gate A succeeds if explicit typed edges surface the correct nodes and
 anchors, transactions prevent stale semantic state, SQLite reduces persistence
@@ -839,8 +970,13 @@ The common POC explicitly does not:
   or literary quality;
 - implement collaborative branches/merges or public plugin packaging.
 
-## 15. Durable direction
+The later scoped authoring agent is not an exception to the automatic-acceptance
+rule: it creates proposals and drafts, not unconfirmed canon. Its text/image
+intake is not a promise of exhaustive document ingestion or synchronization.
 
-> Keep one explicit relationally stored semantic graph internally coherent across
-> revisions, explain what each proposed change affects, and let external tools
-> decide how to use the accepted state.
+## 16. Durable direction
+
+> Let a user express intent naturally, give an AI safe headless tools to propose
+> changes to one explicit relationally stored semantic graph, and refuse the
+> final commit until deterministic impact, required review, and exact user
+> confirmation agree.

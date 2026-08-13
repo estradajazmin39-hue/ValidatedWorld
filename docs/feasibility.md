@@ -2,7 +2,7 @@
 
 **Status:** Accepted product boundary
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-13
 
 ## Verdict
 
@@ -16,9 +16,11 @@ semantics that ordinary database constraints do not express: typed edge impact
 direction, transitive impact across old and projected state, review obligations,
 profile constraints, coverage, and inconclusive outcomes.
 
-ValidatedWorld is not a document system. It does not read or rewrite a novel,
-patent application, whitepaper, manual, or game project. External tools may use
-its data and impact results, but that workflow remains outside its guarantee.
+Gate A is not a document system. A later AI-first authoring gate may accept
+explicit user-supplied text/images and convert intent into proposed graph
+operations, but finished novels, patent applications, whitepapers, manuals, and
+games remain external. Extraction and generation stay heuristic rather than part
+of the deterministic guarantee.
 
 ## Why not arbitrary AI-authored tables
 
@@ -168,11 +170,38 @@ Gate B evaluates scoped, auditable review against known omissions before any
 narrative or interactive-state expansion. See
 [Planned AI semantic review](ai_semantic_review.md).
 
+## Planned AI-first authoring responsibility
+
+The mature product is intended to let a user describe a new project or desired
+alteration in ordinary language and optionally supply explicit text/image inputs.
+A conversational authoring agent then searches and reads bounded graph context,
+asks focused questions, and calls validated draft tools until the proposed
+transaction is ready for review and explicit user confirmation.
+
+This is feasible because the agent does not need the entire project in model
+context. SQLite is persistent memory; deterministic search, tree navigation,
+dependency queries, projection, and whole-graph validators provide the working
+surface. The agent may resume from the durable draft after pausing for user
+input. This is the product's central purpose: a user can converse naturally with
+an AI that safely updates a project far larger than any one context window by
+repeatedly retrieving the relevant working set. Deterministic checks still cover
+the whole explicitly modeled graph; a required heuristic review that cannot fit
+its selected scope reports inconclusive instead of silently omitting context.
+
+The authoring model has no SQL or unguarded canonical-write capability. It uses
+explicit Application-level operations. The user may approve the exact preview in
+conversation; the host binds that approval to the head, draft revision,
+change-set hash, projected hash, and review state, and the agent calls the guarded
+commit tool. Gate B remains a fresh tool-free reviewer rather than letting the
+author approve its own work. See
+[AI-first authoring and intake](ai_authoring_agent.md).
+
 ## What cannot be guaranteed
 
 ValidatedWorld cannot generally:
 
 - recover every fact or dependency from unrestricted prose;
+- guarantee complete/correct extraction from a supplied text or image;
 - detect a relationship that was never modeled;
 - infer reliable semantics from arbitrary user-created SQL tables;
 - prove a scientific claim, design, citation, patent, or legal argument correct;
@@ -219,6 +248,14 @@ Profile helpers may expand common deterministic patterns, but the resulting
 nodes and edges are always previewed and stored explicitly. The app never guesses
 semantic dependency edges from prose. This separates input convenience from the
 authoritative graph and lets an agent work locally without losing traceability.
+
+Gate A also needs deterministic agent discovery primitives: exact lookup,
+bounded search by type/tag/searchable property/scope, scope children and
+ancestors, bounded subtrees, neighbors, dependencies, dependents, and context
+queries. These are ordinary indexed Application queries, not embeddings,
+natural-language SQL, or RAG. The later authoring model translates user intent
+into these tools and may propose semantic edges, but the proposal remains an
+explicit inspectable operation.
 
 ## Relationship to external documents
 
@@ -312,9 +349,10 @@ It does not require:
 - RDF, a graph database, PostgreSQL, a web app, GUI, or plugin;
 - narrative or interactive-state implementation.
 
-This is a Gate A scope statement, not deletion of intelligent review from the
-product direction. Gate B may add the one-request OpenAI review workflow without
-weakening the standalone deterministic product.
+This is a Gate A scope statement, not deletion of the AI-first product direction.
+Gate B may add the one-request OpenAI review workflow and Gate C may add
+conversational authoring/intake without weakening the standalone deterministic
+product.
 
 ## First proof scenario
 
@@ -406,9 +444,10 @@ structured workflow materially outperforms an unscoped whole-document prompt.
 Use a fake client and scripted HTTP for normal tests. The sole production/live
 path is OpenAI with `gpt-5.6-terra` and medium reasoning. A human must personally
 install the secret and provide both readiness and per-run authorization before
-any live request. Send the entire review in one request and never retry it
-automatically. Never make this client mandatory in Core or call its findings
-proof.
+any live request. Send the entire review as one background response with a
+1,200-second deadline and never retry it automatically. Polling that response is
+not another model call. Never make this client mandatory in Core or call its
+findings proof.
 
 `VW_AIREVIEW__LIVETESTS=true` opts only a separately invoked live Gate B smoke or
 evaluation harness into network use. Normal tests ignore it. Real project policy
@@ -416,23 +455,38 @@ independently declares review disabled, optional, or required; an optional
 transaction may record an explicit reviewed skip, but an environment variable
 can never bypass a required review.
 
-### Gate C — Linear narrative profile
+### Gate C — AI-first authoring and intake
+
+Evaluate conversational creation and alteration through strict tools, including
+text/image intake, deterministic search/navigation, durable drafts, user
+questions, Gate B handoff, and exact final confirmation. The author may never use
+raw SQL, mutate canon directly, or approve its own semantic review. Measure
+operation correctness, duplicates/unrelated changes, questions, user effort,
+tool calls, cost, latency, and honest stopping on missing context.
+
+Add one reviewed compact `catalog/v1` profile so the restaurant-menu intake proof
+uses meaningful node/edge types. Ordinary authoring may select installed profiles
+but not silently invent schema packages; custom profile creation remains a
+separate reviewed workflow.
+
+### Gate D — MCP/plugin packaging
+
+Expose the same stable Application tools through a headless MCP server and
+package it with workflow skills using the then-current OpenAI plugin format.
+Keep custom UI optional and keep the tools useful without it.
+
+### Gate E — Linear narrative profile
 
 Add a reduced mystery schema for chronology, perspective, knowledge, clues, and
 disclosure. Keep manuscripts external. Retain the profile only if it catches
 meaningful structured-state errors at acceptable modeling cost.
 
-### Gate D — Interactive-state profile
+### Gate F — Interactive-state profile
 
-Only after Gate C, add finite typed variables, conditions, effects, invariants,
+Only after Gate E, add finite typed variables, conditions, effects, invariants,
 and bounded exploration.
 
-### Gate E — Integration packaging
-
-After the schema/protocol are stable, evaluate MCP/plugin packaging over
-Application use cases.
-
-### Gate F — Optional hosting
+### Gate G — Optional hosting
 
 Evaluate a thin HTTP host only after packaging. PostgreSQL is considered only if
 hosted multi-writer needs are proven.
@@ -448,12 +502,18 @@ the experiment.
 If the in-app AI reviewer adds no measurable value, omit Gate B rather than
 growing a provider ecosystem. This failure does not invalidate Gate A.
 
+If AI authoring does not materially reduce graph-entry burden or frequently makes
+plausible but incorrect/unrelated changes, keep the deterministic CLI/MCP tools
+and omit the built-in authoring loop. Do not weaken confirmation or validation to
+make the demo appear successful.
+
 ## Product language
 
 Prefer:
 
 > ValidatedWorld atomically versions an explicit semantic project graph and
-> explains which modeled nodes must be reconsidered when it changes.
+> gives AI agents safe tools to change it while explaining which modeled nodes
+> must be reconsidered before the user commits.
 
 Avoid:
 
