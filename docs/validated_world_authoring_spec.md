@@ -314,6 +314,13 @@ commit reviewed revision-zero snapshots and transaction scripts, and generate
 sample databases locally. Deliberate binary database fixtures are confined to
 test directories and require documented provenance or a regeneration method.
 
+SQLite runs in-process. The application ships a pinned native SQLite build
+through NuGet and owns project creation, migration, integrity verification,
+sample generation, and backup. Users do not install a SQLite server, standalone
+SQLite CLI, system provider, or Docker, and ordinary authoring does not require
+SQL knowledge. Documented read-only views remain optional for advanced users and
+agents.
+
 ### 6.2 Structural tables
 
 The normative table design is in the blueprint. Conceptually it contains:
@@ -485,6 +492,16 @@ Required use cases:
 
 A logical snapshot is backend-neutral data interchange and test evidence. It is
 not a finished-document export.
+
+The `.vw.db` file or an application-produced backup is the primary complete
+project interchange because it preserves drafts and history. Logical JSON is an
+additional transparent interchange, audit, revision-zero initialization, and
+fixture surface.
+
+The CLI supplies `sample list/create` for reusable built-in scenarios. Sample
+databases are created by the app from retained logical source assets through the
+same initialization/persistence paths as normal workspaces, never by copying or
+editing an opaque test database.
 
 ### 9.2 Database access
 

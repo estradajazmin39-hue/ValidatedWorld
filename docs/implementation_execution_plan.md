@@ -8,6 +8,11 @@ This file tells a coding agent what has been finished and what to do next. The
 [implementation blueprint](implementation_blueprint.md) defines the design and
 ordered work packages. This plan records actual progress.
 
+Fixture/database generation and QA follow
+[testing_and_qa.md](testing_and_qa.md). In particular, the application—not the
+user, agent, test runner, or an external SQLite tool—creates every normal
+workspace database.
+
 The repository is developed by one human-invoked agent at a time. There is no
 parallel-work, branch-management, or unattended-agent workflow to coordinate.
 
@@ -110,8 +115,8 @@ Every work package uses the largest realistic scenario its layer can support:
 
 Starting with WP3, the implementing AI must perform at least one black-box QA
 walkthrough as a user after deterministic tests pass. This is an actual agent
-operating the built CLI against a newly generated temporary database, not merely
-another unit test. It must:
+operating the built CLI against a temporary database freshly created by the app,
+not merely another unit test. It must:
 
 1. Begin from public README/CLI help and scenario instructions, not internal
    repositories or direct canonical SQL writes.
@@ -201,6 +206,13 @@ remaining optional ideas, asks what the human wants next, and stops.
   converted to regression tests and usability/product concerns reported.
 - Moved the first database/CLI walking skeleton to WP3 so end-to-end usability is
   exercised progressively instead of waiting for WP8/WP9.
+- Required reusable checked-in scenario sources plus app-owned `sample create`
+  generation; no SQLite server, standalone `sqlite3`, system provider, Docker,
+  or hand-built ordinary fixture database.
+- The current restored NuGet graph contains bundled native `e_sqlite3` assets for
+  Windows, Linux, and macOS runtime identifiers. Actual application
+  create/open/verify execution is not yet implemented or claimed; WP3 must prove
+  it on each platform the project advertises.
 - Documentation checks passed: local Markdown links resolve and code fences are
   balanced.
 - Full restore/build/test passed on 2026-08-12: 0 build warnings; 5 scaffold
@@ -269,8 +281,9 @@ After each successful task, move it to Completed work and fully specify only the
 next task under Current task.
 
 1. WP2 - logical JSON, built-in packages, and realistic source corpus.
-2. WP3 - SQLite schema/mapping plus the first init/status/verify/query CLI
-   walking skeleton and agent QA.
+2. WP3 - SQLite schema/mapping plus the first init/status/verify/query/sample
+   CLI walking skeleton, reusable TestKit/end-to-end suite, bundled-runtime smoke
+   test, and agent QA.
 3. WP4 - indexes/semantic validation plus agent diagnosis/repair QA.
 4. WP5 - durable drafts/projection plus agent transaction-authoring QA.
 5. WP6 - impact/review plus agent impact-understanding and disposition QA.

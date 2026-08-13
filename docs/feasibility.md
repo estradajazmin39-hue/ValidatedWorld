@@ -193,6 +193,13 @@ recursive queries, and atomic transactions, and preserves a one-file portable
 project. Hundreds of pages will normally produce thousands or tens of thousands
 of semantic records, not a database-scale challenge.
 
+SQLite is an embedded in-process library, not a service. The pinned NuGet native
+bundle is deployed with ValidatedWorld, so users and agents do not install or
+administer SQLite, use the standalone `sqlite3` tool, or run Docker. The
+application creates, migrates, verifies, samples, backs up, and opens its own
+files. Documented SQL views are optional advanced inspection; all ordinary
+workflows exist through the app.
+
 The likely bottleneck is graph density and full validation, not storage bytes.
 Gate A includes synthetic performance tests at 100,000 records and 1,000,000
 derived dependency edges.
@@ -202,6 +209,10 @@ concurrent writers, centralized authorization, multi-tenancy, or remote service
 operations. A specialized graph store is authorized only when measured
 traversal/query workloads exceed the indexed relational implementation and its
 operational cost is justified.
+
+If publish/runtime testing shows that the bundled native provider cannot support
+an intended platform, stop and discuss the exact platform with the human. Do not
+quietly add a system dependency or Docker requirement.
 
 ## Smallest useful product
 

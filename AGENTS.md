@@ -24,7 +24,9 @@ decisions, read these files in order:
    specification.
 3. `docs/implementation_blueprint.md` — normative SQL schema, algorithms,
    tests, and work-package order.
-4. `docs/implementation_execution_plan.md` — completed work, the one current
+4. `docs/testing_and_qa.md` — application-owned fixtures, no-external-database
+   packaging, realistic scenarios, end-to-end tests, and agent QA.
+5. `docs/implementation_execution_plan.md` — completed work, the one current
    task, and the remaining roadmap order.
 
 `docs/prior_art_and_positioning.md` records relevant existing systems and should
@@ -82,6 +84,9 @@ mean an application/SQLite operation, not a Git commit.
   repositories, transactions, integrity checks, and logical snapshot mapping.
 - `src/ValidatedWorld.Cli` — agent-grade JSON command host and composition root.
 - `tests/` — automated tests mirroring production boundaries.
+- `tests/ValidatedWorld.TestKit` — planned reusable app/CLI fixture and process
+  helpers; it never writes canonical SQLite rows directly.
+- `tests/ValidatedWorld.EndToEnd.Tests` — planned black-box public CLI scenarios.
 - `samples/TechnicalProject` — first SQLite-backed dependency POC.
 - `samples/HarborMystery` — later narrative-profile POC.
 
@@ -134,6 +139,16 @@ mean an application/SQLite operation, not a Git commit.
   never load extensions or execute stored project text as SQL.
 - SQLite permits one writer. Keep write transactions short; never hold one open
   while waiting for a human or AI review.
+- SQLite is embedded and serverless. Runtime and tests may not require a SQLite
+  server, standalone `sqlite3`, system SQLite installation, Docker, or SQL
+  knowledge for normal workflows. The pinned NuGet native bundle is deployed
+  with the application.
+- The application owns creation, migration, verification, sample generation, and
+  backup. Test and QA databases are generated through public Application/CLI
+  operations from retained scenario assets, never hand-authored with external
+  database tools or raw canonical inserts.
+- If bundled SQLite cannot support an intended platform, report the platform and
+  discuss it with the human before introducing Docker or another dependency.
 
 ## Required workflow
 
@@ -141,7 +156,7 @@ Implement only Current task in
 `docs/implementation_execution_plan.md`. Every engineering step through WP8 must
 be testable without human inspection, interactive UI use, mutable external
 services, secrets, or subjective manual judgment. Use fixed clocks/IDs/seeds,
-temporary generated databases, deterministic fault injection, scripted CLI
+temporary app-generated databases, deterministic fault injection, scripted CLI
 scenarios, and structured golden outputs as applicable.
 
 Testing has three required layers whenever the current product surface supports

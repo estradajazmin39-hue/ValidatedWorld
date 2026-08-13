@@ -24,7 +24,7 @@ project.vw.db
 That file is a user's mutable project state, not a source-controlled project
 template. The repository ignores `.vw.db` files and their SQLite sidecars
 outside `tests/`. Samples contain reviewed logical snapshots, transaction scripts,
-and expected results, then generate disposable databases locally. A binary
+and expected results, then the app generates disposable databases locally. A binary
 database belongs in `tests/` only when a deliberately constructed persistence or
 corruption fixture cannot reasonably be generated during the test.
 
@@ -118,6 +118,9 @@ open project.vw.db and verify its logical head hash
   — authoritative metamodel, persistence, and profile design.
 - [Implementation blueprint](docs/implementation_blueprint.md) — exact storage
   schema, algorithms, tests, and work packages.
+- [Testing, fixtures, and agent QA](docs/testing_and_qa.md) — embedded SQLite
+  packaging, reusable application-generated scenarios, end-to-end tests, and
+  usability walkthroughs.
 - [Implementation execution plan](docs/implementation_execution_plan.md) —
   completed work, the one current task, automated acceptance criteria, and the
   remaining roadmap order.
@@ -182,6 +185,22 @@ confusing or misleading, and whether the product seems useful—not merely wheth
 commands exited successfully. Deterministic defects become regression tests. A
 serious usability or product-direction concern is reported immediately to the
 human and prevents silently advancing the roadmap.
+
+SQLite requires no server. ValidatedWorld ships the native SQLite runtime through
+its pinned NuGet bundle and creates databases through its own CLI. Users and QA
+agents are not expected to install `sqlite3`, understand DDL, run Docker, or
+construct a database manually. The Gate A CLI is planned to supply `init`, sample
+creation, verification, and backup workflows; these are not implemented in the
+current WP0 scaffold.
+
+Realistic scenario data is authored once and retained as reviewed source assets.
+The app regenerates disposable databases from those assets for automated tests
+and local QA. Each new regression or workflow becomes another reusable scenario
+variant and expected result rather than throwaway data invented on every run.
+
+For users, the `.vw.db` file—or a backup produced by the app—is the primary
+complete portable project artifact. Deterministic logical JSON remains available
+for transparent interchange, audit, revision-zero initialization, and fixtures.
 
 ## Completion and later phases
 

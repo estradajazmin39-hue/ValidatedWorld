@@ -139,6 +139,11 @@ SQLite therefore owns physical integrity and persistence for Gate A. JSON remain
 the versioned protocol and deterministic logical snapshot. The C# engine owns
 semantic meaning and commit policy.
 
+SQLite is embedded and serverless. ValidatedWorld deploys a pinned native bundle
+through NuGet and owns database creation/backup, so a separate SQLite install,
+server, administration tool, or Docker environment is not part of the user or QA
+workflow. See [testing_and_qa.md](testing_and_qa.md).
+
 ## Product survival test
 
 Continue only if Gate A demonstrates all of the following:

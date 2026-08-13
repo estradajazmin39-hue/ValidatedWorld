@@ -23,6 +23,7 @@ Read first:
 2. [validated_world_authoring_spec.md](validated_world_authoring_spec.md)
 3. [prior_art_and_positioning.md](prior_art_and_positioning.md)
 4. This blueprint
+5. [testing_and_qa.md](testing_and_qa.md)
 
 After reading this blueprint, read
 [implementation_execution_plan.md](implementation_execution_plan.md). The
@@ -844,6 +845,11 @@ version. On open:
 Never interpolate user values, identifiers, field names, or type names into SQL.
 All runtime data uses parameters. Migration SQL is a checked embedded resource.
 
+SQLite is an in-process library, not a server. Gate A must not require a separate
+SQLite installation, the `sqlite3` CLI, Docker, or a system-native provider. The
+pinned bundle deploys the native library with ValidatedWorld. Application startup
+reports the SQLite library version in structured status/diagnostic output.
+
 ### 6.2 Journal and concurrency mode
 
 Gate A defaults to rollback journal mode for a portable single-file-at-rest
@@ -941,6 +947,11 @@ complete existing project.
 
 Gate A does not overwrite an existing authoritative database from a snapshot and
 does not call snapshots document exports.
+
+The SQLite project file and `vw backup` output are the primary complete project
+transfer artifacts because they retain current state plus drafts and audit
+history. Logical JSON is an optional transparent interchange/audit/fixture
+surface, not a requirement that users reconstruct databases themselves.
 
 ## 8. Indexes and dependency graph
 
@@ -1309,6 +1320,8 @@ vw status --db <path>
 vw snapshot write --db <path> --output <path-or-stdout>
 vw snapshot init --input <revision-zero-path-or-stdin> --db <new-path>
 vw backup --db <path> --output <new-path>
+vw sample list
+vw sample create --sample <name> --variant <name> --db <new-path>
 
 vw object get --db <path> --id <id>
 vw object list --db <path> [--type <id>] [--tag <value>]
@@ -1336,6 +1349,10 @@ vw commit verify --db <path> [--through <number>]
 
 There is no arbitrary `vw sql` write command. Users may open a verified database
 read-only with standard SQLite tools and use documented `vw_*` views.
+
+No user must do so: every normal workflow is available through the CLI JSON
+contract. Standard SQLite tools are optional advanced readers, not runtime or QA
+dependencies.
 
 ### 12.3 Result envelope
 
@@ -1456,13 +1473,20 @@ goldens. Do not duplicate package definitions as C# enum switches and SQL seed
 scripts; one canonical resource plus registered validator identifiers is the
 source.
 
+The CLI also ships a deterministic named sample catalog sourced from the
+reviewed files under `samples/`. `vw sample create` passes those logical inputs
+through normal Application/Persistence initialization; it never copies a
+hand-edited opaque database. Tests verify that packaged sample assets match the
+repository source.
+
 ### 14.2 TechnicalProject fixture
 
 `samples/TechnicalProject/project.vw.db` is a disposable, ignored build artifact
-generated deterministically from a checked-in revision-zero snapshot and
-initialization/transaction scripts. Never commit or hand-edit its binary bytes.
-Check in the canonical `project.snapshot.json`, scripts, expected result goldens,
-and fixture-building command instead.
+generated deterministically by `vw sample create` from a checked-in
+revision-zero snapshot and initialization/transaction recipes. Never commit or
+hand-edit its binary bytes. Check in the canonical scenario manifest, baseline
+snapshot, recipes, goals, expected result goldens, and fixture-building command
+instead.
 
 The graph contains a quantitative power track:
 
@@ -1519,6 +1543,9 @@ ordered transaction/repair scripts
 expected structured results and logical hashes
 agent-facing scenario goals that do not reveal the expected repair
 ```
+
+See [testing_and_qa.md](testing_and_qa.md) for the normative source layout,
+TestKit, end-to-end suite, ignored QA workspaces, and fixture reuse rules.
 
 ### 14.3 Intentional-error corpus
 
@@ -1660,6 +1687,13 @@ requires a deliberately malformed or byte-specific SQLite artifact that cannot
 reasonably be produced at test time. Such a fixture must document its purpose,
 provenance, expected application/schema version, and regeneration procedure.
 
+All normal fixture databases are created by ValidatedWorld through public
+Application/CLI paths from retained scenario assets. Tests and QA may not depend
+on an external SQLite tool, server, Docker container, system provider, or raw
+canonical SQL setup. Shared fixture/process helpers live in
+`tests/ValidatedWorld.TestKit`; black-box CLI cases live in
+`tests/ValidatedWorld.EndToEnd.Tests`.
+
 Every WP0-WP8 acceptance criterion must be executable by an agent in a clean
 checkout without human inspection, secrets, interactive UI, or a mutable remote
 service. Tests control clocks, IDs, random seeds, scheduling/fault points, and
@@ -1710,7 +1744,8 @@ end-to-end scenario and an actual AI-agent black-box walkthrough.
 The QA agent receives:
 
 - the built CLI and its public README/help;
-- a newly generated temporary database or documented initialization command;
+- a temporary database generated by the app through the documented sample or
+  initialization command;
 - a realistic user goal, such as changing retention policy or diagnosing why a
   privacy claim cannot be accepted; and
 - no expected command sequence, private repository API, or permission to mutate
@@ -1787,11 +1822,16 @@ report the evidence to the human, and stop.
 - Implement connections, v1 migration, repositories, read views, integrity
   checks, logical snapshot load, initialize, and backup.
 - Add the first CLI walking skeleton from Section 12.5 and CLI test project.
+- Add `ValidatedWorld.TestKit`, `ValidatedWorld.EndToEnd.Tests`, the bundled
+  sample catalog, and `vw sample list/create`.
 - Generate a real TechnicalProject `.vw.db` in a temporary directory and run the
   first black-box agent read/query/structural-verification walkthrough.
+- Publish/run from a clean temporary directory and prove bundled SQLite startup,
+  create/open/verify/backup without `sqlite3`, Docker, or system SQLite; record
+  which host platforms were actually exercised.
 - Acceptance: migration/constraint/mutation-detection/mapping/backup integration
-  tests, CLI scenario, and agent QA pass; unimplemented semantic phases are
-  explicitly inconclusive.
+  tests, CLI/package smoke tests, reusable sample generation, and agent QA pass;
+  unimplemented semantic phases are explicitly inconclusive.
 
 ### WP4 — indexes and semantic validation
 

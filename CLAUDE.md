@@ -2,6 +2,9 @@
 
 Read and follow the repository guidance in the root repository agents file, `/AGENTS.md`.
 
+Read `/docs/testing_and_qa.md` before changing persistence, CLI, fixtures,
+samples, testing strategy, or supported-platform behavior.
+
 For implementation work, read and update
 `/docs/implementation_execution_plan.md`. Implement only its Current task. A
 successful handoff records the completed evidence and fully specifies the next
