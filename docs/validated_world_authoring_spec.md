@@ -2,7 +2,7 @@
 
 **Status:** Authoritative product specification
 
-**Specification version:** 5.1
+**Specification version:** 6.0
 
 **Last reviewed:** 2026-08-12
 
@@ -34,7 +34,7 @@ meaning:
 - game transitions depend on state and alter future possibilities.
 
 ValidatedWorld maintains the explicitly modeled, continuity-critical portion of
-that graph as authoritative structured project data. It is a **semantic
+that graph as one authoritative typed property graph. It is a **semantic
 change-control engine**, not a document author, generic database, or RAG system.
 
 The workflow is:
@@ -43,11 +43,11 @@ The workflow is:
 open and integrity-check project.vw.db
 → read the exact logical head revision/hash
 → begin a durable application-level transaction
-→ add, replace, or remove typed objects
+→ add, replace, or remove typed nodes and edges
 → construct the projected logical state
 → derive dependency graphs from base and projection
 → compute explained transitive impact
-→ repair data and disposition selected impacted objects
+→ repair data and disposition selected impacted nodes
 → run every required deterministic validator
 → optionally run required AI semantic review and disposition concerns [Gate B]
 → recheck head and evidence inside a short SQLite write transaction
@@ -65,14 +65,15 @@ transaction/validation boundary is the product.
 
 - One portable authoritative SQLite project file.
 - A fixed, migrated, integrity-constrained physical schema.
-- A small logical metamodel for typed records and relationships.
-- One required project-purpose root and a singular rooted scope hierarchy.
+- One small logical model for typed nodes and binary first-class edges.
+- One required project-purpose root and a spanning rooted scope tree over every
+  other node.
 - Exact versioned logical schema packages/profiles.
-- Stable IDs and per-object revisions.
+- Stable IDs and per-entity revisions.
 - Atomic optimistic project transactions.
 - Derived dependency/impact indexes.
 - Deterministic validators and structured diagnostics.
-- Review dispositions for policy-selected impacted objects.
+- Review dispositions for policy-selected impacted nodes.
 - A planned one-request OpenAI semantic-review workflow over the complete
   selected transaction context (Gate B).
 - Deterministic logical JSON snapshots, commands, and results.
@@ -89,7 +90,7 @@ transaction/validation boundary is the product.
 - Arbitrary user-owned relational schemas.
 - Hosted identity, authorization, collaboration, and multi-tenancy.
 
-External artifact and anchor records may point to external material, but the
+External artifact and anchor nodes may point to external material, but the
 engine does not dereference, parse, edit, or certify it.
 
 ### 2.3 Evidence classes
@@ -117,9 +118,9 @@ ValidatedWorld separates three ideas often conflated as “the schema.”
 
 ### 3.1 Physical SQLite schema
 
-Implementation-owned tables store projects, schema definitions, graph objects,
-field values, relation endpoints, constraints, transactions, reviews, commits,
-and diagnostics.
+Implementation-owned tables store projects, compact schema definitions, graph
+entities, edge endpoints, drafts, validation reports, commits, and later AI
+review runs.
 
 The physical schema changes only through application migrations. A project or AI
 does not issue canonical DDL.
@@ -128,17 +129,17 @@ does not issue canonical DDL.
 
 The common domain defines:
 
-- schema packages;
-- one purpose root and rooted scope hierarchy;
-- record/relation type definitions;
-- field and endpoint-role definitions;
-- dependency rules;
-- record and relation instances;
-- constraints and policy;
-- transactions, impact, review, and commit evidence.
+- schema packages with node and edge type definitions;
+- nodes with stable IDs, revisions, scalar properties, tags, and extensions;
+- binary first-class edges with stable IDs, source/target nodes, properties, and
+  an edge-type impact mode;
+- one purpose root and a `scope-parent` spanning tree over every other node;
+- constraints represented as typed nodes plus explicit target edges;
+- policy, transactions, impact, review, and commit evidence.
 
-This metamodel is intentionally opinionated. Without it, the engine cannot know
-which references produce impact or how to explain validation.
+This model is intentionally opinionated. Every graph-relevant connection is an
+edge; scalar properties cannot hide references. Without that rule, the engine
+cannot know which connections produce impact or how to explain validation.
 
 ### 3.3 Domain profiles
 
@@ -160,8 +161,8 @@ A `SchemaPackage` has:
 - stable package ID;
 - semantic version;
 - canonical definition hash;
-- record type definitions;
-- relation type definitions;
+- node type definitions;
+- edge type definitions;
 - supported constraint kinds;
 - required validator IDs/versions;
 - compatibility and migration metadata.
@@ -169,99 +170,96 @@ A `SchemaPackage` has:
 Projects enable exact package IDs, versions, and hashes. The full definitions are
 stored in the project database so the file is self-describing.
 
-Generic field/type validation may run from package data. Semantic validator code
+Generic property/type validation may run from package data. Semantic validator code
 runs only when the exact declared validator implementation is registered. Missing
 implementations make affected coverage inconclusive.
 
 Gate A ships `core/v1` and `technical-project/v1`. Project-authored packages and
 schema evolution are deferred until the fixed-package POC succeeds.
 
-### 4.2 Record type definitions
+### 4.2 Node type definitions
 
-A record type declares:
+A node type declares:
 
 - stable type ID and display name;
 - owning package;
-- field definitions;
-- whether the type may be an external artifact/anchor or constraint target;
+- scalar-property definitions;
+- whether it is the purpose, a scope/group, constraint, external artifact, or
+  anchor category;
 - categories/tags used by policy;
 - applicable generic constraint selectors.
 
-### 4.3 Field definitions
+### 4.3 Scalar property definitions
 
-A field definition declares:
+A property definition declares:
 
-- stable field name;
-- value kind: `text`, `integer`, canonical `decimal`, `boolean`, `symbol`,
-  `instant`, or `reference`;
+- stable property name;
+- value kind: `text`, `integer`, canonical `decimal`, `boolean`, `symbol`, or
+  `instant`;
 - minimum/maximum cardinality;
 - order significance;
 - allowed symbols/ranges/patterns where supported;
-- allowed reference target types;
-- reference dependency behavior;
 - whether it contributes to display/search only or semantic identity.
 
 Gate A avoids arbitrary nested objects. Repeated structured concepts become
-records or first-class relations. Namespaced extension JSON is allowed only as
-uncovered data and cannot contain hidden canonical references.
+nodes or first-class edges. Namespaced extension JSON is allowed only as
+uncovered data and cannot contain hidden canonical references. An ID-shaped
+string in a property has no graph meaning.
 
-### 4.4 Relation type definitions
+### 4.4 Edge type definitions
 
-A relation type declares:
+An edge type declares:
 
 - stable type ID and owning package;
-- named endpoint roles;
-- cardinality and allowed object types for each role;
-- field definitions and provenance requirements;
-- zero or more dependency rules;
-- whether the relation is authoritative for selected lifecycle states.
-
-A dependency rule identifies a dependent endpoint role, a dependency endpoint
-role, and whether the edge creates review impact. Bidirectional review is two
-explicit rules. A query-only association has no impact rule.
+- allowed source and target node types;
+- scalar property definitions and provenance requirements;
+- impact mode: `none`, `source-depends-on-target`,
+  `target-depends-on-source`, or `bidirectional`;
+- whether the edge type must be acyclic or has other registered validators.
 
 Examples:
 
 ```text
-derived-from:
-  result depends on premise
+derived-from(result -> premise):
+  source-depends-on-target
 
-supports:
-  supported-assertion depends on supporter
+supports(supporter -> supported-assertion):
+  target-depends-on-source
 
-contradicts:
-  left depends on right for review
-  right depends on left for review
+contradicts(left -> right):
+  bidirectional
 
-mentions:
-  no dependency rule
+mentions(source -> mentioned):
+  none
 ```
 
-This declaration—not SQL foreign-key direction—defines semantic impact.
+This declaration—not SQL foreign-key direction—defines semantic impact. A
+relationship requiring more than two roles is represented as a typed node with
+ordinary edges to its participants. This retains expressiveness without a second
+hyperedge model in Gate A.
 
-## 5. Logical project objects
+## 5. Logical graph entities
 
 ### 5.1 Stable identity
 
-Every addressable record, relation, and constraint has a globally unique stable
-ID within the project and a committed object revision. Names, labels, paths, and
+Every node and edge has a globally unique stable entity ID within the project
+and a committed revision. Names, labels, paths, and
 SQL row IDs are never semantic references.
 
 ### 5.2 Project purpose and scope hierarchy
 
-Every project contains exactly one `core:project-purpose` record, identified by
-`ProjectSnapshot.PurposeObjectId`. Project initialization requires a substantive
-plain-English purpose and creates this record before ordinary content. Its
+Every project contains exactly one `core:project-purpose` node, identified by
+`ProjectSnapshot.PurposeNodeId`. Project initialization requires a substantive
+plain-English purpose and creates this node before ordinary content. Its
 conventional stable ID is `purpose:root`; it is ordinary canonical data and may
 be changed only through a transaction.
 
-Every scope-bearing content record other than the purpose has exactly one
-`core:scope-parent` relation. A parent may have many children. Repeatedly
-following a child's parent must be acyclic and terminate at the purpose root.
-Relations and constraints obtain scope context through their endpoints or
-targets rather than acquiring multiple parents of their own. Profiles explicitly
-declare which record categories are scope-bearing; Gate A's ordinary technical
-content is scope-bearing.
+Every other node has exactly one outgoing `core:scope-parent` edge to its parent.
+A parent may have many children. Repeatedly following a node's parent must be
+acyclic and terminate at the purpose root. This is a spanning tree over all
+canonical content nodes, including scope/group, constraint, and anchor nodes.
+Edges obtain review context from their endpoints and do not themselves need a
+scope parent.
 
 `scope-parent` declares the child dependent on the parent and creates review
 impact. This does **not** turn every leaf edit into whole-project impact:
@@ -282,56 +280,59 @@ natural-language conflict with it is not deterministically decidable. For
 example, a `Whopper` under a McDonald's-menu purpose becomes a cited AI concern
 unless a profile also supplies a closed deterministic vocabulary rule.
 
-### 5.3 Records
+### 5.3 Nodes
 
-A record contains:
+A node contains:
 
 - stable ID and revision;
-- logical record type ID;
-- typed field values conforming to its type definition;
+- logical node type ID;
+- typed scalar properties conforming to its type definition;
 - ordinal tags;
 - namespaced extension JSON;
 - lifecycle metadata when its profile declares it.
 
-Examples in the technical profile include subjects, propositions, assertions,
-sources, artifacts, and anchors. They are profile types, not hardcoded physical
-tables.
+Examples include scopes, requirements, assertions, characters, events,
+constraints, artifacts, and anchors. They are profile node types, not hardcoded
+physical tables.
 
-### 5.4 Relations
+### 5.4 Edges
 
-A relation is first-class and contains:
+An edge is first-class and contains:
 
 - stable ID and revision;
-- logical relation type ID;
-- one or more endpoints for each declared named role;
-- typed field values such as rationale;
+- logical edge type ID;
+- exactly one source node and one target node;
+- typed scalar properties such as rationale;
 - provenance;
 - tags and extension data.
 
-First-class relation identity allows evidence, provenance, review, and future
-relations-about-relations without treating an edge as an anonymous pair.
+First-class edge identity allows evidence, provenance, revision, and direct
+transaction operations without treating a connection as an anonymous pair.
+Higher-arity relationships and relationships that themselves need scope are
+reified as nodes with typed edges.
 
-### 5.5 Constraints
+### 5.5 Constraint nodes
 
-Gate A uses a closed constraint catalog whose instances select objects by type,
-field, tag, lifecycle state, or relation kind. Initial generic/technical kinds
+Gate A uses a closed constraint catalog whose instances are typed nodes connected
+to their targets by explicit edges. They may select nodes/edges further by type,
+property, tag, lifecycle state, or edge kind. Initial generic/technical kinds
 cover:
 
 - no selected contradictory accepted assertions;
 - required support for selected assertion roles;
-- acyclic selected dependency relation types;
+- acyclic selected dependency edge types;
 - unique active definitions;
 - required implementation and verification coverage;
-- required impact dispositions.
+- required impact dispositions;
 - exactly one purpose and singular acyclic scope lineage to it.
 
 There is no arbitrary SQL, expression, trigger, or scripting constraint language.
 
 ### 5.6 External artifacts and anchors
 
-Artifact and anchor are logical profile record types. They may store opaque
+Artifact and anchor are logical profile node types. They may store opaque
 external locators and observed external version/hash claims. Anchors may form an
-acyclic ordered hierarchy and bind to semantic objects using typed relations.
+acyclic ordered hierarchy and bind to semantic nodes using typed edges.
 
 The engine never follows a locator or verifies external bytes.
 
@@ -375,19 +376,19 @@ The normative table design is in the blueprint. Conceptually it contains:
 
 ```text
 metadata and migration history
-project and project_head
-schema_packages, logical_types, field_definitions
-relation_roles, dependency_rules
-graph_objects, object_tags, object_field_values
-relations, relation_endpoints
-constraints
-draft_transactions, draft_operations, submitted_dispositions
-commits, commit_operations, accepted_dispositions
-validation_runs, diagnostics
+project/head
+schema_packages, entity_types
+graph_entities, graph_edges
+draft_transactions
+validation_runs
+commits
 ```
 
-Record-valued fields and relation endpoints reference the global graph-object ID
-space with foreign keys. Deletes restrict rather than cascade.
+This is nine v1 tables including migration history. `graph_entities` provides a
+global node/edge ID space; `graph_edges` supplies source/target foreign keys.
+Scalar property/tag/extension maps and ledger payloads use validated canonical
+JSON. Deletes restrict rather than cascade. Add a materialized property index
+later only if measured query performance requires it.
 
 ### 6.3 Connection policy
 
@@ -408,9 +409,9 @@ not an ORM.
 
 SQLite physical bytes are not semantic identity. The logical snapshot includes:
 
-- project head metadata, policy, and `purposeObjectId`;
-- selected complete schema package definitions;
-- all current graph objects, values, endpoints, and constraints;
+- project head metadata, policy, and `purposeNodeId`;
+- selected complete schema package/type definitions;
+- all current nodes, edges, scalar properties, tags, and extensions;
 - exact deterministic ordering.
 
 Its `logicalHash` is SHA-256 over canonical UTF-8 JSON with that field omitted.
@@ -431,41 +432,59 @@ A draft transaction records:
 
 - transaction ID, project ID, base revision/hash;
 - intent, author, creation time, and status;
-- one final add/replace/remove operation per target object ID;
-- expected object revision for replacements/removals;
+- one final add/replace/remove operation per target entity ID;
+- expected entity revision for replacements/removals;
 - submitted review dispositions and allowed warning acknowledgements.
 
 Drafts are durable database rows but are not canonical logical state.
 
-Clients cannot set committed object revisions. Adds start at 1; replacements
+Clients cannot set committed entity revisions. Adds start at 1; replacements
 increment the authoritative revision.
 
-### 7.2 Projection
+### 7.2 Focused batch authoring
 
-The Application layer loads the required base logical state, applies draft
-operations to isolated builders, materializes the projection, extracts typed
-references/endpoints, and validates it. There is no cascade delete or partial
+A draft may remember a noncanonical focus node. An authoring batch supplies new
+nodes and edges plus an optional focus. Each new node lacking an explicit
+`scope-parent` receives one to the focus. The application expands the shorthand
+into explicit edge operations and returns that expansion before validation.
+
+A cluster is an ordinary scope node created with its children in one batch.
+Profile helpers may expand common deterministic patterns in the same way. Focus,
+templates, and shorthand never enter canonical state or create semantic
+dependency edges by inference. Once expanded, the stored draft and change-set
+hash contain only ordinary explicit node/edge operations.
+
+### 7.3 Projection
+
+The Application layer loads the base graph, applies draft operations to isolated
+node/edge builders, materializes the projection, and validates it. There is no
+cascade delete or partial
 canonical write.
 
 Gate A may perform full projection and validation in memory. Persistence is
 incremental; semantic validation need not be incremental yet.
 
-### 7.3 Dependency graph
+### 7.4 Dependency graph
 
-Edges are derived from:
+The canonical edges are the only authored connectivity. Each edge type expands
+to zero, one, or two operational dependency arcs:
 
-- reference-valued fields whose field definitions declare dependency behavior;
-- relation endpoints interpreted by relation-type dependency rules;
-- the built-in `scope-parent` child-to-parent dependency rule;
-- containment and definition rules declared by profiles;
-- constraint and understood profile references.
+- `none` creates no impact arc;
+- `source-depends-on-target` creates source → target;
+- `target-depends-on-source` creates target → source;
+- `bidirectional` creates both.
 
-Foreign-key rows are not automatically semantic edges. Presentation order,
-provenance, and query-only associations do not create impact unless declared.
+`scope-parent` uses source child → target parent with
+`source-depends-on-target`. Presentation order, provenance, and query-only edges
+use `none`. Validators may reject or diagnose the graph but cannot invent hidden
+dependency arcs from scalar properties.
 
-### 7.4 Impact
+### 7.5 Impact
 
-Impact seeds are direct operation targets. The engine traverses reverse
+Node-operation targets are direct impact seeds. For an edge operation, the
+changed edge is recorded and its dependent endpoint(s), determined from the base
+and projected edge/type, become node seeds; an impact-`none` edge adds no node
+seed. The engine traverses reverse
 review-impact edges in the union of base and projected dependency graphs:
 
 - base edges retain impact from removed/redirected dependencies;
@@ -477,15 +496,16 @@ traversal. Consequently a leaf's upward purpose lineage cannot accidentally
 select siblings; the root selects the full project only when the transaction
 directly changes it.
 
-Results contain changed IDs, impacted IDs, shortest deterministic explanation
-paths, relation/field evidence, completeness/bounds, and statistics.
+Results contain changed entity IDs, node seeds, impacted node IDs, shortest
+deterministic explanation paths, edge evidence, completeness/bounds, and
+statistics.
 
-### 7.5 Review obligations
+### 7.6 Review obligations
 
-Policy selects which impacted objects require one disposition:
+Policy selects which impacted nodes require one disposition:
 
-- `updated` — object is directly changed by the transaction;
-- `reviewed-no-change` — reviewer says projected object remains correct;
+- `updated` — node is directly changed by the transaction;
+- `reviewed-no-change` — reviewer says projected node remains correct;
 - `not-applicable` — reviewer says the explained path requires no action;
 - `pending` — commit blocks when policy requires review.
 
@@ -493,19 +513,19 @@ Nonautomatic dispositions require reviewer, rationale, and time. They are
 fingerprinted over the projected target, change set, and impact path. Operation
 changes invalidate stale dispositions.
 
-### 7.6 Planned AI semantic review — Gate B
+### 7.7 Planned AI semantic review — Gate B
 
 After deterministic projection, validation, impact, and obligation construction,
 a project policy may require AI semantic review for selected changes. The
 application builds one exact request from the complete transaction, every
 policy-selected impact closure and explanation edge, required forward
 dependencies, applicable constraints and anchors, and the singular upward scope
-lineage from every included content record to the project purpose. All disjoint
+lineage from every included node to the project purpose. All disjoint
 chains remain together in the same request.
 
-The reviewer returns structured concerns with cited object/field/edge evidence,
-insufficient-context observations, and separately identified candidate records,
-relationships, or operations. Candidates never become canonical automatically.
+The reviewer returns structured concerns with cited entity/property/edge
+evidence, insufficient-context observations, and separately identified candidate
+nodes, edges, or operations. Candidates never become canonical automatically.
 Policy may require a complete fresh run and a disposition for every concern.
 
 The request has an exact preview and coverage manifest. If all required context
@@ -519,14 +539,20 @@ is not a content-validation error. No network call occurs inside a SQLite write
 transaction. The normative later-phase design is
 [Planned AI semantic review](ai_semantic_review.md).
 
-### 7.7 Commit
+Gate B project policy is `disabled`, `optional`, or `required`. An optional
+transaction may explicitly record `skipped` with actor and rationale; a required
+review cannot be skipped. `VW_AIREVIEW__LIVETESTS` controls only whether the
+separate live-provider test harness is eligible to run. It is ignored by unit and
+ordinary end-to-end tests and never overrides project/transaction policy.
+
+### 7.8 Commit
 
 After an apparently valid reviewed draft, commit:
 
 1. Opens a short SQLite write transaction.
-2. Rechecks database integrity, project head, and record preconditions.
+2. Rechecks database integrity, project head, and entity preconditions.
 3. Reprojects/revalidates evidence that could be stale.
-4. Applies every logical object/value/endpoint/constraint change.
+4. Applies every graph-entity and edge-endpoint change.
 5. Inserts accepted operation, disposition, report, and commit rows.
 6. Updates the project head revision, parent hash, and logical hash.
 7. Commits SQLite once.
@@ -539,9 +565,9 @@ Validation phases are:
 
 1. SQLite application/schema/migration/integrity checks.
 2. Logical snapshot/hash integrity.
-3. Schema package/type/field coverage.
-4. ID, revision, value, reference, and endpoint integrity.
-5. Generic relation dependency-rule validity.
+3. Schema package/type/property coverage.
+4. Entity ID, revision, scalar value, and edge-endpoint integrity.
+5. Edge-type impact-mode validity.
 6. Profile structural and semantic rules.
 7. Contradiction, support, definition, cycle, and traceability constraints.
 8. Transaction impact completeness and review dispositions.
@@ -551,7 +577,7 @@ Database failures are structural errors. Semantic phases skipped because a
 prerequisite failed are explicitly inconclusive.
 
 Diagnostics include stable code/rule version, outcome/severity, primary/related
-IDs, field/endpoint evidence, impact path where applicable, safe repair
+IDs, property/edge evidence, impact path where applicable, safe repair
 categories, source command pointer, and deterministic fingerprint.
 
 ## 9. JSON and SQL interfaces
@@ -564,12 +590,12 @@ and writes exactly one versioned JSON result to stdout. Logs go to stderr.
 Required use cases:
 
 - initialize, inspect, verify, and snapshot a project;
-- get/list/query logical objects and relationships;
+- get/list/query logical nodes and edges;
 - inspect dependencies/dependents and explanation paths;
 - begin/show/apply/validate/commit/abort transactions;
 - list and disposition review obligations;
 - retrieve commit evidence and verify replay;
-- build bounded relevant-object context.
+- build bounded relevant-node/edge context.
 
 A logical snapshot is backend-neutral data interchange and test evidence. It is
 not a finished-document export.
@@ -587,7 +613,7 @@ editing an opaque test database.
 ### 9.2 Database access
 
 Because AIs and developers can query SQLite effectively, the database exposes
-documented read views for logical objects, field values, relationships, direct
+documented read views for logical nodes, edges, scalar property JSON, direct
 dependencies, commits, and diagnostics.
 
 Direct SQL reads are supported after integrity verification. Direct SQL writes
@@ -601,8 +627,8 @@ validated draft/staging structures. It must not bypass Application operations.
 
 ### 10.1 Technical project profile — Gate A
 
-Logical record types cover artifacts, anchors, terms, quantities, components,
-requirements, propositions, assertions, and evidence. Relation types cover
+Logical node types cover artifacts, anchors, terms, quantities, components,
+requirements, propositions, assertions, and evidence. Edge types cover
 depends-on, derived-from, supports, contradicts, defines, uses, implements,
 satisfies, verifies, cites, binds, and mentions.
 
@@ -672,7 +698,8 @@ deterministic-core project references a provider SDK.
 The `TechnicalProject` fixture starts with one plain-English purpose and a rooted
 scope hierarchy, then includes an offline sensor design with external anchors for
 requirements, power budget, architecture, privacy, verification, manuals, and
-unrelated accessibility material.
+unrelated accessibility material. All are nodes; traceability/dependency facts
+are edges.
 
 The initial graph contains a 24-hour runtime requirement, a 20 mA current
 assumption, a 500 mAh capacity assumption, a 25-hour runtime result, and a
@@ -685,7 +712,9 @@ A valid transaction repairs structured capacity/runtime values and all required
 dispositions together.
 
 The changed power leaf's ancestors are included as context without selecting
-their privacy/accessibility children. A separate transaction that directly
+their privacy/accessibility children. A focused authoring batch can create the
+power cluster and its children without repeating their scope parent. A separate
+transaction that directly
 changes the purpose root must impact every descendant, demonstrating the one
 intentional full-project-review operation.
 
@@ -714,7 +743,7 @@ Gate A must prove:
 11. Accepted operations replay to the recorded logical hash.
 12. Documented read views and JSON results are deterministic.
 13. A lower-cost agent can query and repair the project without direct writes.
-14. Synthetic 100,000-record/1,000,000-edge performance stays within documented
+14. Synthetic 100,000-node/1,000,000-edge performance stays within documented
     budgets.
 15. Starting with the first database/CLI walking skeleton, each usable work
     package has a replayable realistic end-to-end scenario and an actual
@@ -722,6 +751,10 @@ Gate A must prove:
 16. Agent QA findings become regression tests when deterministic and are
     reported to the human when they expose friction, misleading behavior,
     excessive modeling burden, or a questionable product direction.
+17. The nine-table v1 layout preserves entity/type/endpoint integrity without a
+    normalized property-value or relation-role subsystem.
+18. Focused batch expansion produces explicit deterministic operations and makes
+    realistic graph entry practical for a lower-cost agent.
 
 No document import/rendering, arbitrary DDL, AI provider, web server, RDF store,
 graph database, narrative timeline, or game exploration is required.
@@ -756,7 +789,7 @@ requests a separate planning task. It must:
 
 1. Preserve all deterministic behavior when the AI-review assemblies and
    configuration are absent.
-2. Build one hash-addressed whole-transaction request with explicit object/edge
+2. Build one hash-addressed whole-transaction request with explicit node/edge
    coverage, all disjoint selected chains, singular purpose lineages, omissions,
    bounds, and freshness.
 3. Accept only versioned schema-valid concerns that cite supplied IDs and
@@ -784,14 +817,14 @@ remains useful independently.
 
 ## 14. Success and stop criteria
 
-Gate A succeeds if explicit typed relationships surface the correct records and
+Gate A succeeds if explicit typed edges surface the correct nodes and
 anchors, transactions prevent stale semantic state, SQLite reduces persistence
 complexity, agents can repair failures from evidence, and modeling cost is
 acceptable.
 
 Scale down to a smaller fixed type catalog if the general logical schema package
 model is too complex. Remove the proposition/assertion layer if generic typed
-records and relations perform as well. Stop if the result offers no meaningful
+nodes and edges perform as well. Stop if the result offers no meaningful
 advantage over ordinary SQLite plus Doorstop-style suspect-link review.
 
 The common POC explicitly does not:

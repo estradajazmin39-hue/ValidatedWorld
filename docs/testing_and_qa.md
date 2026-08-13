@@ -227,7 +227,7 @@ Its normal test suite must still be self-contained:
 - prove the request preview, cache, and freshness hashes cover every material
   non-secret input;
 - prove one request includes the whole transaction, every disjoint selected
-  dependency/impact chain, and each selected record's singular upward lineage;
+  dependency/impact chain, and each selected node's singular upward lineage;
 - prove ancestor-as-context never pulls an unselected sibling into scope, while
   directly changing the purpose root selects every descendant;
 - prove that malformed or stale results cannot satisfy policy or mutate canon;
@@ -235,6 +235,13 @@ Its normal test suite must still be self-contained:
   secret leakage; and
 - require no API key or live network for restore, build, test, packaging, or
   ordinary black-box QA.
+
+Unit, integration, and ordinary end-to-end tests ignore
+`VW_AIREVIEW__LIVETESTS` and always remain offline. A separately named Gate B
+live smoke/evaluation command checks that it is `true` before considering a
+network call; credentials and explicit human live-call authorization are still
+required. The Gate B suite separately proves project-policy behavior:
+`disabled`, audited transaction `optional` skip, and non-bypassable `required`.
 
 The tracked TechnicalProject corpus gains reviewed Gate B variants with known
 omitted links, stale values, terminology conflicts, missing qualifications,
@@ -253,3 +260,9 @@ key or private chain-of-thought. Never retry a live failure automatically. A liv
 result cannot replace the deterministic fake/scripted acceptance suite. The
 timeout setting is simple operational configuration and needs no artificial unit
 test.
+
+Gate A scenario QA also measures graph-entry burden. The TechnicalProject source
+uses focused batches and clusters; golden expansion tests prove inherited scope
+parents become explicit edges and that no semantic dependency edge is guessed.
+The black-box agent must be able to add several nodes under one focus without
+repeating identical parent data or directly editing SQLite.

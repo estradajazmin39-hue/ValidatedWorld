@@ -8,10 +8,10 @@ sequence, but its important meaning forms a graph. Conclusions depend on
 assumptions and evidence; scenes depend on prior events and character knowledge;
 requirements depend on definitions and are realized by decisions and tests.
 
-ValidatedWorld stores that explicit graph in an embedded SQLite project file. It
-validates proposed transactions, calculates their downstream impact, requires
-selected affected records to be reviewed, and commits the complete new state or
-nothing at all.
+ValidatedWorld stores that explicit typed property graph in an embedded SQLite
+project file. It validates proposed transactions, calculates their downstream
+impact, requires selected affected nodes to be reviewed, and commits the complete
+new state or nothing at all.
 
 ## Storage and protocol
 
@@ -38,30 +38,46 @@ operations, diagnostics, impact results, and deterministic logical snapshots are
 versioned JSON. The project hash is computed from the logical canonical snapshot,
 not from SQLite's physical file bytes.
 
-## A small opinionated metamodel
+## The simple mental model
 
-ValidatedWorld is not a suggestion that every AI invent arbitrary SQL tables and
-remember to check them carefully. That workflow cannot deterministically answer
-what a foreign key means, which direction impact flows, or whether every relevant
-record was reviewed.
+Canonical project content is one graph:
 
-Instead, the physical database has a small fixed metamodel:
+- every authored fact, claim, requirement, character, event, constraint, scope,
+  artifact anchor, or other concept is a stable-ID typed **node**;
+- every graph-relevant connection is a stable-ID typed **edge** with a source,
+  target, optional properties, and declared impact direction;
+- exactly one node is the project-purpose root;
+- every other node has exactly one `scope-parent` edge, forming a spanning tree;
+- all remaining edges form a directed semantic multigraph. An edge may propagate
+  impact source-to-target, target-to-source, both ways, or not at all.
 
-- stable-ID records with versioned logical types and typed fields;
-- one required project-purpose root and a singular `scope-parent` lineage from
-  each scope-bearing content record to that root;
-- first-class typed relationships with named endpoints and impact semantics;
-- extracted record references with foreign-key integrity;
-- closed deterministic constraint kinds;
-- draft transactions and operations;
-- impact evidence and review dispositions;
-- accepted commits and audit records.
+That is the public mental model. Schema packages, drafts, validation reports,
+reviews, and commits are metadata and ledger records around the graph, not fake
+content nodes. SQLite v1 uses nine tables—including migration history—to enforce
+stable entity/type identity, edge endpoint foreign keys, and the surrounding
+ledger. C# validates node/edge
+types, properties, the scope tree, constraints, and transaction policy.
 
-Technical claims, fictional events, character knowledge, game transitions, and
-other domain concepts are versioned profiles over that metamodel. Project authors
-do not create arbitrary physical tables or write canonical rows directly.
-Unmodeled extension data may be retained, but it is reported as outside the
-engine's guarantees.
+Technical claims, fictional events, character knowledge, and game transitions
+are profiles over the same node/edge model. Graph links never hide inside scalar
+properties. A higher-arity relationship is represented when needed as a node
+connected by ordinary typed edges.
+
+```mermaid
+graph BT
+  Power["Power scope"] -->|scope-parent| Purpose["Project purpose"]
+  Privacy["Privacy scope"] -->|scope-parent| Purpose
+  Runtime["Runtime result"] -->|scope-parent| Power
+  Current["Current assumption"] -->|scope-parent| Power
+  Claim["Privacy claim"] -->|scope-parent| Privacy
+  Runtime -. "derived-from" .-> Current
+  Claim -. "cross-branch semantic edge if explicitly needed" .-> Runtime
+```
+
+The solid edges form the mandatory tree. The dotted examples are ordinary typed
+semantic edges; they may cross tree branches and may be directed or
+bidirectional. Thus the database is a graph whose nodes are all organized by one
+spanning tree—not merely a tree and not two independently authored graphs.
 
 ## Product boundary
 
@@ -69,14 +85,14 @@ ValidatedWorld owns:
 
 - the authoritative `project.vw.db` state;
 - a deterministic backend-neutral JSON snapshot representation;
-- stable IDs, logical types, and typed references;
+- stable node/edge IDs, logical types, properties, and endpoints;
 - structural and semantic validation;
 - explained graph impact and mandatory review policy;
 - atomic optimistic transactions and replayable commit evidence;
 - bounded JSON queries for humans, AIs, and integrations.
 
 ValidatedWorld does **not** own the finished novel, paper, patent application,
-manual, source tree, game project, or media. External artifact/anchor records may
+manual, source tree, game project, or media. External artifact/anchor nodes may
 point to those products, but the engine does not import, rewrite, render, publish,
 or certify them.
 
@@ -86,7 +102,7 @@ change record; impact analysis supplies the transitive consequences.
 After Gate A, ValidatedWorld is planned to own one narrowly scoped AI feature:
 an optional semantic review of one complete projected transaction. Its single
 request contains all selected dependency/impact chains—even when disjoint—and
-each included record's singular lineage to the project-purpose root. The
+each included node's singular lineage to the project-purpose root. The
 reviewer returns cited concerns and candidate links or operations. It never edits
 canon, generates the finished artifact, or turns a model judgment into proof.
 
@@ -101,7 +117,7 @@ canon, generates the finished artifact, or turns a model judgment into proof.
 - Games and campaigns: a static transition specification whose runtime states
   are derived by a later bounded-analysis profile.
 
-Despite the name, a “world” is any versioned universe of connected records.
+Despite the name, a “world” is any versioned universe of connected nodes.
 Fiction is one profile, not the common engine's foundation.
 
 ## Planned AI semantic review
@@ -115,11 +131,11 @@ If Gate A succeeds, Gate B adds an expensive "lore-team" review. The app first
 computes deterministic impact, then makes one request containing the entire
 transaction, all selected dependency and impact closures, applicable
 constraints, explanation paths, an explicit coverage/omission manifest, and the
-singular upward scope lineage for every included record. Disjoint chains remain
+singular upward scope lineage for every included node. Disjoint chains remain
 together so the reviewer can detect cross-change conflicts. The model can flag
 likely missing connections, stale implications, contradictions, terminology
 drift, missing qualifications, or insufficient context. Results are structured
-`Concern` records with cited object IDs.
+`Concern` records with cited entity IDs.
 
 Scope ascent is contextual, not a new impact seed. A leaf change includes its
 ancestors but not their other children. Directly changing an intermediate scope
@@ -142,28 +158,50 @@ tracked [`.env.example`](.env.example) lists configuration names, while real
 `.env` files remain ignored and are not loaded implicitly. The normal build and
 test suite never needs a secret or live API call.
 
+`VW_AIREVIEW__LIVETESTS=true` enables only the separately invoked Gate B live
+smoke/evaluation harness; unit and ordinary end-to-end tests always remain
+offline. It does not decide whether a user's transaction may skip review.
+Gate B project policy declares AI review `disabled`, `optional`, or `required`.
+An optional transaction can record an explicit skip with actor and reason; a
+required review cannot be bypassed by an environment variable.
+
 ## Core workflow
 
 ```text
 open project.vw.db and verify its logical head hash
 → begin a draft transaction against the exact head revision/hash
-→ add, replace, or remove typed records and relationships
+→ add, replace, or remove typed nodes and edges
 → construct the projected logical state
-→ derive dependency edges from base and projected state
+→ expand dependency arcs from base and projected typed edges
 → compute explained transitive impact
-→ repair graph data and disposition policy-selected affected records
+→ repair graph data and disposition policy-selected affected nodes
 → run complete deterministic validation
 → optionally run required AI semantic review and disposition its concerns [Gate B]
 → commit all relational changes atomically or roll back everything
 → return versioned JSON results
 ```
 
+## Authoring without edge-entry drudgery
+
+The stored graph stays fully explicit, but input need not be repetitive. Planned
+transaction authoring supports a focus node and batches:
+
+- new nodes in a batch may inherit the chosen focus as their `scope-parent`;
+- a cluster is simply a normal scope node created with its children in one batch;
+- explicitly selected profile helpers may expand common patterns into nodes and
+  semantic edges;
+- the app returns the fully expanded operation list before validation or commit.
+
+Only the scope-parent convenience is automatic. Semantic dependency edges are
+never guessed silently. This keeps the canonical graph inspectable while letting
+an agent work within one local branch of the project at a time.
+
 ## Start here
 
 - [Feasibility and limits](docs/feasibility.md) — guarantee boundary and proof
   gates.
 - [Product and architecture specification](docs/validated_world_authoring_spec.md)
-  — authoritative metamodel, persistence, and profile design.
+  — authoritative graph model, persistence, and profile design.
 - [Implementation blueprint](docs/implementation_blueprint.md) — exact storage
   schema, algorithms, tests, and work packages.
 - [Planned AI semantic review](docs/ai_semantic_review.md) — post-Gate-A review
@@ -273,7 +311,7 @@ ideas, and asks what the human wants next.
 ## Current status
 
 The repository is a .NET 10 scaffold plus an implementation-ready design. WP0 is
-complete and WP1 (the common metamodel) is the Current task. The execution
+complete and WP1 (the common graph domain) is the Current task. The execution
 plan, rather than this summary, is authoritative if progress changes. Gate A is
 a small technical-project graph backed by SQLite. It must prove useful and
 accurate impact at acceptable modeling cost before narrative or game profiles

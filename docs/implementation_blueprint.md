@@ -2,7 +2,7 @@
 
 **Status:** Coding-agent handoff
 
-**Blueprint version:** 4.2
+**Blueprint version:** 5.0
 
 **Last reviewed:** 2026-08-12
 
@@ -66,18 +66,19 @@ dotnet test ValidatedWorld.slnx --no-build --no-restore
 8. Durable drafts are not authoritative state and hold no long-lived SQLite
    write transaction.
 9. A rejected or stale commit rolls back every relational and audit write.
-10. Stable IDs, not labels, paths, names, or row IDs, are semantic references.
-11. SQLite foreign keys establish structural integrity only. Dependency rules
-    establish semantic impact.
-12. Every graph-relevant reference is an explicit reference-valued field or
-    relation endpoint; extension JSON is never scanned for IDs.
-13. The dependency graph is derived and never authored as a second source of
-    truth.
+10. Stable entity IDs, not labels, paths, names, or row IDs, are semantic
+    references.
+11. SQLite foreign keys establish entity/type/endpoint integrity only. Edge-type
+    impact mode establishes semantic dependency direction.
+12. Every graph-relevant connection is a canonical typed edge. Scalar
+    properties and extension JSON are never scanned for IDs.
+13. The operational dependency multigraph is a deterministic directional view
+    of canonical edges; no second adjacency graph is authored or inferred.
 14. Impact uses the union of base and projected dependency graphs.
 15. Accepted operations are the direct change record; no separate semantic diff
     is canonical.
 16. Impact means “must be considered,” not “must be edited.”
-17. Policy may require current dispositions for selected impacted objects.
+17. Policy may require current dispositions for selected impacted nodes.
 18. Deterministic results are Proven, Disproven, or Inconclusive.
 19. Remove never cascades implicitly. Physical foreign keys use Restrict/No
     Action, and application repair is explicit.
@@ -97,9 +98,9 @@ dotnet test ValidatedWorld.slnx --no-build --no-restore
     bodies/arguments, logs, diagnostics, cache keys, or test fixtures.
 28. The default build/test suite uses fake/scripted providers and requires no
     secret or live network.
-29. Every project has exactly one purpose root. Every other scope-bearing content
-    record has exactly one `scope-parent`; repeated parent traversal is acyclic
-    and terminates at the root.
+29. Every project has exactly one purpose root. Every other canonical node has
+    exactly one `scope-parent`; repeated parent traversal is acyclic and
+    terminates at the root.
 30. `scope-parent` means child depends on parent, but only direct transaction
     operation targets seed impact. Context ancestors never become seeds or fan
     down into siblings. A direct root change, and only that case, deliberately
@@ -112,6 +113,16 @@ dotnet test ValidatedWorld.slnx --no-build --no-restore
     provider ecosystem.
 33. AI-review implementation requires an exact human secret-readiness
     attestation; a paid call requires a second exact per-run authorization.
+34. Canonical content has one public shape: typed nodes and typed binary edges.
+    Constraints, anchors, and reified higher-arity relationships are nodes.
+35. Schema/package metadata and the transaction/validation/commit ledger are
+    control-plane tables outside the canonical content graph.
+36. Gate A v1 uses nine tables including migration history. Scalar property maps
+    and ledger payloads are canonical JSON; add normalized/materialized property
+    indexes only after measured need.
+37. Authoring focus, cluster, and template expansion are noncanonical input
+    conveniences. They must expand to explicit node/edge operations before
+    hashing, validation, or commit.
 
 ## 3. Solution architecture
 
@@ -161,7 +172,7 @@ root is the only layer that chooses SQLite.
 ValidatedWorld.Core.Identifiers
 ValidatedWorld.Core.Schema
 ValidatedWorld.Core.Values
-ValidatedWorld.Core.Objects
+ValidatedWorld.Core.Graph
 ValidatedWorld.Core.Constraints
 ValidatedWorld.Core.Transactions
 ValidatedWorld.Core.Reviews
@@ -173,7 +184,7 @@ ValidatedWorld.Serialization.Hashing
 ValidatedWorld.Validation.Diagnostics
 ValidatedWorld.Validation.Schema
 ValidatedWorld.Validation.Indexes
-ValidatedWorld.Validation.Dependencies
+ValidatedWorld.Validation.Edges
 ValidatedWorld.Validation.Impact
 ValidatedWorld.Validation.Rules
 ValidatedWorld.Validation.Context
@@ -240,14 +251,14 @@ from normalized rows.
 
 ```csharp
 public readonly record struct ProjectId(string Value);
-public readonly record struct ObjectId(string Value);
+public readonly record struct EntityId(string Value);
 public readonly record struct TypeId(string Value);
 public readonly record struct PackageId(string Value);
 public readonly record struct TransactionId(string Value);
 public readonly record struct CommitId(string Value);
 ```
 
-Project/object/type/package IDs match:
+Project/entity/type/package IDs match:
 
 ```regex
 ^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$
@@ -264,60 +275,66 @@ public sealed record SchemaPackage(
     PackageId Id,
     string Version,
     string DefinitionHash,
-    ImmutableArray<LogicalTypeDefinition> Types,
+    ImmutableArray<NodeTypeDefinition> NodeTypes,
+    ImmutableArray<EdgeTypeDefinition> EdgeTypes,
     ImmutableArray<RequiredValidator> RequiredValidators);
 
-public enum LogicalObjectKind { Record, Relation, Constraint }
-
-public sealed record LogicalTypeDefinition(
+public sealed record NodeTypeDefinition(
     TypeId Id,
     PackageId PackageId,
     string PackageVersion,
-    LogicalObjectKind ObjectKind,
     string DisplayName,
-    ImmutableArray<FieldDefinition> Fields,
-    ImmutableArray<EndpointRoleDefinition> EndpointRoles,
-    ImmutableArray<DependencyRuleDefinition> DependencyRules,
+    ImmutableArray<PropertyDefinition> Properties,
+    ImmutableArray<string> Categories);
+
+public enum EdgeImpactMode
+{
+    None,
+    SourceDependsOnTarget,
+    TargetDependsOnSource,
+    Bidirectional
+}
+
+public sealed record EdgeTypeDefinition(
+    TypeId Id,
+    PackageId PackageId,
+    string PackageVersion,
+    string DisplayName,
+    ImmutableArray<PropertyDefinition> Properties,
+    ImmutableArray<TypeId> AllowedSourceTypes,
+    ImmutableArray<TypeId> AllowedTargetTypes,
+    EdgeImpactMode ImpactMode,
+    bool MustBeAcyclic,
     ImmutableArray<string> Categories);
 ```
 
-Only Relation types may declare endpoint roles/dependency rules. Constraint
-kinds are ordinary logical types whose object kind is Constraint and whose
-registered validators understand their fields. Type inheritance is deferred;
-Gate A packages declare complete concrete type definitions.
+Purpose, scope/group, constraint, artifact, and anchor concepts are node types or
+categories. Constraint validators understand the node's properties and explicit
+target edges. A relationship requiring more than two roles is reified as a node
+with ordinary edges. Type inheritance is deferred; Gate A packages declare
+complete concrete definitions.
 
-### 4.3 Fields and values
+### 4.3 Scalar properties and values
 
 ```csharp
-public enum FieldValueKind
+public enum PropertyValueKind
 {
     Text,
     Integer,
     Decimal,
     Boolean,
     Symbol,
-    Instant,
-    Reference
+    Instant
 }
 
-public enum ReferenceImpactMode
-{
-    None,
-    OwnerDependsOnTarget,
-    TargetDependsOnOwner,
-    Bidirectional
-}
-
-public sealed record FieldDefinition(
+public sealed record PropertyDefinition(
     string Name,
     int Ordinal,
-    FieldValueKind ValueKind,
+    PropertyValueKind ValueKind,
     int MinimumCount,
     int? MaximumCount,
     bool IsOrderSignificant,
-    ImmutableArray<TypeId> AllowedReferenceTypes,
-    ReferenceImpactMode ReferenceImpact,
-    FieldValueConstraints Constraints);
+    PropertyValueConstraints Constraints);
 
 public abstract record ProjectValue
 {
@@ -327,56 +344,54 @@ public abstract record ProjectValue
     public sealed record Boolean(bool Value) : ProjectValue;
     public sealed record Symbol(string Value) : ProjectValue;
     public sealed record Instant(DateTimeOffset Value) : ProjectValue;
-    public sealed record Reference(ObjectId TargetId) : ProjectValue;
 }
 ```
 
 Decimal values are canonical base-10 strings; floating point is forbidden for
 semantic values. Instants canonicalize to UTC ISO 8601 with seven fractional
-digits. Repeated unordered field values sort by canonical value; ordered values
+digits. Repeated unordered property values sort by canonical value; ordered values
 retain explicit ordinal.
 
-### 4.4 Relation roles and dependency rules
+Properties contain values only. An ID-shaped string has no graph meaning. Every
+semantic reference or association is an explicit `ProjectEdge`.
+
+### 4.4 Graph entities
 
 ```csharp
-public sealed record EndpointRoleDefinition(
-    string Name,
-    int Ordinal,
-    int MinimumCount,
-    int? MaximumCount,
-    ImmutableArray<TypeId> AllowedTypes);
-
-public sealed record DependencyRuleDefinition(
-    int Ordinal,
-    string DependentRole,
-    string DependencyRole,
-    bool CreatesReviewImpact,
-    string Meaning);
-```
-
-The two roles must exist on the relation type. At instance time, the cross
-product of objects playing the roles yields dependency edges. If self-dependency
-is nonsensical for a relation type, its validator rejects identical endpoints.
-
-### 4.5 Objects
-
-```csharp
-public sealed record ProjectObject(
-    ObjectId Id,
+public abstract record ProjectEntity(
+    EntityId Id,
     int Revision,
-    LogicalObjectKind Kind,
     TypeId TypeId,
-    ImmutableSortedDictionary<string, ImmutableArray<ProjectValue>> Fields,
-    ImmutableSortedDictionary<string, ImmutableArray<ObjectId>> Endpoints,
+    ImmutableSortedDictionary<string, ImmutableArray<ProjectValue>> Properties,
     ImmutableArray<string> Tags,
     ExtensionMap Extensions);
+
+public sealed record ProjectNode(
+    EntityId Id,
+    int Revision,
+    TypeId TypeId,
+    ImmutableSortedDictionary<string, ImmutableArray<ProjectValue>> Properties,
+    ImmutableArray<string> Tags,
+    ExtensionMap Extensions)
+    : ProjectEntity(Id, Revision, TypeId, Properties, Tags, Extensions);
+
+public sealed record ProjectEdge(
+    EntityId Id,
+    int Revision,
+    TypeId TypeId,
+    EntityId SourceNodeId,
+    EntityId TargetNodeId,
+    ImmutableSortedDictionary<string, ImmutableArray<ProjectValue>> Properties,
+    ImmutableArray<string> Tags,
+    ExtensionMap Extensions)
+    : ProjectEntity(Id, Revision, TypeId, Properties, Tags, Extensions);
 
 public sealed record ExtensionMap(
     ImmutableSortedDictionary<string, CanonicalJsonValue> Values);
 ```
 
-Only Relation objects have endpoints. Constraint objects use registered closed
-types/validators. Extension keys are namespace-qualified. Extension values are
+Nodes and edges share one ID/revision space. Edges are binary, stable, typed, and
+property-bearing. Extension keys are namespace-qualified. Extension values are
 round-tripped but uncovered; reference-looking strings inside them have no graph
 meaning.
 
@@ -394,15 +409,29 @@ public sealed record ProjectSnapshot(
     string ProtocolVersion,
     ProjectHead Head,
     string Title,
-    ObjectId PurposeObjectId,
+    EntityId PurposeNodeId,
     ProjectPolicy Policy,
     ImmutableArray<SchemaPackage> SchemaPackages,
-    ImmutableArray<ProjectObject> Objects);
+    ImmutableArray<ProjectNode> Nodes,
+    ImmutableArray<ProjectEdge> Edges);
+
+public enum AiReviewMode { Disabled, Optional, Required }
+
+public sealed record ProjectPolicy(
+    int MaximumDependencyDepth,
+    int MaximumImpactNodes,
+    ImmutableArray<TypeId> TypesRequiringImpactDisposition,
+    AiReviewMode AiReviewMode);
 ```
 
 Revision 0 initialization uses a documented null parent/last-commit encoding.
-Object arrays sort by ID. Package/type/field/role/rule arrays have the canonical
+Node and edge arrays sort by ID. Package/type/property arrays have the canonical
 ordering defined in Section 7.
+
+Gate A accepts only `AiReviewMode.Disabled` until Gate B exists. Gate B permits
+Optional or Required. Optional requires either a fresh run or an explicit
+transaction skip record with actor, reason, time, and change-set hash; Required
+accepts only a fresh completed run with all concerns dispositioned.
 
 ## 5. Normative SQLite schema v1
 
@@ -444,14 +473,14 @@ Unknown newer versions, missing migrations, or checksum mismatches block writes.
 CREATE TABLE projects (
     project_id              TEXT PRIMARY KEY,
     title                   TEXT NOT NULL CHECK(length(title) > 0),
-    purpose_object_id       TEXT NOT NULL UNIQUE,
+    purpose_node_id         TEXT NOT NULL UNIQUE,
     head_revision           INTEGER NOT NULL CHECK(head_revision >= 0),
     parent_logical_hash     TEXT NULL,
     logical_hash            TEXT NOT NULL,
     last_commit_id          TEXT NULL,
     policy_json             TEXT NOT NULL CHECK(json_valid(policy_json)),
     created_at_utc          TEXT NOT NULL,
-    FOREIGN KEY(purpose_object_id) REFERENCES graph_objects(object_id)
+    FOREIGN KEY(purpose_node_id) REFERENCES graph_entities(entity_id)
         ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
     FOREIGN KEY(last_commit_id) REFERENCES commits(commit_id)
         ON DELETE RESTRICT,
@@ -467,231 +496,99 @@ CREATE TABLE schema_packages (
     package_id              TEXT NOT NULL,
     package_version         TEXT NOT NULL,
     definition_hash         TEXT NOT NULL,
+    definition_json         TEXT NOT NULL CHECK(json_valid(definition_json)),
     PRIMARY KEY(package_id, package_version)
-) STRICT;
-
-CREATE TABLE schema_package_validators (
-    package_id              TEXT NOT NULL,
-    package_version         TEXT NOT NULL,
-    validator_id            TEXT NOT NULL,
-    validator_version       INTEGER NOT NULL CHECK(validator_version >= 1),
-    PRIMARY KEY(package_id, package_version, validator_id),
-    FOREIGN KEY(package_id, package_version)
-        REFERENCES schema_packages(package_id, package_version)
-        ON DELETE RESTRICT
-) STRICT;
-
-CREATE TABLE project_packages (
-    project_id              TEXT NOT NULL,
-    package_id              TEXT NOT NULL,
-    package_version         TEXT NOT NULL,
-    PRIMARY KEY(project_id, package_id),
-    FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE RESTRICT,
-    FOREIGN KEY(package_id, package_version)
-        REFERENCES schema_packages(package_id, package_version)
-        ON DELETE RESTRICT
 ) STRICT;
 ```
 
 Initialization is one SQLite transaction: insert the project row, package/type
-rows, the purpose object at `purpose:root`, and its substantive text before
+rows, the purpose node at `purpose:root`, and its substantive text before
 commit. The deferred foreign key permits the project and root to be created
-atomically. Logical validation additionally proves that the referenced object is
-the sole `core:project-purpose` record.
+atomically. Logical validation additionally proves that the referenced node is
+the sole `core:project-purpose` node.
 
 Gate A permits exactly one row in `projects`; initialization rejects a second.
+Because one database contains one project, every stored package is selected by
+that project; no join table is needed. `definition_json` is strict canonical
+package JSON and must hash to `definition_hash`.
 
 ### 5.3 Logical type definitions
 
 ```sql
-CREATE TABLE logical_types (
+CREATE TABLE entity_types (
     type_id                 TEXT PRIMARY KEY,
     package_id              TEXT NOT NULL,
     package_version         TEXT NOT NULL,
-    object_kind             TEXT NOT NULL
-        CHECK(object_kind IN ('record', 'relation', 'constraint')),
-    display_name            TEXT NOT NULL CHECK(length(display_name) > 0),
+    entity_kind             TEXT NOT NULL CHECK(entity_kind IN ('node','edge')),
+    definition_hash         TEXT NOT NULL,
+    definition_json         TEXT NOT NULL CHECK(json_valid(definition_json)),
+    edge_impact_mode        TEXT NULL CHECK(edge_impact_mode IS NULL OR
+        edge_impact_mode IN ('none','source-depends-on-target',
+                             'target-depends-on-source','bidirectional')),
     FOREIGN KEY(package_id, package_version)
         REFERENCES schema_packages(package_id, package_version)
-        ON DELETE RESTRICT
-) STRICT;
-
-CREATE TABLE logical_type_categories (
-    type_id                 TEXT NOT NULL,
-    category                TEXT NOT NULL,
-    PRIMARY KEY(type_id, category),
-    FOREIGN KEY(type_id) REFERENCES logical_types(type_id) ON DELETE RESTRICT
-) STRICT;
-
-CREATE TABLE field_definitions (
-    type_id                 TEXT NOT NULL,
-    field_name              TEXT NOT NULL,
-    field_ordinal           INTEGER NOT NULL CHECK(field_ordinal >= 0),
-    value_kind              TEXT NOT NULL CHECK(value_kind IN
-        ('text','integer','decimal','boolean','symbol','instant','reference')),
-    minimum_count           INTEGER NOT NULL CHECK(minimum_count >= 0),
-    maximum_count           INTEGER NULL CHECK(maximum_count IS NULL OR
-                                                maximum_count >= minimum_count),
-    is_order_significant    INTEGER NOT NULL CHECK(is_order_significant IN (0,1)),
-    reference_impact        TEXT NOT NULL CHECK(reference_impact IN
-        ('none','owner-depends-on-target','target-depends-on-owner',
-         'bidirectional')),
-    constraints_json        TEXT NOT NULL CHECK(json_valid(constraints_json)),
-    PRIMARY KEY(type_id, field_name),
-    UNIQUE(type_id, field_ordinal),
-    FOREIGN KEY(type_id) REFERENCES logical_types(type_id) ON DELETE RESTRICT,
-    CHECK(value_kind = 'reference' OR reference_impact = 'none')
-) STRICT;
-
-CREATE TABLE field_allowed_target_types (
-    owner_type_id           TEXT NOT NULL,
-    field_name              TEXT NOT NULL,
-    target_type_id          TEXT NOT NULL,
-    PRIMARY KEY(owner_type_id, field_name, target_type_id),
-    FOREIGN KEY(owner_type_id, field_name)
-        REFERENCES field_definitions(type_id, field_name) ON DELETE RESTRICT,
-    FOREIGN KEY(target_type_id) REFERENCES logical_types(type_id)
-        ON DELETE RESTRICT
-) STRICT;
-
-CREATE TABLE relation_role_definitions (
-    relation_type_id        TEXT NOT NULL,
-    role_name               TEXT NOT NULL,
-    role_ordinal            INTEGER NOT NULL CHECK(role_ordinal >= 0),
-    minimum_count           INTEGER NOT NULL CHECK(minimum_count >= 0),
-    maximum_count           INTEGER NULL CHECK(maximum_count IS NULL OR
-                                                maximum_count >= minimum_count),
-    PRIMARY KEY(relation_type_id, role_name),
-    UNIQUE(relation_type_id, role_ordinal),
-    FOREIGN KEY(relation_type_id) REFERENCES logical_types(type_id)
-        ON DELETE RESTRICT
-) STRICT;
-
-CREATE TABLE relation_role_allowed_types (
-    relation_type_id        TEXT NOT NULL,
-    role_name               TEXT NOT NULL,
-    allowed_type_id         TEXT NOT NULL,
-    PRIMARY KEY(relation_type_id, role_name, allowed_type_id),
-    FOREIGN KEY(relation_type_id, role_name)
-        REFERENCES relation_role_definitions(relation_type_id, role_name)
         ON DELETE RESTRICT,
-    FOREIGN KEY(allowed_type_id) REFERENCES logical_types(type_id)
-        ON DELETE RESTRICT
+    CHECK((entity_kind = 'node' AND edge_impact_mode IS NULL) OR
+          (entity_kind = 'edge' AND edge_impact_mode IS NOT NULL))
 ) STRICT;
 
-CREATE TABLE dependency_rules (
-    relation_type_id        TEXT NOT NULL,
-    rule_ordinal            INTEGER NOT NULL CHECK(rule_ordinal >= 0),
-    dependent_role          TEXT NOT NULL,
-    dependency_role         TEXT NOT NULL,
-    creates_review_impact   INTEGER NOT NULL
-        CHECK(creates_review_impact IN (0,1)),
-    meaning                 TEXT NOT NULL CHECK(length(meaning) > 0),
-    PRIMARY KEY(relation_type_id, rule_ordinal),
-    FOREIGN KEY(relation_type_id, dependent_role)
-        REFERENCES relation_role_definitions(relation_type_id, role_name)
-        ON DELETE RESTRICT,
-    FOREIGN KEY(relation_type_id, dependency_role)
-        REFERENCES relation_role_definitions(relation_type_id, role_name)
-        ON DELETE RESTRICT
-) STRICT;
 ```
 
-Cross-row rules—such as Relation types only declaring roles—are validated when
-packages load and again from stored rows. Do not encode opaque business behavior
-in triggers.
+The application verifies each canonical type definition against the containing
+package JSON/hash and validates property schemas, allowed edge endpoint types,
+categories, acyclicity flags, and required validators. The normalized type row
+supports foreign keys, kind checks, lookup, and impact traversal; it is not a
+second definition source. Do not encode opaque behavior in triggers.
 
-### 5.4 Current logical objects
+### 5.4 Current graph entities
 
 ```sql
-CREATE TABLE graph_objects (
-    object_id               TEXT PRIMARY KEY,
-    object_revision         INTEGER NOT NULL CHECK(object_revision >= 1),
-    object_kind             TEXT NOT NULL
-        CHECK(object_kind IN ('record', 'relation', 'constraint')),
-    logical_type_id         TEXT NOT NULL,
+CREATE TABLE graph_entities (
+    entity_id               TEXT PRIMARY KEY,
+    entity_revision         INTEGER NOT NULL CHECK(entity_revision >= 1),
+    entity_kind             TEXT NOT NULL CHECK(entity_kind IN ('node','edge')),
+    type_id                 TEXT NOT NULL,
+    properties_json         TEXT NOT NULL CHECK(json_valid(properties_json)),
+    tags_json               TEXT NOT NULL CHECK(json_valid(tags_json)),
     extensions_json         TEXT NOT NULL CHECK(json_valid(extensions_json)),
-    UNIQUE(object_id, logical_type_id),
-    FOREIGN KEY(logical_type_id) REFERENCES logical_types(type_id)
+    UNIQUE(entity_id, type_id),
+    FOREIGN KEY(type_id) REFERENCES entity_types(type_id)
         ON DELETE RESTRICT
 ) STRICT;
 
-CREATE TABLE object_tags (
-    object_id               TEXT NOT NULL,
-    tag                     TEXT NOT NULL,
-    PRIMARY KEY(object_id, tag),
-    FOREIGN KEY(object_id) REFERENCES graph_objects(object_id)
+CREATE TABLE graph_edges (
+    edge_id                 TEXT PRIMARY KEY,
+    edge_type_id            TEXT NOT NULL,
+    source_node_id          TEXT NOT NULL,
+    target_node_id          TEXT NOT NULL,
+    FOREIGN KEY(edge_id, edge_type_id)
+        REFERENCES graph_entities(entity_id, type_id)
+        ON DELETE RESTRICT,
+    FOREIGN KEY(source_node_id) REFERENCES graph_entities(entity_id)
+        ON DELETE RESTRICT,
+    FOREIGN KEY(target_node_id) REFERENCES graph_entities(entity_id)
         ON DELETE RESTRICT
 ) STRICT;
 
-CREATE TABLE object_field_values (
-    object_id               TEXT NOT NULL,
-    logical_type_id         TEXT NOT NULL,
-    field_name              TEXT NOT NULL,
-    value_ordinal           INTEGER NOT NULL CHECK(value_ordinal >= 0),
-    value_kind              TEXT NOT NULL CHECK(value_kind IN
-        ('text','integer','decimal','boolean','symbol','instant','reference')),
-    text_value              TEXT NULL,
-    integer_value           INTEGER NULL,
-    boolean_value           INTEGER NULL CHECK(boolean_value IN (0,1)),
-    reference_object_id     TEXT NULL,
-    PRIMARY KEY(object_id, field_name, value_ordinal),
-    FOREIGN KEY(object_id, logical_type_id)
-        REFERENCES graph_objects(object_id, logical_type_id)
-        ON DELETE RESTRICT,
-    FOREIGN KEY(logical_type_id, field_name)
-        REFERENCES field_definitions(type_id, field_name)
-        ON DELETE RESTRICT,
-    FOREIGN KEY(reference_object_id) REFERENCES graph_objects(object_id)
-        ON DELETE RESTRICT,
-    CHECK(
-      (value_kind IN ('text','decimal','symbol','instant') AND
-       text_value IS NOT NULL AND integer_value IS NULL AND
-       boolean_value IS NULL AND reference_object_id IS NULL) OR
-      (value_kind = 'integer' AND integer_value IS NOT NULL AND
-       text_value IS NULL AND boolean_value IS NULL AND
-       reference_object_id IS NULL) OR
-      (value_kind = 'boolean' AND boolean_value IS NOT NULL AND
-       text_value IS NULL AND integer_value IS NULL AND
-       reference_object_id IS NULL) OR
-      (value_kind = 'reference' AND reference_object_id IS NOT NULL AND
-       text_value IS NULL AND integer_value IS NULL AND boolean_value IS NULL)
-    )
-) STRICT;
-
-CREATE TABLE relation_endpoints (
-    relation_id             TEXT NOT NULL,
-    relation_type_id        TEXT NOT NULL,
-    role_name               TEXT NOT NULL,
-    endpoint_ordinal        INTEGER NOT NULL CHECK(endpoint_ordinal >= 0),
-    target_object_id        TEXT NOT NULL,
-    PRIMARY KEY(relation_id, role_name, endpoint_ordinal),
-    FOREIGN KEY(relation_id, relation_type_id)
-        REFERENCES graph_objects(object_id, logical_type_id)
-        ON DELETE RESTRICT,
-    FOREIGN KEY(relation_type_id, role_name)
-        REFERENCES relation_role_definitions(relation_type_id, role_name)
-        ON DELETE RESTRICT,
-    FOREIGN KEY(target_object_id) REFERENCES graph_objects(object_id)
-        ON DELETE RESTRICT
-) STRICT;
-
-CREATE INDEX ix_graph_objects_type
-    ON graph_objects(logical_type_id, object_id);
-CREATE INDEX ix_field_reference_target
-    ON object_field_values(reference_object_id)
-    WHERE reference_object_id IS NOT NULL;
-CREATE INDEX ix_relation_endpoint_target
-    ON relation_endpoints(target_object_id, relation_type_id, role_name);
-CREATE INDEX ix_relation_endpoint_role
-    ON relation_endpoints(relation_type_id, role_name, relation_id);
+CREATE INDEX ix_graph_entities_type
+    ON graph_entities(entity_kind, type_id, entity_id);
+CREATE INDEX ix_graph_edges_source
+    ON graph_edges(source_node_id, edge_type_id, target_node_id);
+CREATE INDEX ix_graph_edges_target
+    ON graph_edges(target_node_id, edge_type_id, source_node_id);
+CREATE UNIQUE INDEX ux_scope_parent_source
+    ON graph_edges(source_node_id)
+    WHERE edge_type_id = 'core:scope-parent';
 ```
 
-Application validation checks that object kind equals its type's kind, stored
-value kind equals field definition, reference targets match allowed exact types,
-cardinalities hold, and endpoint targets match role types.
+Application validation checks entity kind against its type, canonical
+property/tag/extension shapes, edge endpoint entity kinds and allowed node types,
+and all property constraints. SQLite proves global identity and endpoint
+existence. The partial index proves at most one scope parent; application
+validation proves exactly one for every non-root node, no cycles, and root
+reachability.
 
-### 5.5 Draft transaction tables
+### 5.5 Draft transactions
 
 Draft payloads are canonical operation JSON because they are proposed state, not
 authoritative normalized graph rows.
@@ -705,115 +602,30 @@ CREATE TABLE draft_transactions (
     intent                  TEXT NOT NULL CHECK(length(intent) > 0),
     author                  TEXT NOT NULL CHECK(length(author) > 0),
     created_at_utc          TEXT NOT NULL,
+    focus_node_id           TEXT NULL,
     status                  TEXT NOT NULL CHECK(status IN
         ('draft','review-required','ready','rejected','committed','aborted')),
+    operations_json         TEXT NOT NULL CHECK(json_valid(operations_json)),
+    dispositions_json       TEXT NOT NULL CHECK(json_valid(dispositions_json)),
     change_set_hash         TEXT NULL,
     projected_logical_hash  TEXT NULL,
     draft_revision          INTEGER NOT NULL CHECK(draft_revision >= 1),
     FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE RESTRICT
 ) STRICT;
-
-CREATE TABLE draft_operations (
-    transaction_id          TEXT NOT NULL,
-    target_object_id        TEXT NOT NULL,
-    operation_kind          TEXT NOT NULL CHECK(operation_kind IN
-        ('add','replace','remove')),
-    expected_object_revision INTEGER NULL,
-    object_json             TEXT NULL CHECK(object_json IS NULL OR
-                                             json_valid(object_json)),
-    PRIMARY KEY(transaction_id, target_object_id),
-    FOREIGN KEY(transaction_id) REFERENCES draft_transactions(transaction_id)
-        ON DELETE RESTRICT,
-    CHECK(
-      (operation_kind = 'add' AND expected_object_revision IS NULL AND
-       object_json IS NOT NULL) OR
-      (operation_kind = 'replace' AND
-       expected_object_revision IS NOT NULL AND
-       expected_object_revision >= 1 AND
-       object_json IS NOT NULL) OR
-      (operation_kind = 'remove' AND
-       expected_object_revision IS NOT NULL AND
-       expected_object_revision >= 1 AND
-       object_json IS NULL)
-    )
-) STRICT;
-
-CREATE TABLE submitted_dispositions (
-    transaction_id          TEXT NOT NULL,
-    target_object_id        TEXT NOT NULL,
-    disposition             TEXT NOT NULL CHECK(disposition IN
-        ('reviewed-no-change','not-applicable')),
-    target_fingerprint      TEXT NOT NULL,
-    impact_fingerprint      TEXT NOT NULL,
-    reviewer_id             TEXT NOT NULL,
-    rationale               TEXT NOT NULL CHECK(length(rationale) > 0),
-    dispositioned_at_utc    TEXT NOT NULL,
-    PRIMARY KEY(transaction_id, target_object_id),
-    FOREIGN KEY(transaction_id) REFERENCES draft_transactions(transaction_id)
-        ON DELETE RESTRICT
-) STRICT;
 ```
+
+`operations_json` is the canonical sorted array with one final operation per
+target entity; `dispositions_json` is the canonical sorted submitted evidence.
+The application validates both completely. `focus_node_id` is noncanonical
+authoring metadata and may name a projected node; it is intentionally not a
+foreign key. Batch expansion resolves focus before storing operations.
 
 Application draft edits increment `draft_revision`, recompute hashes, and delete
 or invalidate dispositions whose fingerprints no longer match.
 
-### 5.6 Commit and diagnostic tables
+### 5.6 Validation and commit ledger
 
 ```sql
-CREATE TABLE commits (
-    commit_id               TEXT PRIMARY KEY,
-    project_id              TEXT NOT NULL,
-    project_revision        INTEGER NOT NULL UNIQUE CHECK(project_revision >= 1),
-    parent_logical_hash     TEXT NOT NULL,
-    logical_hash            TEXT NOT NULL UNIQUE,
-    change_set_hash         TEXT NOT NULL,
-    impact_hash             TEXT NOT NULL,
-    validation_hash         TEXT NOT NULL,
-    author                  TEXT NOT NULL,
-    intent                  TEXT NOT NULL,
-    committed_at_utc        TEXT NOT NULL,
-    FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE RESTRICT
-) STRICT;
-
-CREATE TABLE commit_operations (
-    commit_id               TEXT NOT NULL,
-    target_object_id        TEXT NOT NULL,
-    operation_kind          TEXT NOT NULL CHECK(operation_kind IN
-        ('add','replace','remove')),
-    expected_object_revision INTEGER NULL,
-    object_json             TEXT NULL CHECK(object_json IS NULL OR
-                                             json_valid(object_json)),
-    PRIMARY KEY(commit_id, target_object_id),
-    FOREIGN KEY(commit_id) REFERENCES commits(commit_id) ON DELETE RESTRICT,
-    CHECK(
-      (operation_kind = 'add' AND expected_object_revision IS NULL AND
-       object_json IS NOT NULL) OR
-      (operation_kind = 'replace' AND
-       expected_object_revision IS NOT NULL AND
-       expected_object_revision >= 1 AND
-       object_json IS NOT NULL) OR
-      (operation_kind = 'remove' AND
-       expected_object_revision IS NOT NULL AND
-       expected_object_revision >= 1 AND
-       object_json IS NULL)
-    )
-) STRICT;
-
-CREATE TABLE accepted_dispositions (
-    commit_id               TEXT NOT NULL,
-    target_object_id        TEXT NOT NULL,
-    disposition             TEXT NOT NULL CHECK(disposition IN
-        ('updated','reviewed-no-change','not-applicable')),
-    target_fingerprint      TEXT NOT NULL,
-    impact_fingerprint      TEXT NOT NULL,
-    reviewer_id             TEXT NULL,
-    rationale               TEXT NULL,
-    dispositioned_at_utc    TEXT NOT NULL,
-    explanation_path_json  TEXT NOT NULL CHECK(json_valid(explanation_path_json)),
-    PRIMARY KEY(commit_id, target_object_id),
-    FOREIGN KEY(commit_id) REFERENCES commits(commit_id) ON DELETE RESTRICT
-) STRICT;
-
 CREATE TABLE validation_runs (
     validation_run_id       TEXT PRIMARY KEY,
     transaction_id          TEXT NULL,
@@ -828,23 +640,36 @@ CREATE TABLE validation_runs (
         ON DELETE RESTRICT
 ) STRICT;
 
-CREATE TABLE diagnostics (
-    validation_run_id       TEXT NOT NULL,
-    diagnostic_ordinal      INTEGER NOT NULL CHECK(diagnostic_ordinal >= 0),
-    diagnostic_code         TEXT NOT NULL,
-    severity                TEXT NOT NULL,
-    primary_object_id       TEXT NULL,
-    fingerprint             TEXT NOT NULL,
-    diagnostic_json         TEXT NOT NULL CHECK(json_valid(diagnostic_json)),
-    PRIMARY KEY(validation_run_id, diagnostic_ordinal),
-    FOREIGN KEY(validation_run_id)
-        REFERENCES validation_runs(validation_run_id) ON DELETE RESTRICT
+CREATE TABLE commits (
+    commit_id               TEXT PRIMARY KEY,
+    project_id              TEXT NOT NULL,
+    project_revision        INTEGER NOT NULL UNIQUE CHECK(project_revision >= 1),
+    parent_logical_hash     TEXT NOT NULL,
+    logical_hash            TEXT NOT NULL UNIQUE,
+    change_set_hash         TEXT NOT NULL,
+    impact_hash             TEXT NOT NULL,
+    validation_hash         TEXT NOT NULL,
+    operations_json         TEXT NOT NULL CHECK(json_valid(operations_json)),
+    dispositions_json       TEXT NOT NULL CHECK(json_valid(dispositions_json)),
+    validation_report_json TEXT NOT NULL CHECK(json_valid(validation_report_json)),
+    author                  TEXT NOT NULL,
+    intent                  TEXT NOT NULL,
+    committed_at_utc        TEXT NOT NULL,
+    FOREIGN KEY(project_id) REFERENCES projects(project_id) ON DELETE RESTRICT
 ) STRICT;
 ```
 
 The accepted commit and project-head update occur in the same SQLite transaction
-as current-state row changes. Draft cleanup may occur in the same commit or a
-later maintenance transaction; a committed draft status is not authoritative.
+as current-state row changes. Canonical arrays in the commit row retain exact
+operations, dispositions, explanation paths, and the accepted report. Diagnostics
+remain structured entries inside `report_json`/`validation_report_json`; stable
+read views use `json_each`. Drafts are retained in a final status by default.
+Optional maintenance may delete a draft only after explicitly deleting its
+noncanonical validation runs; cleanup is never part of the canonical commit.
+
+These tables plus `schema_migrations`, `projects`, `schema_packages`,
+`entity_types`, `graph_entities`, `graph_edges`, and `draft_transactions` are the
+nine Gate A v1 tables.
 
 ### 5.7 Read views
 
@@ -853,11 +678,9 @@ Provide stable documented views:
 ```text
 vw_project_head
 vw_schema_packages
-vw_logical_types
-vw_objects
-vw_object_fields
-vw_relations
-vw_relation_endpoints
+vw_entity_types
+vw_nodes
+vw_edges
 vw_direct_dependencies
 vw_commits
 vw_diagnostics
@@ -866,16 +689,18 @@ vw_diagnostics
 `vw_direct_dependencies` returns:
 
 ```text
-dependent_object_id
-dependency_object_id
-evidence_kind       field-reference | relation-rule
-evidence_id         object/field or relation/rule
-creates_review_impact
+dependent_node_id
+dependency_node_id
+edge_id
+edge_type_id
+impact_mode
 ```
 
-It is the union of reference-impact declarations and relation dependency rules.
-It is a convenience/read surface, not stored canon. Application edge extraction
-and the view must be tested against the same golden edge set.
+It expands each canonical edge according to its type's impact mode; a
+bidirectional edge produces two rows and an impact-`none` edge produces none. It
+is a convenience/read surface, not separate canon. Application expansion and the
+view must be tested against the same golden dependency-arc set. Property and
+diagnostic views use SQLite JSON functions over canonical payloads.
 
 ## 6. Connection, safety, and integrity
 
@@ -896,7 +721,7 @@ version. On open:
    verify/recovery commands.
 8. Load the logical snapshot and verify its head hash before canonical writes.
 
-Never interpolate user values, identifiers, field names, or type names into SQL.
+Never interpolate user values, identifiers, property names, or type names into SQL.
 All runtime data uses parameters. Migration SQL is a checked embedded resource.
 
 SQLite is an in-process library, not a server. Gate A must not require a separate
@@ -922,7 +747,7 @@ backup.
 
 On commit failure, SQLite rollback is authoritative. On startup, draft and
 validation rows may remain; they cannot change the project head or current
-objects. Gate A does not invent a second journal or file-replacement protocol.
+entities. Gate A does not invent a second journal or file-replacement protocol.
 
 ### 6.4 Untrusted databases
 
@@ -931,7 +756,7 @@ Treat project databases as untrusted:
 - refuse unknown application IDs/migrations;
 - do not enable loadable extensions;
 - do not execute SQL stored in project data;
-- cap file size/page count, logical object/value counts, JSON lengths, graph
+- cap file size/page count, logical entity/value counts, JSON lengths, graph
   edges, traversal depth, diagnostics, and output bytes;
 - use read-only connections for inspection where possible;
 - validate every value after mapping even if SQL constraints passed.
@@ -950,25 +775,28 @@ Treat project databases as untrusted:
     "parentLogicalHash": "sha256:...",
     "logicalHash": "sha256:...",
     "lastCommitId": "tx:...",
+    "purposeNodeId": "purpose:root",
     "policy": {}
   },
   "schemaPackages": [],
-  "objects": []
+  "nodes": [],
+  "edges": []
 }
 ```
 
-Each package contains complete type/field/role/dependency definitions. Each
-object contains `id`, `revision`, `kind`, `typeId`, `fields`, `endpoints`, `tags`,
-and `extensions`.
+Each package contains complete node/edge type and scalar-property definitions.
+Each node contains `id`, `revision`, `typeId`, `properties`, `tags`, and
+`extensions`. Each edge adds `sourceNodeId` and `targetNodeId`. Every graph link
+is in `edges`; property values never act as references.
 
 ### 7.2 Ordering
 
 - packages by `(packageId, semanticVersionOrdinal)`;
 - types by type ID;
-- fields/roles/rules by declared ordinal then ID/name;
-- objects by object ID;
-- field and endpoint names ordinally;
-- ordered values/endpoints by ordinal;
+- properties by declared ordinal then name;
+- nodes by node ID and edges by edge ID;
+- property names ordinally;
+- ordered values by ordinal;
 - unordered values by canonical value;
 - tags and extension keys ordinally.
 
@@ -984,7 +812,7 @@ ChangeSetHash = SHA-256(canonical transaction identity/base plus operations
                         sorted by target ID)
 
 ProjectedLogicalHash = SHA-256(canonical projected logical state using
-                               provisional next head fields)
+                               provisional next head properties)
 ```
 
 Review evidence and acknowledgements do not alter projected logical state and are
@@ -1015,61 +843,53 @@ surface, not a requirement that users reconstruct databases themselves.
 public sealed class ProjectIndex
 {
     public ProjectSnapshot Snapshot { get; }
-    public ImmutableDictionary<ObjectId, ProjectObject> ObjectsById { get; }
-    public ImmutableDictionary<TypeId, LogicalTypeDefinition> TypesById { get; }
-    public ImmutableDictionary<TypeId, ImmutableArray<ProjectObject>> ObjectsByType { get; }
-    public ImmutableDictionary<ObjectId, ImmutableArray<ProjectObject>> RelationsByEndpoint { get; }
+    public ImmutableDictionary<EntityId, ProjectEntity> EntitiesById { get; }
+    public ImmutableDictionary<EntityId, ProjectNode> NodesById { get; }
+    public ImmutableDictionary<EntityId, ProjectEdge> EdgesById { get; }
+    public ImmutableDictionary<TypeId, NodeTypeDefinition> NodeTypesById { get; }
+    public ImmutableDictionary<TypeId, EdgeTypeDefinition> EdgeTypesById { get; }
+    public ImmutableDictionary<EntityId, ImmutableArray<ProjectEdge>> EdgesBySource { get; }
+    public ImmutableDictionary<EntityId, ImmutableArray<ProjectEdge>> EdgesByTarget { get; }
 }
 ```
 
 Duplicate/ambiguous rows are integrity failures, never last-writer-wins.
 
-### 8.2 Dependency edges
+### 8.2 Dependency arcs
 
 ```csharp
-public enum DependencyEvidenceKind
-{
-    FieldReference,
-    RelationRule,
-    TypeDefinition,
-    ConstraintReference,
-    ProfileDerived
-}
-
 public sealed record DependencyEdge(
-    ObjectId DependentId,
-    ObjectId DependencyId,
-    DependencyEvidenceKind EvidenceKind,
-    string EvidenceId,
-    bool CreatesReviewImpact);
+    EntityId DependentId,
+    EntityId DependencyId,
+    EntityId EdgeId,
+    TypeId EdgeTypeId);
 ```
 
-Extract with explicit visitors:
+Expand canonical edges only:
 
 ```text
-for every reference field value:
-  apply its ReferenceImpactMode
-
-for every relation instance and dependency rule:
-  dependentPlayers = endpoints[DependentRole]
-  dependencyPlayers = endpoints[DependencyRole]
-  emit sorted cross-product edges with relation/rule evidence
-
-for every registered constraint/profile visitor:
-  emit only declared referenced-object edges
+none:                       emit nothing
+source-depends-on-target:   emit source -> target
+target-depends-on-source:   emit target -> source
+bidirectional:              emit both arcs
 ```
 
-Do not reflect over strings or JSON looking for IDs. Keep all evidence edges even
-when dependent/dependency pairs repeat; traversal may deduplicate destination
-objects while retaining sorted evidence.
+Do not reflect over properties/JSON looking for IDs, and do not let validators
+invent hidden arcs. Keep all explicit edge evidence even when dependent/
+dependency pairs repeat; traversal may deduplicate nodes while retaining sorted
+edge evidence.
 
 ### 8.3 Impact algorithm
 
 ```text
-ComputeImpact(changedIds, baseGraph, projectedGraph, policy):
+ComputeImpact(operations, baseGraph, projectedGraph, policy):
+    changedEntityIds = direct operation targets
+    nodeSeeds = directly changed nodes
+    for each changed edge in base or projection:
+        add its dependent endpoint(s) according to impact mode
     reverseUnion = review-impact reverse edges from base and projected graphs
-    visited = changedIds
-    queue = changedIds sorted ordinal at depth 0
+    visited = nodeSeeds
+    queue = nodeSeeds sorted ordinal at depth 0
     predecessor = empty
 
     while queue not empty:
@@ -1083,68 +903,67 @@ ComputeImpact(changedIds, baseGraph, projectedGraph, policy):
                 predecessor[dependent] = deterministic selected edge/evidence
                 enqueue(dependent, depth + 1)
 
-        if visited count > MaximumImpactObjects:
+        if visited count > MaximumImpactNodes:
             return Inconclusive with partial evidence
 
-    return Complete(changed, impacted excluding seeds, shortest paths)
+    return Complete(changed entities, node seeds,
+                    impacted nodes excluding seeds, shortest paths)
 ```
 
-Use breadth-first traversal. Tie between predecessor nodes resolves by object ID;
-retain all sorted evidence for the selected hop. Base-only edges preserve impact
+Use breadth-first traversal. Tie between predecessor nodes resolves by node ID;
+retain all sorted edge evidence for the selected hop. Base-only edges preserve impact
 from removed dependencies; projected-only edges include new dependencies.
 
-`changedIds` is exactly the set of direct operation targets after operation
-normalization. Do not add scope ancestors, forward context dependencies, or any
-other review-context record to it. The `scope-parent` edge therefore behaves like
-every other child-depends-on-parent rule: changing a parent reaches its dependent
-children, while merely walking upward from a changed child never turns the parent
-into a second traversal seed. This is what makes leaf, intermediate, and root
-changes produce progressively wider—but controlled—scope.
+Do not add scope ancestors, forward context dependencies, or any other
+review-context node to `nodeSeeds`. The `scope-parent` edge therefore behaves
+like every other source-depends-on-target edge: changing a parent reaches its
+dependent children, while merely walking upward from a changed child never turns
+the parent into a second traversal seed. This makes leaf, intermediate, and root
+changes progressively wider—but controlled.
 
-## 9. Schema and object validation
+## 9. Schema and graph validation
 
 ### 9.1 Stored schema package validation
 
 Validate:
 
 1. Package ID/version/hash and required validators.
-2. Unique type IDs and valid object kinds.
-3. Unique field/role ordinals and names within each complete type definition.
-4. Field kinds/cardinalities/constraints.
-5. Reference target types and impact modes.
-6. Relation-only role and dependency definitions.
-7. Dependency rules reference existing roles.
-8. Exact registered package definition hash matches stored definitions.
+2. Unique node/edge type IDs and valid entity kinds.
+3. Unique scalar-property ordinals and names within each complete type.
+4. Property kinds/cardinalities/constraints.
+5. Edge allowed source/target types, impact mode, and acyclicity declarations.
+6. Exact type-definition rows match the containing canonical package JSON/hash.
+7. Exact registered package definition hash matches stored definitions.
 
 A mismatch between built-in code and stored built-in schema is an unsupported or
 inconsistently modified project, not an opportunity to guess. This check detects
 accidental/incomplete mutation, not a privileged attacker who rewrites data,
 hashes, and history together.
 
-### 9.2 Object validation
+### 9.2 Entity validation
 
-For every object:
+For every entity:
 
 1. Validate ID and revision.
-2. Resolve type and require matching object kind.
-3. Load the type's complete declared fields/roles.
-4. Reject unknown fields/endpoints outside namespaced extensions.
+2. Resolve type and require matching node/edge kind.
+3. Load the type's complete declared scalar properties.
+4. Reject unknown properties outside namespaced extensions.
 5. Check cardinality, order, canonical values, symbols/ranges/patterns.
-6. Resolve references and allowed target types.
-7. Validate relation roles/endpoints and allowed types.
-8. Ensure every reference and endpoint agrees with normalized database rows.
+6. For an edge, resolve source/target as nodes and check allowed endpoint types.
+7. Ensure each edge entity agrees with its `graph_edges` row.
+8. Reject any semantic reference encoded in a property or extension.
 9. Report uncovered extension namespaces.
 
 ### 9.3 Generic constraints
 
 Initial validators include:
 
-- exactly one referenced `core:project-purpose` record;
-- exactly one `core:scope-parent` for every non-root scope-bearing record, with
+- exactly one referenced `core:project-purpose` node;
+- exactly one `core:scope-parent` for every non-root node, with
   an acyclic singular path terminating at that purpose;
 - selected explicit contradictions;
-- minimum support relationships/sources;
-- Tarjan SCC detection for selected dependency relation types;
+- minimum support edges/sources;
+- Tarjan SCC detection for selected edge types;
 - unique active definitions;
 - implementation and verification coverage;
 - required impact dispositions.
@@ -1158,9 +977,9 @@ These prove explicit graph properties, not prose or real-world truth.
 ```csharp
 public abstract record ProjectOperation
 {
-    public required ObjectId TargetId { get; init; }
-    public sealed record Add(ProjectObjectDraft Object) : ProjectOperation;
-    public sealed record Replace(int ExpectedRevision, ProjectObjectDraft Object)
+    public required EntityId TargetId { get; init; }
+    public sealed record Add(ProjectEntityDraft Entity) : ProjectOperation;
+    public sealed record Replace(int ExpectedRevision, ProjectEntityDraft Entity)
         : ProjectOperation;
     public sealed record Remove(int ExpectedRevision) : ProjectOperation;
 }
@@ -1169,31 +988,48 @@ public abstract record ProjectOperation
 One final operation per target. Editing a draft replaces that operation and
 increments draft revision. The operation document cannot set committed revision.
 
+Focused input is expanded before operations are stored:
+
+```csharp
+public sealed record AuthoringBatch(
+    EntityId? FocusNodeId,
+    ImmutableArray<ProjectNodeDraft> Nodes,
+    ImmutableArray<ProjectEdgeDraft> Edges);
+
+public sealed record BatchExpansion(
+    ImmutableArray<ProjectOperation> Operations,
+    ImmutableArray<EntityId> AddedScopeParentEdgeIds);
+```
+
+For each new node without an explicit `scope-parent` edge, require a focus and
+add an edge from that node to the focus. A cluster helper first creates a normal
+scope node, attaches it to the current focus, then uses it as focus for its
+children. Return the complete expansion; never infer non-scope semantic edges.
+
 ### 10.2 Projection
 
 ```text
 Apply(base, transaction):
     require project ID/base revision/base hash match
-    copy current objects to ID-keyed builders
+    copy current entities to ID-keyed node/edge builders
 
     for operation sorted by target ID:
         Add: require absent; materialize revision 1
-        Replace: require current expected revision; preserve object ID;
-                 materialize expected revision + 1
+        Replace: require current expected revision; preserve entity ID;
+                 preserve entity kind/type; materialize expected revision + 1
         Remove: require current expected revision; remove target only
 
     materialize sorted immutable snapshot with provisional next head
-    validate every post-operation reference; never cascade
+    validate every post-operation edge endpoint; never cascade
 ```
 
-Changing a relation's type is remove-plus-add and is disallowed under one-target
-operation uniqueness in Gate A; use a new stable ID or an explicit future
-migration workflow. Changing a record's logical type is rejected in Replace.
+Changing an entity's kind or logical type is rejected in Replace; remove it and
+add a new stable ID or use a future explicit migration workflow.
 
 ### 10.3 Review fingerprints
 
 ```text
-TargetFingerprint = SHA-256(target ID + projected revision + canonical object)
+TargetFingerprint = SHA-256(target ID + projected revision + canonical entity)
 ImpactFingerprint = SHA-256(ChangeSetHash + target ID + ordered shortest path)
 ```
 
@@ -1252,7 +1088,7 @@ Commit(transactionId):
     re-read project head and draft revision/change-set hash
     reject/rollback if either changed
     verify submitted dispositions still match computed evidence
-    normalize and apply every accepted object mutation
+    normalize and apply every accepted entity mutation
     insert commit operations/dispositions/report/commit
     compute/verify final logical snapshot hash from transaction-visible rows
     update project head
@@ -1274,11 +1110,11 @@ inside the transaction.
 
 Recommended approach:
 
-1. Upsert/add target object headers needed by new references.
-2. Remove/rewrite relation endpoints and field values for changed objects.
-3. Insert new field values/endpoints/tags.
-4. Delete removed object headers only after all referencing rows were explicitly
-   repaired/removed by operations.
+1. Insert headers for newly added nodes before edges that target them.
+2. Remove changed/removed edge rows before deleting their entity headers.
+3. Rewrite changed entity property/tag/extension JSON and edge endpoint rows.
+4. Delete removed node headers only after all incident edges were explicitly
+   repaired or removed by operations.
 5. Write audit and head rows.
 6. Verify relational integrity and logical hash.
 
@@ -1297,10 +1133,10 @@ Ranges:
 
 ```text
 VW10xx  database application ID, migrations, integrity, mapping
-VW11xx  schema packages, types, fields, roles, validators
-VW12xx  objects, values, references, endpoints
+VW11xx  schema packages, node/edge types, properties, validators
+VW12xx  graph entities, property values, edge endpoints
 VW13xx  profile assertions and lifecycle
-VW14xx  dependency extraction and relationship semantics
+VW14xx  dependency-arc expansion and edge semantics
 VW15xx  support, cycles, definitions, traceability
 VW16xx  impact and review obligations
 VW18xx  transaction, concurrency, commit, audit, replay
@@ -1317,18 +1153,18 @@ VW1003 SQLite integrity/foreign-key failure
 VW1004 logical snapshot hash mismatch
 VW1005 relational-to-logical mapping mismatch
 VW1101 invalid/unsupported schema package
-VW1102 invalid logical type hierarchy
-VW1103 invalid field definition
-VW1104 invalid role/dependency rule
+VW1102 duplicate or inconsistent logical type definition
+VW1103 invalid scalar-property definition
+VW1104 invalid edge endpoint/impact definition
 VW1105 required validator unavailable
-VW1201 invalid/duplicate object ID
-VW1202 object kind/type mismatch
-VW1203 invalid/missing field value
-VW1204 missing or incompatible reference
-VW1205 invalid relation endpoint/cardinality
+VW1201 invalid/duplicate entity ID
+VW1202 entity kind/type mismatch
+VW1203 invalid/missing scalar property
+VW1204 missing edge endpoint node
+VW1205 incompatible edge endpoint type
 VW1301 accepted assertion contradiction
 VW1401 dependency extraction mismatch
-VW1402 invalid semantic relation instance
+VW1402 invalid semantic edge
 VW1501 missing required support
 VW1502 forbidden dependency cycle
 VW1503 missing implementation
@@ -1363,10 +1199,10 @@ WriteLogicalSnapshot
 InitializeFromRevisionZeroSnapshot
 BackupProject
 
-GetObject
-ListObjects
-GetRelation
-ListRelations
+GetNode
+ListNodes
+GetEdge
+ListEdges
 GetDependencies
 GetDependents
 ExplainDependencyPath
@@ -1374,6 +1210,8 @@ BuildContextQuery
 
 BeginTransaction
 GetTransaction
+SetTransactionFocus
+ExpandAuthoringBatch
 ApplyOperations
 AnalyzeTransactionImpact
 ValidateTransaction
@@ -1393,6 +1231,7 @@ contracts:
 ```text
 PreviewAiSemanticReviewRequest
 RunAiSemanticReview
+SkipOptionalAiSemanticReview
 GetAiSemanticReviewRun
 ListAiSemanticReviewConcerns
 SetAiSemanticReviewConcernDisposition
@@ -1414,16 +1253,19 @@ vw backup --db <path> --output <new-path>
 vw sample list
 vw sample create --sample <name> --variant <name> --db <new-path>
 
-vw object get --db <path> --id <id>
-vw object list --db <path> [--type <id>] [--tag <value>]
-vw relation list --db <path> [--type <id>] [--endpoint <id>]
+vw node get --db <path> --id <id>
+vw node list --db <path> [--type <id>] [--tag <value>]
+vw edge get --db <path> --id <id>
+vw edge list --db <path> [--type <id>] [--source <id>] [--target <id>]
 vw dependencies --db <path> --id <id> [--transitive]
 vw dependents --db <path> --id <id> [--transitive]
 vw explain path --db <path> --from <id> --to <id>
-vw context --db <path> --seed <id> [--max-objects <n>]
+vw context --db <path> --seed <id> [--max-nodes <n>]
 
 vw tx begin --db <path> --intent <text> --author <text>
 vw tx show --db <path> --tx <id>
+vw tx focus --db <path> --tx <id> --node <id>
+vw tx expand --db <path> --tx <id> --batch <file-or-stdin>
 vw tx apply --db <path> --tx <id> --operations <file-or-stdin>
 vw tx impact --db <path> --tx <id>
 vw tx validate --db <path> --tx <id>
@@ -1443,6 +1285,7 @@ Planned Gate B commands are explicit network/audit operations:
 ```text
 vw tx ai-review preview --db <path> --tx <id> --output <path>
 vw tx ai-review run --db <path> --tx <id>
+vw tx ai-review skip --db <path> --tx <id> --actor <id> --reason <text>
 vw tx ai-review get --db <path> --tx <id> --run <id>
 vw tx ai-review concerns --db <path> --tx <id> --run <id>
 vw tx ai-review disposition --db <path> --tx <id> --run <id>
@@ -1454,6 +1297,11 @@ vw tx ai-review disposition --db <path> --tx <id> --run <id>
 and reports scope, coverage, omissions, hashes, and size. `run` is the only
 network call and sends that single request at most once. Supplying credentials
 as command arguments or JSON is forbidden.
+
+`skip` makes no network call and is accepted only when project policy is
+`Optional`; it records actor, reason, time, draft revision, and change-set hash.
+Changing the draft makes the skip stale. Policy `Required` rejects `skip`, and
+`Disabled` needs neither run nor skip.
 
 There is no arbitrary `vw sql` write command. Users may open a verified database
 read-only with standard SQLite tools and use documented `vw_*` views.
@@ -1496,7 +1344,7 @@ Exactly one JSON document goes to stdout. Operational logs go to stderr.
 0  completed / proven valid where validation applies
 2  deterministic validation rejected
 3  command/input contract error
-4  stale head/object/draft precondition or writer conflict
+4  stale head/entity/draft precondition or writer conflict
 5  database integrity, migration, mapping, or write failure
 6  required analysis or AI review inconclusive
 7  required impact or AI-concern dispositions pending
@@ -1511,10 +1359,10 @@ CLI progressively so realistic black-box use starts with the first database
 slice:
 
 ```text
-WP3  init/status/structural verify/snapshot read plus object/relation reads;
+WP3  init/status/structural verify/snapshot read plus node/edge reads;
      generated TechnicalProject database and documented read-only views
 WP4  full verify, diagnostics, dependencies/dependents, and explanation reads
-WP5  tx begin/show/apply/validate/abort
+WP5  tx begin/show/focus/expand/apply/validate/abort
 WP6  tx impact/obligations/disposition
 WP7  tx commit plus commit get/verify/replay
 WP8  context, backup, remaining query/help contracts, limits, and polish
@@ -1542,11 +1390,11 @@ public sealed record ContextQueryResult(
     ProjectId ProjectId,
     long ProjectRevision,
     string LogicalHash,
-    ImmutableArray<ObjectId> SeedIds,
-    ImmutableArray<ProjectObject> Objects,
-    ImmutableArray<DependencyEdge> Edges,
+    ImmutableArray<EntityId> SeedIds,
+    ImmutableArray<ProjectNode> Nodes,
+    ImmutableArray<ProjectEdge> Edges,
     ImmutableArray<ImpactStep> SelectionPaths,
-    ImmutableArray<ObjectId> OmittedObjectIds,
+    ImmutableArray<EntityId> OmittedEntityIds,
     bool Truncated,
     string ResultHash);
 ```
@@ -1554,16 +1402,16 @@ public sealed record ContextQueryResult(
 Priority:
 
 ```text
-0 seed objects
+0 seed nodes
 1 exact type definitions and applicable constraints
-2 singular `scope-parent` lineage from each selected record to purpose root
+2 singular `scope-parent` lineage from each selected node to purpose root
 3 forward dependencies needed to understand seeds
 4 reverse impacted dependents and paths
-5 external anchors bound through relations
-6 additional related objects by increasing graph distance
+5 external anchors bound through edges
+6 additional related nodes by increasing graph distance
 ```
 
-Within priority/distance sort by ID. Include each object atomically. Report
+Within priority/distance sort by ID. Include each entity atomically. Report
 limits and omissions. A required seed/type/constraint that cannot fit produces
 inconclusive output. Walking the scope lineage is upward-only; an included
 ancestor is never treated as a seed and its other children are not selected.
@@ -1580,11 +1428,11 @@ public sealed record AiReviewPlan(
     long DraftRevision,
     string ChangeSetHash,
     string ProjectedLogicalHash,
-    ImmutableArray<ObjectId> RequiredObjectIds,
-    ImmutableArray<DependencyEdge> RequiredEdges,
+    ImmutableArray<EntityId> RequiredNodeIds,
+    ImmutableArray<EntityId> RequiredEdgeIds,
     ImmutableArray<ScopeLineage> RequiredScopeLineages,
     AiReviewRequestManifest Request,
-    ImmutableArray<ObjectId> ExcludedObjectIds,
+    ImmutableArray<EntityId> ExcludedEntityIds,
     string PlanHash);
 ```
 
@@ -1593,20 +1441,20 @@ Required scope is the union of:
 ```text
 direct operation targets
 policy-selected complete reverse impact closure and explanation edges
-forward dependencies needed to understand every changed/impacted object
-singular upward scope-parent lineage for every included content record
+forward dependencies needed to understand every changed/impacted node
+singular upward scope-parent lineage for every included node
 applicable exact type definitions and constraints
 policy-selected bound external anchors
 ```
 
 Sort all sets and hashes canonically and produce exactly one request. Multiple
 disjoint transaction chains remain together. A coverage matrix proves that every
-required object, dependency edge, constraint, operation, explanation path, and
+required node, edge, constraint, operation, explanation path, and
 scope-parent edge appears in that request. It also proves that context-only
 ancestors did not expand impact into unselected siblings.
 
 If the complete selected scope exceeds the fixed model/request bound, contains an
-oversized indivisible object, or has missing coverage, planning is inconclusive
+oversized indivisible entity, or has missing coverage, planning is inconclusive
 before any network call. Do not shard, summarize, synthesize across calls, drop a
 chain, select a fallback model, or make a second paid request. Coverage proves
 what was presented, not that the model understood it.
@@ -1626,12 +1474,12 @@ The request includes the complete ordered operations, base/draft/change-set and
 projected hashes, review profile/version, prompt template/version/hash, review
 plan/request hashes, OpenAI/model/reasoning/timeout values, strict response-schema
 version, purpose statement, required scope lineages, and all selected content.
-The cache/request identity hashes every material non-secret field.
+The cache/request identity hashes every material non-secret property.
 
 The response is strict versioned JSON containing status, structured concerns,
 insufficient-context observations, and a separate list of candidate
-records/relations/operations. Each concern has a run-local stable ID, `AIxxxx`
-code, category, severity, message, supplied object IDs, field/edge/path evidence,
+nodes/edges/operations. Each concern has a run-local stable ID, `AIxxxx`
+code, category, severity, message, supplied entity IDs, property/edge/path evidence,
 optional confidence, suggested follow-up, and fingerprint.
 
 Unknown citations, schema mismatch, refusal, truncation, timeout, cancellation,
@@ -1639,7 +1487,7 @@ or malformed content fails or makes the run inconclusive. Do not parse free-form
 prose into findings. Candidate changes require an explicit normal transaction
 operation. Concern dispositions are `open`, `resolved-by-change`,
 `rejected-with-rationale`, or `acknowledged`; policy decides which are
-acceptable. Changing any request-identity field stales the run and dispositions.
+acceptable. Changing any request-identity property stales the run and dispositions.
 
 Gate B adds checked migration tables for run metadata, request manifests, and
 concerns. They are draft/audit state and do not enter the logical project hash.
@@ -1665,6 +1513,14 @@ reads `AiReview:OpenAI:ApiKey` from .NET user-secrets in source development or
 arguments, project JSON, or the database. `.env` files are ignored but are not
 searched or loaded automatically.
 
+`VW_AIREVIEW__LIVETESTS=false` is the sole test-harness network opt-in. Unit,
+integration, and ordinary end-to-end tests ignore it and always use a fake or
+scripted HTTP. It does not govern user transaction behavior. Gate B adds project
+policy `AiReviewMode = Disabled | Optional | Required`; Optional permits an
+explicit transaction-scoped `skipped` record with actor/rationale, while
+Required blocks commit without a fresh successful review and concern
+dispositions. No environment value can override Required.
+
 Only `vw tx ai-review run` contacts OpenAI, before any SQLite write transaction.
 It sends exactly one request and has zero automatic retries. Refusal, truncation,
 timeout, cancellation, malformed output, or transport failure is inconclusive.
@@ -1685,8 +1541,8 @@ security, privacy, cost, failure, and evaluation contract.
 
 Embed canonical package JSON resources for:
 
-- `core/v1`: project-purpose record, `scope-parent` child-to-parent dependency,
-  artifact, anchor, containment, binds/uses/mentions, and generic constraint
+- `core/v1`: project-purpose and scope/constraint nodes, `scope-parent`
+  child-to-parent edge, artifact/anchor nodes, binds/uses/mentions edges, and generic constraint
   vocabulary;
 - `technical-project/v1`: subject, proposition, assertion, source, and technical
   dependency/traceability vocabulary.
@@ -1732,11 +1588,11 @@ depends-on(conclusion, result)
 satisfies(conclusion, requirement)
 
 anchors: requirements, power-budget, architecture, verification, privacy
-bindings from semantic objects to relevant anchors
+binding edges from semantic nodes to relevant anchors
 ```
 
 Changing current to 25 mA must impact the result, conclusion, and relevant
-anchors, not privacy or accessibility. The engine includes the changed record's
+anchors, not privacy or accessibility. The engine includes the changed node's
 power-to-purpose lineage as context without treating those ancestors as new
 impact seeds. It does not perform arithmetic; fixture operations supply the known
 repaired capacity/runtime values.
@@ -1766,8 +1622,14 @@ set. Expected results include both required paths and unrelated exclusions. This
 corpus is complex enough to expose modeling and diagnostic problems without
 claiming that the engine understands arbitrary prose.
 
+The fixture source uses one focused batch for each major scope. For example, a
+power batch creates its nodes and inherits `scope:power` as their parent, while
+explicit `derived-from`, `depends-on`, and `satisfies` edges are supplied in the
+same batch. Golden expansion output proves the convenience introduced no hidden
+semantic edge.
+
 A separate transaction changes `purpose:root`; its reverse `scope-parent`
-closure must include every scope-bearing record. Another Gate B transaction
+closure must include every node. Another Gate B transaction
 changes one power item and one privacy item together so the one review request
 must contain both disjoint impact chains and both singular purpose lineages.
 
@@ -1790,38 +1652,38 @@ Include fixtures for:
 - wrong application ID/user version/migration hash;
 - SQLite foreign-key/integrity failure;
 - logical hash mismatch caused by accidental/incomplete direct mutation;
-- invalid type hierarchy, field, role, or dependency rule;
+- invalid node/edge type, property schema, endpoint type, or impact mode;
 - unavailable required validator;
-- duplicate/invalid object ID;
+- duplicate/invalid entity ID;
 - missing/duplicate project purpose, multiple scope parents, disconnected scope,
   and scope-parent cycle;
 - type/kind mismatch;
-- invalid field cardinality/value/reference;
-- invalid relation endpoint/cardinality;
+- invalid scalar-property cardinality/value;
+- missing or incompatible edge endpoint;
 - omitted or reversed semantic dependency;
 - explicit contradiction;
 - missing support/definition/implementation/verification;
 - forbidden cycle;
-- unreviewed or stale impacted object;
-- stale project/draft/object precondition;
+- unreviewed or stale impacted node;
+- stale project/draft/entity precondition;
 - impact/context bound reached;
 - unrelated cross-track/distractor false-positive regression;
 - writer conflict and injected commit failure;
-- relational/logical mapping mismatch;
+- relational/logical graph mapping mismatch;
 - replay mismatch;
 - uncovered extension/profile data.
 
 Every fixture has golden structured diagnostics. Golden comparisons exclude
-injected timestamps but assert deterministic semantic fields and ordering.
+injected timestamps but assert deterministic semantic properties and ordering.
 
 ### 14.4 Performance corpus
 
 Generate deterministic sparse and dense fixtures:
 
 ```text
-small:       1,000 objects / 10,000 edges
-expected:   10,000 objects / 100,000 edges
-stress:    100,000 objects / 1,000,000 edges
+small:       1,000 nodes / 10,000 edges
+expected:   10,000 nodes / 100,000 edges
+stress:    100,000 nodes / 1,000,000 edges
 ```
 
 Measure database load, logical materialization, validation, direct queries,
@@ -1842,7 +1704,7 @@ Gate A passes only if:
 7. Invalid/stale/busy/faulted commits change no authoritative/audit rows.
 8. Accepted commit yields expected rows and logical hash.
 9. Replay reproduces recorded hashes.
-10. Read views and C# edge extraction agree.
+10. Read-view and C# dependency-arc expansion agree.
 11. Accumulated WP3-WP8 agent walkthroughs complete realistic goals through
     public commands without source knowledge or direct canonical SQL.
 12. A fresh lower-cost-agent evaluation succeeds over the full workflow using
@@ -1869,7 +1731,7 @@ than adding more providers or import/export machinery.
 
 Add package types/validators for story events, fictional intervals, participants,
 effects, belief/knowledge states, clues, and disclosure. No new physical tables
-are required unless measurement proves the generic field/endpoint representation
+are required unless measurement proves the generic property/binary-edge representation
 inadequate.
 
 Keep project revision, fictional time, narrative order, canon truth, and
@@ -1905,13 +1767,14 @@ suite; do not assume SQLite SQL is portable.
 
 ```text
 Core unit/property tests
-  IDs, packages, types, fields, roles, values, objects, operations
+  IDs, packages, node/edge types, values, entities, operations, batch expansion
 
 Serialization unit/property tests
   strict JSON, canonical order, logical hash, operation/result schemas
 
 Validation unit/property tests
-  schema validation, indexes, edges, constraints, impact, obligations, context
+  schema validation, graph indexes, dependency arcs, constraints, impact,
+  obligations, context
 
 Application integration tests with in-memory ports
   draft lifecycle, projection, stale checks, policy, commit orchestration, replay
@@ -1966,8 +1829,8 @@ appears plausible.
 - Physical insertion order does not change logical hash.
 - SQLite file bytes may differ while logical hashes remain equal.
 - Stable IDs and revisions survive round trip.
-- Every normalized reference/endpoint resolves.
-- Exactly one purpose exists and every scope-bearing record has one acyclic
+- Every edge endpoint resolves to a node of an allowed type.
+- Exactly one purpose exists and every non-root node has one acyclic
   parent path to it.
 - Read-view direct edges equal C# extracted edges.
 - Unrelated insertion does not change an existing impact set/path.
@@ -1979,17 +1842,19 @@ appears plausible.
 - Operation changes invalidate stale dispositions.
 - Failed commits preserve identical logical head, current rows, and audit rows.
 - Accepted commit and replay reproduce the same logical hash.
-- Extension JSON never creates hidden references.
+- Scalar properties and extension JSON never create hidden references.
 - Artifact locators are never dereferenced.
 - No CLI command emits non-JSON stdout.
 - Gate B's preview contains the complete transaction and every disjoint selected
   chain in one request; each run invokes the live client at most once.
+- Focus/cluster batch expansion is deterministic, always returns explicit
+  operations, and never invents a non-scope semantic edge.
 
 ### 16.3 Fault injection
 
 Inject failures after draft load, base verification, projection, validation,
-writer acquisition, head recheck, object header mutation, value mutation,
-endpoint mutation, audit insert, hash verification, head update, and before
+writer acquisition, head recheck, entity header mutation, property mutation,
+edge-endpoint mutation, audit insert, hash verification, head update, and before
 SQLite commit. Every failure before commit must roll back the entire SQL
 transaction.
 
@@ -2059,15 +1924,16 @@ report the evidence to the human, and stop.
   bundle directly in Persistence.Sqlite.
 - Acceptance: scaffold and existing suite restore/build/test cleanly.
 
-### WP1 — common metamodel
+### WP1 — common graph domain
 
-- Implement IDs, schema packages, type/field/role/dependency definitions, values,
-  objects, snapshots (including `PurposeObjectId`), policies, operations, and
-  review records.
+- Implement IDs, schema packages, node/edge/property definitions, scalar values,
+  nodes, binary edges, snapshots (including `PurposeNodeId`), policies,
+  operations, focused-batch expansion contracts, and review records.
 - Construct a realistic interconnected technical-design scenario through public
   Core APIs with one purpose and sibling scope branches; report modeling friction.
-- Acceptance: unit/property tests cover every local valid/rejected shape and the
-  realistic graph requires no test-only escape hatch.
+- Acceptance: unit/property tests cover every local valid/rejected shape; a
+  focused cluster batch expands to the expected explicit scope and semantic
+  edges; the realistic graph requires no test-only escape hatch.
 
 ### WP2 — logical JSON and built-in packages
 
@@ -2076,12 +1942,13 @@ report the evidence to the human, and stop.
   package resources.
 - Materialize the realistic TechnicalProject source corpus and representative
   edit/error variants as reviewed text fixtures.
-- Acceptance: round-trip/order/duplicate/unknown-field/hash goldens pass and an
+- Acceptance: round-trip/order/duplicate/unknown-property/hash goldens pass and an
   agent can inspect/author the documented JSON without hidden conventions.
 
 ### WP3 — SQLite schema and mapping
 
-- Implement connections, v1 migration, repositories, read views, integrity
+- Implement connections, nine-table v1 migration, repositories, read views,
+  integrity checks, logical snapshot load, initialize, and backup.
 - Make initialization require purpose text and atomically create/store the sole
   purpose root.
 - Add the first CLI walking skeleton from Section 12.5 and CLI test project.
@@ -2093,12 +1960,13 @@ report the evidence to the human, and stop.
   create/open/verify/backup without `sqlite3`, Docker, or system SQLite; record
   which host platforms were actually exercised.
 - Acceptance: migration/constraint/mutation-detection/mapping/backup integration
-  tests, CLI/package smoke tests, reusable sample generation, and agent QA pass;
+  tests prove the compact schema plus entity/type/endpoint foreign keys;
+  CLI/package smoke tests, reusable sample generation, and agent QA pass;
   unimplemented semantic phases are explicitly inconclusive.
 
 ### WP4 — indexes and semantic validation
 
-- Validate stored schema packages/objects, build indexes/edges, implement generic
+- Validate stored schema packages/entities, build graph indexes/dependency arcs, implement generic
   and technical constraints, diagnostics, and coverage.
 - Enforce exact-one purpose and singular acyclic root-reaching scope lineages.
 - Expose full verify, diagnostics, dependencies/dependents, and explanation reads
@@ -2110,8 +1978,8 @@ report the evidence to the human, and stop.
 ### WP5 — durable drafts and projection
 
 - Implement draft repository, operations, preconditions, projection, hashes,
-  validation runs, and disposition invalidation.
-- Expose begin/show/apply/validate/abort through the CLI.
+  focus/batch expansion, validation runs, and disposition invalidation.
+- Expose begin/show/focus/expand/apply/validate/abort through the CLI.
 - Acceptance: concurrent draft edits and stale operation cases are deterministic,
   and an agent can author and repair a realistic proposed transaction without
   direct canonical SQL.

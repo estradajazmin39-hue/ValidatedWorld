@@ -26,7 +26,8 @@ review or clear them.
 This is close to ValidatedWorld's technical-project use case. ValidatedWorld is
 not justified as merely “Doorstop with JSON/SQLite.” Its distinct hypothesis is:
 
-- one general typed graph rather than a document hierarchy;
+- one general typed node/edge graph with a spanning scope tree rather than a
+  document hierarchy;
 - explicit relationship-specific impact direction;
 - transitive base-plus-projected impact paths;
 - commit-blocking dispositions over the whole proposed transaction;
@@ -138,6 +139,15 @@ queries over trees and graphs.
 SQLite therefore owns physical integrity and persistence for Gate A. JSON remains
 the versioned protocol and deterministic logical snapshot. The C# engine owns
 semantic meaning and commit policy.
+
+The v1 storage deliberately avoids reproducing a full property-graph database
+inside SQLite. Nine tables cover migration/project metadata, canonical package
+and type definitions, graph entities/edge endpoints, drafts, validation runs,
+and commits. Scalar property maps remain canonical JSON and are validated by C#.
+This sacrifices arbitrary indexed SQL over every property and native hyperedges;
+higher-arity relations are reified as nodes. Those features are not needed to
+test transaction impact, review, or Gate B context completeness. Add a property
+index or specialized graph store only after measurement demonstrates a failure.
 
 SQLite is embedded and serverless. ValidatedWorld deploys a pinned native bundle
 through NuGet and owns database creation/backup, so a separate SQLite install,

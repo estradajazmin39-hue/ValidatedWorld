@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-08-12
 
-**Current task:** WP1 - common metamodel
+**Current task:** WP1 - common graph domain
 
 This file tells a coding agent what has been finished and what to do next. The
 [implementation blueprint](implementation_blueprint.md) defines the design and
@@ -97,7 +97,7 @@ realistic TechnicalProject corpus and actual agent-operated usability checks.
 
 ### Realistic scenario requirement
 
-Do not validate the product only with isolated records or toy arithmetic. The
+Do not validate the product only with isolated nodes or toy arithmetic. The
 checked-in source fixtures must grow into a plausible technical design containing
 requirements, definitions, assumptions, evidence, claims, decisions,
 implementations, verification, external document anchors, relevant dependency
@@ -126,7 +126,7 @@ not merely another unit test. It must:
 1. Begin from public README/CLI help and scenario instructions, not internal
    repositories or direct canonical SQL writes.
 2. Attempt a realistic goal using soft-logic data, including relevant and
-   irrelevant records rather than a preselected minimal graph.
+   irrelevant nodes rather than a preselected minimal graph.
 3. Use only supported public commands and documented read-only SQLite views.
 4. Record commands, structured results, whether the goal was completed, errors,
    confusing concepts, unnecessary steps, missing diagnostics, and confidence in
@@ -222,18 +222,29 @@ remaining optional ideas, asks what the human wants next, and stops.
   balanced.
 - Restored and refined the AI semantic-review concept as the first planned
   post-Gate-A phase: one expensive request contains the whole transaction, all
-  disjoint selected dependency/impact chains, and each selected record's singular
+  disjoint selected dependency/impact chains, and each selected node's singular
   lineage to the purpose root; results are structured non-authoritative concerns.
   The production path is only OpenAI `gpt-5.6-terra`, while normal tests use a
   fake client. Human secret readiness and per-live-call authorization are hard
   preconditions, and paid calls have zero automatic retries. This does not
   authorize Gate B implementation.
+- Simplified the pre-implementation canonical model to one typed property graph:
+  every concept is a node, every graph-relevant connection is a binary typed
+  edge, `scope-parent` spans all non-root nodes, and no reference fields create a
+  hidden second graph. The planned SQLite v1 schema is nine tables, with
+  canonical scalar-property/ledger JSON and relational entity/type/endpoint
+  integrity. Focused batch/cluster expansion reduces repeated authoring while
+  producing only explicit operations.
+- Restored `VW_AIREVIEW__LIVETESTS=false` solely for the separately invoked Gate
+  B live harness. It is ignored by normal tests and cannot bypass project policy;
+  optional transaction skips are explicit/auditable and required review cannot
+  be skipped.
 - Full restore/build/test passed on 2026-08-12: 0 build warnings; 5 scaffold
   tests passed.
 
 ## 6. Current task
 
-### WP1 - common metamodel
+### WP1 - common graph domain
 
 **Blueprint references:** Sections 2, 3, 4, 10.1, 10.3, 10.4, 16, and 17
 
@@ -243,27 +254,30 @@ validation, application, and persistence work.
 
 **In scope:**
 
-- Strongly typed project, object, type, package, transaction, and commit IDs with
+- Strongly typed project, graph-entity, type, package, transaction, and commit IDs with
   exact validation and ordinal semantics.
-- Logical object/value/impact enums and immutable value types.
-- Schema packages, required validators, logical type definitions, field
-  definitions and constraints, relation roles, and dependency rules.
-- Project objects, fields, endpoints, tags, extensions, project policy, head,
-  and complete snapshot types.
-- A required `PurposeObjectId` on the project snapshot plus model shapes capable
-  of representing one purpose root and singular scope-parent hierarchy. The
-  canonical `core/v1` definitions arrive in WP2 and cross-object tree validation
+- Scalar value/impact enums and immutable value types; properties cannot contain
+  semantic references.
+- Schema packages, required validators, node/property definitions, binary edge
+  definitions, allowed endpoint types, and four explicit impact modes.
+- Project nodes, first-class property-bearing edges, tags, extensions, project
+  policy, head, and complete node/edge snapshot types.
+- A required `PurposeNodeId` on the snapshot plus model shapes capable of
+  representing one purpose root and one `scope-parent` per other node. The
+  canonical `core/v1` definitions arrive in WP2 and cross-entity tree validation
   remains WP4.
-- Add/replace/remove transaction operations and the review/disposition/report
-  domain records required by the blueprint.
+- Add/replace/remove entity operations, focused `AuthoringBatch`/expanded
+  operation contracts, and the review/disposition/report domain records required
+  by the blueprint.
 - Explicit construction-time or factory validation for local invariants.
 - Comprehensive Core tests for accepted and rejected shapes, equality,
   immutability, invalid default/empty values, and lack of silent normalization.
 - A realistic technical-design scenario constructed through the public Core API
-  to prove the metamodel can express interconnected soft-logic records without
+  to prove the graph model can express interconnected soft-logic nodes without
   relying on extensions or test-only escape hatches.
 - That scenario includes one purpose root, at least two sibling scope branches,
-  and one singular parent lineage for every ordinary content record.
+  one parent lineage for every other node, cross-branch typed semantic edges, and
+  a focused cluster batch whose explicit expansion is asserted.
 - A short modeling-usability assessment in Completed work and the human report.
 - Removal of `ValidatedWorld.Core/Class1.cs` and empty placeholder tests.
 
@@ -271,7 +285,7 @@ validation, application, and persistence work.
 
 - JSON DTOs, canonical JSON, hashes, or built-in package resources (WP2).
 - SQLite, migrations, repositories, or physical mapping (WP3).
-- Cross-object indexes, dependency extraction, impact traversal, profile
+- Cross-entity indexes, dependency-arc expansion, impact traversal, profile
   validators, or diagnostic execution (WP4 and later).
 - Application handlers, CLI behavior, narrative/game profiles, or public hosts.
 
@@ -287,8 +301,8 @@ validation, application, and persistence work.
 5. `dotnet test tests/ValidatedWorld.Core.Tests/ValidatedWorld.Core.Tests.csproj`
    passes.
 6. A representative technical-design graph is constructed and asserted through
-   public Core APIs, including purpose identity and scope hierarchy shapes, and
-   modeling friction or missing concepts are reported.
+   public Core APIs, including purpose identity, scope tree, semantic cross-links,
+   and deterministic focus/batch expansion; modeling friction is reported.
 7. The full restore/build/test sequence in Section 1 passes without warnings.
 8. This plan records WP1 under Completed work and replaces Current task with a
    fully specified WP2 task.

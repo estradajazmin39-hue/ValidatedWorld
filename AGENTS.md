@@ -2,23 +2,24 @@
 
 ## Project purpose
 
-ValidatedWorld is a .NET 10 semantic change-control engine for versioned project
-data. One embedded SQLite application file stores a small fixed relational
-metamodel: typed records, relationships, constraints, transactions, impact
-evidence, reviews, and commits. Technical projects, fiction, and interactive
-worlds are logical profiles over that common metamodel.
+ValidatedWorld is a .NET 10 semantic change-control engine for a versioned typed
+property graph. One embedded SQLite application file stores canonical nodes and
+typed first-class edges plus schema metadata and a transaction/review/commit
+ledger. Technical projects, fiction, and interactive worlds are logical profiles
+over that one graph model.
 
 JSON is the deterministic agent/interchange protocol, not the authoritative
 physical store. The engine validates explicit semantics, computes change impact,
-and can require review of affected records. It does not ingest, generate, render,
+and can require review of affected nodes. It does not ingest, generate, render,
 publish, or validate arbitrary finished prose or game assets.
 
-Every project has exactly one purpose root. Every scope-bearing content record
-has one parent, so its upward scope lineage is singular while a parent may have
-many children. Transaction targets alone seed impact: adding ancestors as review
-context never causes traversal back down through their other children. Therefore
-changing a leaf excludes its siblings, changing an intermediate scope node can
-affect its subtree, and directly changing the purpose root affects the project.
+Every project has exactly one purpose root. Every other canonical node has one
+`scope-parent` edge, so all nodes form a spanning rooted tree while other typed
+edges form a directed semantic multigraph. Transaction targets alone seed impact:
+adding ancestors as review context never causes traversal back down through their
+other children. Therefore changing a leaf excludes its siblings, changing an
+intermediate scope node can affect its subtree, and directly changing the purpose
+root affects the project.
 
 If Gate A proves the deterministic core useful, the first planned later phase is
 an expensive whole-transaction AI semantic reviewer. One request receives every
@@ -90,8 +91,8 @@ mean an application/SQLite operation, not a Git commit.
 
 ## Repository structure
 
-- `src/ValidatedWorld.Core` — database- and medium-independent immutable logical
-  metamodel.
+- `src/ValidatedWorld.Core` — database- and medium-independent immutable typed
+  node/edge graph plus transaction/review domain.
 - `src/ValidatedWorld.Serialization` — strict versioned JSON protocol and
   deterministic logical snapshot serialization/hashing.
 - `src/ValidatedWorld.Validation` — type/index construction, dependency and
@@ -118,37 +119,41 @@ mean an application/SQLite operation, not a Git commit.
 - Hash a deterministic logical JSON projection; never hash SQLite file bytes as
   semantic identity.
 - Keep the physical relational schema fixed and implementation-owned. Project
-  authors and AIs define logical records through supported profiles; they do not
+  authors and AIs define logical nodes/edges through supported profiles; they do not
   create arbitrary tables or mutate canonical rows directly.
-- Use a small opinionated metamodel: logical type definitions, stable-ID records,
-  typed relations/endpoints, typed references, constraints, transactions,
-  reviews, and commits.
-- Require exactly one project-purpose root. Give each scope-bearing content
-  record exactly one `scope-parent`; following parents must terminate at the
-  root. A parent may have many children.
-- Define `scope-parent` as child-dependent-on-parent, but seed impact traversal
-  only from records directly targeted by transaction operations. Ancestors added
-  as context are never new impact seeds. A root-targeting operation is therefore
-  the deliberate project-wide review mechanism.
+- Use one small typed property-graph model: stable-ID nodes, stable-ID binary
+  edges with properties, node/edge type definitions, constraints represented as
+  typed nodes plus explicit target edges, transactions, reviews, and commits.
+- Require exactly one project-purpose root. Give every other canonical node
+  exactly one `scope-parent`; following parents must terminate at the root. A
+  parent may have many children.
+- Define `scope-parent` as child-dependent-on-parent. Node operations seed their
+  target node; edge operations seed the edge type's dependent endpoint(s).
+  Ancestors added as context are never new impact seeds. A root-targeting node
+  operation is therefore the deliberate project-wide review mechanism.
 - Keep domain vocabulary profile-driven. Do not force technical claims,
   fictional events, and game state into one domain ontology.
-- Make every graph-relevant reference explicit and typed. Foreign keys prove
-  existence; Validation proves supported endpoint semantics and impact meaning.
-- Derive the operational dependency graph from typed fields and relationships.
-  Do not maintain a second authored adjacency graph.
+- Keep schema metadata and the draft/validation/commit ledger outside the
+  canonical content graph. They are necessary control data, not fictional graph
+  nodes.
+- Make every graph-relevant connection an explicit typed edge. Scalar node/edge
+  properties never contain semantic references. Foreign keys prove endpoint
+  existence; Validation proves endpoint types and impact meaning.
+- Derive operational dependency directions directly from canonical edge types.
+  Do not maintain another authored or inferred adjacency graph.
 - Treat missing claims or links as unknown unless a profile explicitly declares
   a finite closed-world rule.
 - Author only through transactions. A failed or stale commit must roll back every
   relational write.
 - Treat accepted transaction operations as the direct change record; do not add
   a separate semantic-diff source of truth.
-- Require every policy-selected impacted record to be updated or given a current
+- Require every policy-selected impacted node to be updated or given a current
   reviewed-no-change/not-applicable disposition before commit.
 - Report deterministic results as proven, disproven, or inconclusive.
 - Report AI/text-review results only as concerns. Policy may require a current
   review and disposition of every concern, but concern correctness is never a
   deterministic guarantee.
-- Keep AI review auditable and non-authoritative. Extracted records, links,
+- Keep AI review auditable and non-authoritative. Candidate nodes, edges,
   operations, and dispositions remain proposals until explicitly applied
   through the normal transaction boundary.
 - Use stable IDs, diagnostic codes, structured JSON results, deterministic
@@ -163,6 +168,11 @@ mean an application/SQLite operation, not a Git commit.
 - Never persist or log provider credentials. Use .NET user-secrets for local
   development and environment variables for published/deployed processes as
   specified in `docs/ai_semantic_review.md`.
+- `VW_AIREVIEW__LIVETESTS` opts only the separately invoked Gate B live smoke or
+  evaluation harness into network use. Unit, integration, and ordinary
+  end-to-end tests ignore it. Whether a real transaction requires, runs, or
+  explicitly skips AI review is recorded transaction/project policy, never an
+  environment-variable bypass.
 - Keep the web host optional. Gate A is local/embedded; PostgreSQL or a service is
   justified only by demonstrated multi-user requirements.
 - Do not substitute a graph database, RAG index, or arbitrary AI-generated SQL
@@ -178,6 +188,11 @@ mean an application/SQLite operation, not a Git commit.
 - Enable and verify `PRAGMA foreign_keys = ON` on every connection.
 - Use `STRICT` tables where compatible, explicit constraints, parameterized SQL,
   and schema migrations with checksums.
+- Gate A schema v1 has nine tables including migration history: project,
+  package/type metadata, graph entities/edges, drafts, validation runs, and
+  commits. Do not reintroduce normalized property-value, relation-role,
+  endpoint-per-role, disposition, operation, or diagnostic tables without
+  measured evidence and a controlling-document change.
 - Use `ON DELETE RESTRICT`; application transactions perform explicit repairs.
 - Treat a supplied database file as untrusted input. Set conservative limits and
   never load extensions or execute stored project text as SQL.
@@ -245,7 +260,7 @@ them:
 
 1. Focused unit/property tests for local contracts.
 2. Realistic integration and scripted end-to-end scenarios using the evolving
-   TechnicalProject soft-logic corpus, not only toy records.
+   TechnicalProject soft-logic corpus, not only toy nodes.
 3. Starting at WP3's first database/CLI walking skeleton, an actual AI agent
    performs a black-box QA workflow through public commands and documented
    read-only views against a newly generated temporary `.vw.db`.
@@ -260,7 +275,7 @@ deterministic QA failures into regression tests.
 
 An end-to-end test is not merely "the command returned zero." Assert the
 resulting logical data, impact set and paths, review obligations, diagnostics,
-commit/rollback state, and unrelated-record exclusions available at that work
+commit/rollback state, and unrelated-node exclusions available at that work
 package. If the product cannot complete the documented scenario, requires source
 knowledge, silently makes the wrong semantic change, or feels fundamentally
 misdirected, do not hide that behind unit-test success: fix it or report the

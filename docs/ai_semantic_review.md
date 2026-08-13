@@ -4,7 +4,9 @@
 implementation roadmap.
 
 This is the expensive "run the transaction past the lore team" pass. It reviews
-qualitative coherence that the deterministic engine cannot prove. It is not
+qualitative coherence that the deterministic engine cannot prove. Canonical
+content arrives as the project's one node/edge graph; type packages and the
+transaction ledger are supporting metadata. It is not
 document generation, RAG, an autonomous database agent, or a second way to
 mutate canonical state.
 
@@ -31,7 +33,7 @@ transaction API.
 
 ## 2. Required project purpose root
 
-Every project has exactly one `core:project-purpose` record. Initialization
+Every project has exactly one `core:project-purpose` node. Initialization
 creates it before any ordinary project content and requires an English purpose
 statement. Examples include:
 
@@ -40,23 +42,23 @@ statement. Examples include:
   raw readings."
 - "Maintain the canon and disclosure logic of the Harbor mystery."
 
-The project snapshot identifies the purpose record by stable ID. Scope is a
-rooted hierarchy distinct from arbitrary cross-linking domain dependencies:
+The project snapshot identifies the purpose node by stable ID. Scope is a
+spanning tree over nodes, distinct from arbitrary cross-linking domain edges:
 
-- every scope-bearing content record except the purpose has exactly one
+- every node except the purpose has exactly one
   `scope-parent`;
 - one parent may have any number of children;
-- following a record's parent repeatedly must terminate at the one purpose;
+- following a node's parent repeatedly must terminate at the one purpose;
 - the hierarchy is acyclic; and
-- relations/constraints are reviewed with their endpoints/targets and those
-  records' lineages rather than acquiring ambiguous multiple parents.
+- graph edges are reviewed with their source/target nodes and those nodes'
+  lineages; constraint and higher-arity concepts are nodes and have parents.
 
 The enforceable rule is:
 
-> Every review-covered content record has exactly one upward scope lineage to
-> the project purpose, and review includes that lineage for each selected record.
+> Every canonical node has exactly one upward scope lineage to
+> the project purpose, and review includes that lineage for each selected node.
 
-`scope-parent` is a canonical typed containment relation whose dependency rule is
+`scope-parent` is a canonical typed edge whose dependency rule is
 `child depends on parent` with `CreatesReviewImpact = true`. Impact traversal is
 seeded only by actual transaction operation targets. Scope ancestors added later
 for context are never promoted to impact seeds.
@@ -73,8 +75,9 @@ Walking upward for context follows only the singular parent direction. Reaching
 an ancestor or the purpose during that walk never causes traversal back down into
 other children.
 
-The semantic dependency graph remains separate and may branch or cross-link.
-Multiple changed/impacted records may therefore contribute different dependency
+The semantic dependency view expands direction from the same canonical typed
+edges and may branch or cross-link. There is no hidden reference-field graph.
+Multiple changed/impacted nodes may therefore contribute different dependency
 closures and different scope lineages, all of which appear together in the one
 transaction review request.
 
@@ -91,23 +94,22 @@ One AI review run means exactly one model request containing the entire proposed
 transaction. Disjoint dependency chains are never reviewed in separate calls.
 The request contains, in deterministic order:
 
-1. Project identity, exact purpose record, review rubric, and evidence boundary.
+1. Project identity, exact purpose node, review rubric, and evidence boundary.
 2. Transaction identity, intent, author, base revision/hash, draft revision,
    change-set hash, and projected-state hash.
-3. Every transaction operation with the complete base and projected form of its
-   target where applicable.
+3. Every node/edge transaction operation with the complete base and projected
+   form of its target where applicable.
 4. The complete policy-selected reverse impact closure for all operation targets
    in the union of the base and projected graphs.
 5. Every forward dependency needed to understand every changed or impacted
-   object.
-6. The singular upward `scope-parent` lineage from every included content record
+   node.
+6. The singular upward `scope-parent` lineage from every included node
    to the project purpose. Ancestor traversal never includes siblings or other
    descendants.
 7. Applicable type definitions, deterministic constraints, external anchors,
    impact explanation paths, and current review obligations.
-8. A coverage manifest listing the exact required object/dependency/scope-edge
-   sets and proving
-   that none were omitted.
+8. A coverage manifest listing the exact required node, edge, dependency-arc,
+   and scope-edge sets and proving that none were omitted.
 9. The strict structured response schema.
 
 All operation targets and all disjoint closures appear together so the model can
@@ -116,7 +118,7 @@ synthesis call, recursive summarization, or per-chain provider call in the
 roadmap.
 
 If the complete request cannot fit the one supported model or any required
-object/edge/purpose path is missing, planning returns `Inconclusive` **before any
+node/edge/purpose path is missing, planning returns `Inconclusive` **before any
 network call**. The product does not trade away whole-transaction reasoning to
 force a result.
 
@@ -135,7 +137,7 @@ to:
    drift, missing qualifications, and insufficient context.
 5. Use only supplied data, clearly label inference, and make no external factual
    claims.
-6. Cite supplied object IDs plus field, edge, or impact-path evidence for every
+6. Cite supplied entity IDs plus property, edge, or impact-path evidence for every
    concern.
 7. Return only the strict response schema and never propose direct canonical
    mutation.
@@ -249,7 +251,7 @@ Paid-call rules:
 
 - `preview` is mandatory and must be inspected before the first live call.
 - The preview reports model, UTF-8 request bytes, a clearly labeled conservative
-  token estimate, the fixed output cap, and the number of objects/edges/paths.
+  token estimate, the fixed output cap, and the number of nodes/edges/paths.
 - One explicit `run` command makes one provider request.
 - There are **zero automatic retries**, including after timeouts or ambiguous
   transport failures. Failure is `Inconclusive`; another paid attempt requires a
@@ -265,6 +267,23 @@ timeout. Input/output/request-count/cost/retry configuration knobs are not part
 of the roadmap. The fixed output cap and zero-retry rule are implementation
 safety invariants rather than user settings.
 
+`VW_AIREVIEW__LIVETESTS=false` is a fourth setting belonging only to the
+separately invoked live smoke/evaluation harness. Unit, integration, and ordinary
+end-to-end tests ignore it and stay offline. Setting it true does not authorize a
+paid call by itself; the secret-readiness and live-call attestations above still
+apply.
+
+This harness switch is separate from product behavior. Gate B project policy is:
+
+- `disabled`: no review or skip record is needed;
+- `optional`: the transaction may run review or explicitly record `skipped` with
+  actor, rationale, time, draft revision, and change-set hash; or
+- `required`: a fresh successful review and dispositions are mandatory.
+
+Changing the draft stales a skip. An environment variable can never downgrade or
+bypass `required`. The CLI exposes an explicit `vw tx ai-review skip` command for
+the optional case so the decision is auditable.
+
 ## 8. Response, persistence, and commit policy
 
 The strict response contains:
@@ -276,7 +295,7 @@ The strict response contains:
 - request, raw-response, normalized-response, schema, and prompt hashes.
 
 Each concern contains a stable run-local ID, `AIxxxx` code, category, severity,
-message, cited object IDs, cited field/edge/path evidence, optional confidence,
+message, cited entity IDs, cited property/edge/path evidence, optional confidence,
 suggested follow-up, and fingerprint. Unknown citations, schema mismatch,
 refusal, truncation, or malformed content makes the run failed/inconclusive.
 Free-form prose is never loosely parsed into findings.
