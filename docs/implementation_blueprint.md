@@ -27,9 +27,15 @@ Read first:
 After reading this blueprint, read
 [implementation_execution_plan.md](implementation_execution_plan.md). The
 blueprint is the normative design and ordered backlog. The execution plan is the
-authoritative record of completed evidence and the only current assignment.
-Agents update it in the same change that completes or blocks implementation
-work; chat history is not project state.
+authoritative record of completed evidence and the only Current task. Agents
+update it in the same local task that succeeds; chat history is not project
+state. If the task fails, it remains Current task and the agent reports why.
+
+A human invokes each agent run. One run completes one task or reports failure,
+then stops. It does not start the recorded next task. Agents edit and test the supplied
+working tree but do not manage Git branches, staging, commits, merges, remotes,
+or pull requests. Product-language `commit` operations below are ValidatedWorld
+database transactions, not Git operations.
 
 Pseudocode and SQL are normative about observable behavior. If implementation
 evidence invalidates a contract, update the controlling documents in the same
@@ -1633,18 +1639,16 @@ transaction.
 
 Implement one package at a time. Do not add later-host dependencies early.
 [implementation_execution_plan.md](implementation_execution_plan.md) records the
-one current package/slice, its status, evidence, and exact next-agent assignment.
+completed work, the one Current task, and remaining roadmap order.
 
-An agent marks the current entry `in-progress` before coding and `complete` only
-after assignment-specific checks plus full restore/build/test pass. The same
-change must append evidence and define the next authorized assignment. If a work
-package is too large for one change, first record ordered slices with explicit
-boundaries and acceptance criteria; only the first slice becomes current.
+On success, the agent appends evidence and fully specifies the next task. If a
+work package is too large for one local task, the Current task may first be a
+bounded slice with explicit acceptance criteria; the agent still does only that
+slice and stops.
 
-Do not skip ahead because a later task looks easier. If the same blocker survives
-three materially different repairs or repair attempts cycle to an earlier
-failure, follow the execution plan's failure-loop rule: record the evidence,
-mark the item blocked, stop, and ask one focused human question.
+Do not skip ahead because a later task looks easier. If repair attempts keep
+producing or cycling through the same failure, leave Current task unchanged,
+report the evidence to the human, and stop.
 
 ### WP0 — architecture scaffold
 
@@ -1726,21 +1730,29 @@ mark the item blocked, stop, and ask one focused human question.
 - Evaluate MCP packaging first; web/PostgreSQL only for demonstrated hosted
   requirements.
 
-## 18. Pull-request checklist
+## 18. Implementation handoff checklist
 
 Every implementation change states:
 
 - work package/bounded slice;
-- execution-plan status transition and exact next assignment;
+- resulting next task on success;
 - changed physical migration or logical JSON contract;
 - schema package/validator version changes;
 - tests and database/snapshot/golden changes;
 - guarantees and remaining inconclusive behavior;
 - exact assignment-specific and full restore/build/test results;
-- any failure-loop attempts or blocker decision.
+- any failed repair attempts that caused the agent to stop.
 
 The change is incomplete if production code and tests are updated but
 `implementation_execution_plan.md` still describes the old repository state.
+The agent run is incomplete until it reports the result and next task to the
+human and stops without beginning that next task.
+
+After WP9, no later profile is automatically authorized. Record the Gate A
+result, set Current task to `None`, report the available
+complete/continue/narrow/pivot/stop choices, and ask the human what to do. Any
+approved later phase begins with a separate planning task rather than continuing
+automatically.
 
 Never silently edit an applied migration. Add a new checked migration. During the
 POC, breaking logical changes are allowed but must use an explicit new package or

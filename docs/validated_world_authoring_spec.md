@@ -593,6 +593,12 @@ verification; passing behavior is established by repository evidence rather than
 manual human inspection. Completion evidence and the next authorized assignment
 must be recorded in the execution plan before another package begins.
 
+A human invokes each agent run. The agent completes the Current task or reports
+why it failed, then stops; it does not perform Git workflow operations or
+automatically start the next task. Gate A completion places the plan at
+Current task `None` until a human declares the roadmap finished or requests a
+separate later-phase planning task.
+
 ## 13. Success and stop criteria
 
 Gate A succeeds if explicit typed relationships surface the correct records and

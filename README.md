@@ -23,7 +23,7 @@ project.vw.db
 
 That file is a user's mutable project state, not a source-controlled project
 template. The repository ignores `.vw.db` files and their SQLite sidecars
-outside `tests/`. Samples commit reviewed logical snapshots, transaction scripts,
+outside `tests/`. Samples contain reviewed logical snapshots, transaction scripts,
 and expected results, then generate disposable databases locally. A binary
 database belongs in `tests/` only when a deliberately constructed persistence or
 corruption fixture cannot reasonably be generated during the test.
@@ -119,18 +119,22 @@ open project.vw.db and verify its logical head hash
 - [Implementation blueprint](docs/implementation_blueprint.md) — exact storage
   schema, algorithms, tests, and work packages.
 - [Implementation execution plan](docs/implementation_execution_plan.md) —
-  proven progress, the one current assignment, automated acceptance criteria,
-  and the required next-agent handoff.
+  completed work, the one current task, automated acceptance criteria, and the
+  remaining roadmap order.
 - [Related systems and product position](docs/prior_art_and_positioning.md) —
   overlaps with requirements tools, graph validation, versioned databases, and
   RAG.
 
-## Self-directed implementation
+## Human-invoked, agent-executed implementation
 
 The blueprint is implemented sequentially from WP0 through Gate A. Agents do not
 choose a work package from the roadmap or infer the next task from chat history.
-They read the living execution plan, implement its single current assignment,
-and update that plan in the same change.
+They read the living execution plan, implement its single Current task,
+and update that plan in the same local task.
+
+A human prompt starts each agent run. The agent completes that one task or
+reports why it failed, tells the human the result, and stops. It
+does not automatically begin the next task or launch another agent.
 
 Every completed assignment must leave behind:
 
@@ -141,18 +145,40 @@ Every completed assignment must leave behind:
 - an execution-plan entry containing the exact verification evidence, known
   inconclusive behavior, and an explicit next assignment;
 - no need for a human to manually click through, inspect output, supply secrets,
-  or decide routine implementation details.
+  or decide routine implementation details;
+- a final report to the human followed by a stop, leaving the next invocation
+  under human control.
 
-An agent marks an item complete only when repository evidence proves it. If the
-same blocker survives three materially different repair attempts or the fixes
-cycle back to an earlier failure, the agent records the attempts, marks the item
-blocked, stops, and asks one focused human question instead of retrying forever
-or skipping ahead.
+An agent records a task as completed only when repository evidence proves it. If
+repair attempts keep cycling through the same failure, it leaves Current task
+unchanged, reports the evidence, and stops instead of retrying forever or
+skipping ahead.
+
+Agents do not manage Git. They may inspect status or diffs, but they do not
+create branches, stage, commit, merge, rebase, reset, stash, pull, push, or open
+pull requests. All local edits are left for the human to review and manage.
+
+## Completion and later phases
+
+An assignment is done when its automated acceptance and full repository checks
+pass, the execution plan records exact evidence and the next task, and the
+agent reports back to the human.
+
+Phase 1 ends with WP9's Gate A evaluation. At that point there is deliberately no
+automatic next coding task: Current task becomes `None`, and the agent reports
+whether evidence supports continuing, narrowing, pivoting, or stopping. It asks
+the human whether to declare the current scope complete or request a separate
+later-phase planning task. Planning that phase does not itself authorize
+implementation.
+
+If Current task is `None`, an invoked agent makes no changes. It reports that the
+planned work is finished, summarizes the final verification and optional future
+ideas, and asks what the human wants next.
 
 ## Current status
 
 The repository is a .NET 10 scaffold plus an implementation-ready design. WP0 is
-complete and WP1 (the common metamodel) is the current assignment. The execution
+complete and WP1 (the common metamodel) is the Current task. The execution
 plan, rather than this summary, is authoritative if progress changes. Gate A is
 a small technical-project graph backed by SQLite. It must prove useful and
 accurate impact at acceptable modeling cost before narrative or game profiles

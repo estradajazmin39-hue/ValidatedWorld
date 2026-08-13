@@ -155,7 +155,9 @@ If it only becomes a database schema, use an existing database directly. If it
 only becomes a requirements-link tool, use or extend an existing requirements
 tool. If it only becomes context retrieval, use a RAG/knowledge-graph system.
 
-WP9 records the reproducible comparison evidence and resulting gate status in
+WP9 records the reproducible comparison evidence and resulting Gate A outcome in
 [implementation_execution_plan.md](implementation_execution_plan.md). Narrative,
-interactive-state, and integration work remains gated until that plan contains a
-conclusive authorization supported by the criteria above.
+interactive-state, and integration work is outside the current roadmap. It
+requires a conclusive outcome supported by the criteria above and a new
+human-requested planning task. The evaluating agent reports the choices and
+stops; it does not infer permission to continue.

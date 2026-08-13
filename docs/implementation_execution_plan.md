@@ -1,63 +1,27 @@
-# ValidatedWorld Implementation Execution Plan
-
-**Status:** Active
-
-**Plan format:** 1.0
+# ValidatedWorld Implementation Plan
 
 **Last updated:** 2026-08-12
 
-**Baseline commit:** `dead7b814df2`
+**Current task:** WP1 - common metamodel
 
-**Current assignment:** WP1 - common metamodel
+This file tells a coding agent what has been finished and what to do next. The
+[implementation blueprint](implementation_blueprint.md) defines the design and
+ordered work packages. This plan records actual progress.
 
-This is the repository's authoritative implementation status and handoff file.
-The [implementation blueprint](implementation_blueprint.md) defines what the
-system must do and the order of its work packages. This file records what has
-actually been completed, what evidence proves it, and the one task the next
-agent must perform.
+The repository is developed by one human-invoked agent at a time. There is no
+parallel-work, branch-management, or unattended-agent workflow to coordinate.
 
-An agent may not infer progress from plausible-looking code, old chat history,
-or a work-package heading. Repository state, automated evidence, and this file
-must agree.
+## 1. Simple working procedure
 
-## 1. Autonomous execution contract
+When a human asks an agent to continue implementation:
 
-Agents implement the blueprint sequentially. At most one work package, or one
-explicitly recorded slice of it, may be active.
-
-Before changing production code, an agent must:
-
-1. Read `AGENTS.md`, the required product documents, the relevant blueprint
-   sections, and this entire file.
-2. Inspect the actual source, tests, fixtures, and recent history relevant to the
-   current assignment.
-3. Reconcile this plan with repository evidence. If they disagree, correct the
-   plan or mark it blocked before implementing later work.
-4. Change the current assignment status from `ready` to `in-progress`, add the
-   UTC start time and a short implementation intent, and keep that plan edit in
-   the same change set.
-
-While implementing, the agent must:
-
-1. Stay inside the current assignment. A necessary prerequisite defect may be
-   fixed and documented, but later work packages may not be pulled forward.
-2. Add meaningful automated tests with the behavior. Tests must fail for a real
-   regression; assembly-load, empty, or tautological tests are not acceptance
-   evidence.
-3. Prefer deterministic, hermetic verification: generated temporary databases,
-   fixed clocks and IDs, fixed seeds, checked-in text goldens, bounded data, and
-   no dependence on network services, secrets, UI interaction, or a human
-   reviewer.
-4. Make routine, reversible implementation decisions using the controlling
-   documents and the simplest design that satisfies them. Do not stop for naming,
-   formatting, or ordinary coding preferences.
-5. Record any contract ambiguity, deviation, or inconclusive behavior instead of
-   hiding it behind a passing test.
-
-Before handing off, the agent must:
-
-1. Satisfy every acceptance criterion for the assignment.
-2. Run the assignment-specific tests and the complete repository verification:
+1. Read `AGENTS.md`, the required product documents, this entire file, and the
+   blueprint sections named by Current task.
+2. Inspect the existing source, tests, and fixtures. Work with the directory
+   exactly as the human supplied it and preserve unrelated changes.
+3. Implement only Current task. Do not pull later work forward.
+4. Add meaningful deterministic automated tests with the behavior.
+5. Run the task-specific acceptance checks and then:
 
    ```powershell
    dotnet restore ValidatedWorld.slnx
@@ -65,102 +29,123 @@ Before handing off, the agent must:
    dotnet test ValidatedWorld.slnx --no-build --no-restore
    ```
 
-3. Update this file in the same change set:
-   - mark the assignment `complete` only when all required checks pass;
-   - update the roadmap table;
-   - append a completion entry with exact commands and outcomes;
-   - replace Current assignment with the next authorized work package or slice;
-   - give that next assignment explicit scope, exclusions, and executable
-     acceptance criteria.
-4. Leave the repository so the next agent can begin from this file without
-   requiring chat history or a human interpretation of what happened.
+6. If the task succeeds:
+   - add it to Completed work with exact verification evidence;
+   - replace Current task with the next work package and give that task explicit
+     scope, exclusions, and acceptance criteria;
+   - report the result and next task to the human; and
+   - stop. The human will review the changes and decide when to invoke another
+     agent.
+7. If the task cannot be completed or the agent starts cycling through the same
+   failure:
+   - do not mark it done and do not advance Current task;
+   - report the failing command/test, relevant output, likely cause, and attempted
+     fixes to the human; and
+   - stop. The human may revert the local work and start a new conversation with
+     another agent.
 
-A code change is incomplete when the code works but this plan still describes
-the previous state.
+Routine coding choices do not require human approval. Use the simplest
+reversible implementation consistent with the controlling documents and prove
+it with tests. Ask the human only when work genuinely cannot proceed without a
+product/scope decision or repeated repair attempts are not making progress.
 
-## 2. Failure-loop and human-escalation rule
+## 2. Git rule
 
-Normal failing tests are implementation feedback, not a reason to ask a human.
-Diagnose them, make a targeted change, and rerun the narrowest useful check.
+Agents do not manage Git. Do not create or switch branches, stage files, commit,
+amend, merge, rebase, cherry-pick, revert, reset, clean, stash, tag, pull, push,
+create pull requests, or change Git configuration. Leave local edits for the
+human to review, commit, and merge.
 
-Stop instead of looping when the same blocking condition remains after **three
-materially different, evidence-based repair attempts**, or when attempted fixes
-return to a previously observed failure state. Also stop when two controlling
-requirements are irreconcilable and choosing either would change a public
-contract, product guarantee, destructive-data behavior, or authorized scope.
+Read-only inspection such as `git status`, `git diff`, or `git log` is allowed
+when useful, but implementation must not depend on Git being available.
+References elsewhere to a ValidatedWorld transaction `commit` mean an
+application/SQLite operation, not a Git operation.
 
-When stopping:
+## 3. Automated acceptance
 
-1. Do not start a later work package and do not mark the current one complete.
-2. Set the assignment and roadmap status to `blocked`.
-3. Add a blocker entry containing the failing command/test, the relevant output,
-   root-cause hypothesis, and all three attempted approaches.
-4. State the smallest concrete human decision or missing information needed.
-5. Ask that one focused question. Do not ask the human to debug the code or
-   manually verify behavior the repository should test.
+Every implementation task through WP8 must be verifiable without human
+inspection, secrets, interactive UI, or mutable remote services.
 
-Once human direction resolves the blocker, the resuming agent records the
-decision, returns the assignment to `in-progress`, adds a regression test where
-possible, and continues the same work package.
-
-## 3. Automated acceptance standard
-
-Every engineering work package through WP8 must be verifiable without human
-inspection. Its acceptance suite must provide a deterministic pass, failure, or
-explicit inconclusive result.
-
-- Unit tests cover local invariants and rejected inputs.
-- Property tests cover ordering, round trips, graph properties, and atomicity
-  where the blueprint requires them.
-- SQLite tests create databases in per-test temporary directories by default.
-- Checked-in fixtures are source snapshots, scripts, and expected JSON. Binary
+- Unit tests cover accepted values, local invariants, and rejected inputs.
+- Property/integration tests cover ordering, round trips, graph behavior,
+  rollback, and atomicity where required by the blueprint.
+- Tests control clocks, IDs, random seeds, concurrency/fault points, and
+  environment-dependent limits.
+- SQLite tests generate databases in per-test temporary directories by default.
+- Source fixtures are scripts, logical snapshots, and expected JSON. Binary
   databases are exceptional test-only artifacts as defined in `AGENTS.md`.
-- Time, IDs, random data, concurrency scheduling, and fault points are controlled
-  by test doubles or fixed inputs.
-- Performance checks record fixture size, environment, elapsed time, and budget;
-  they do not rely on an undocumented universal threshold.
-- Agent/CLI scenarios are driven by scripts and assert structured outputs and
-  exit codes, not prose judgment.
-- A skipped, flaky, network-dependent, or manually inspected check does not prove
-  completion.
+- CLI scenarios are scripted and assert structured output plus exit codes.
+- Skipped, flaky, tautological, network-dependent, or manually inspected checks
+  are not acceptance evidence.
 
-If a requirement has no reliable automated oracle, the current task includes
-building that oracle. If that is genuinely impossible, report the requirement as
-inconclusive and apply the failure/escalation rule rather than claiming it works.
+If a requirement lacks an automated oracle, creating that oracle is part of the
+task. If it cannot be automated reliably, report it as inconclusive and do not
+claim the task is done.
 
-WP9 evaluates the Gate A product hypothesis. Its reproducible measurements and
-predeclared criteria should drive the recommendation. Gated later work must not
-begin when the result is inconclusive; record the evidence and request the
-smallest necessary product-direction decision.
+## 4. Definition of done
 
-## 4. Roadmap status
+### One task is done when
 
-Allowed statuses are `queued`, `ready`, `in-progress`, `blocked`, `complete`, and
-`gated`. Exactly one row may be `ready` or `in-progress`.
+- all of its stated scope is implemented;
+- its executable acceptance criteria pass;
+- the full restore/build/test sequence passes without warnings;
+- fixtures, goldens, documentation, and guarantees agree with the behavior;
+- this plan records the completed evidence and the next task; and
+- the agent reports the result to the human and stops.
 
-| Work package | Status | Evidence or prerequisite |
-|---|---|---|
-| WP0 - architecture scaffold | complete | Solution/project boundaries and pinned SQLite dependencies exist at baseline `dead7b814df2`; restore/build/test verified. |
-| WP1 - common metamodel | ready | Current assignment below. |
-| WP2 - logical JSON and built-in packages | queued | Requires WP1 completion. |
-| WP3 - SQLite schema and mapping | queued | Requires WP2 completion. |
-| WP4 - indexes and semantic validation | queued | Requires WP3 completion. |
-| WP5 - durable drafts and projection | queued | Requires WP4 completion. |
-| WP6 - impact and mandatory review | queued | Requires WP5 completion. |
-| WP7 - atomic accepted commit and replay | queued | Requires WP6 completion. |
-| WP8 - queries and CLI | queued | Requires WP7 completion. |
-| WP9 - Gate A evaluation | queued | Requires WP8 and the complete Gate A acceptance corpus. |
-| WP10 - LinearNarrative profile | gated | Requires a conclusive Gate A decision recorded here. |
-| WP11 - InteractiveState profile | gated | Requires a conclusive Gate B decision recorded here. |
-| WP12 - optional hosts/integrations | gated | Requires the applicable hosting/integration evidence gate. |
+### The current roadmap is done when
 
-## 5. Current assignment
+WP0 through WP9 are complete and WP9 has recorded the Gate A correctness,
+modeling-cost, comparison, lower-cost-agent, and performance evidence required by
+the blueprint.
+
+At that point, replace Current task with:
+
+```text
+None - the planned Gate A roadmap is complete; human direction required.
+```
+
+The finishing agent must report the outcome and ask the human whether to:
+
+- call the project complete at its current scope;
+- request a separate planning task for the LinearNarrative phase;
+- narrow or pivot the design; or
+- stop/archive the experiment.
+
+It must not plan or implement another phase until the human explicitly asks.
+Planning a later phase is itself one local task; implementation begins only in a
+later human-invoked conversation.
+
+If an agent is invoked while Current task is `None`, it makes no changes. It
+reports that the planned work is finished, summarizes the recorded outcome and
+remaining optional ideas, asks what the human wants next, and stops.
+
+## 5. Completed work
+
+### WP0 - architecture scaffold
+
+- Added the six intended production projects and five matching test projects to
+  `ValidatedWorld.slnx`.
+- Added project references matching the blueprint boundaries.
+- Pinned `Microsoft.Data.Sqlite.Core` and the audited
+  `SQLitePCLRaw.bundle_e_sqlite3` dependency.
+- Verified full restore/build/test: 0 build warnings; 5 scaffold tests passed.
+- Limitation: these tests prove only assembly scaffolding. Production behavior
+  and meaningful behavioral tests begin with WP1.
+
+### Development workflow documentation
+
+- Established this one-agent-at-a-time plan, automated acceptance requirements,
+  no-agent-Git rule, mandatory human report, failure stop rule, and final-roadmap
+  behavior.
+- Documentation checks passed: local Markdown links resolve and code fences are
+  balanced.
+- Full restore/build/test passed on 2026-08-12: 0 build warnings; 5 scaffold
+  tests passed.
+
+## 6. Current task
 
 ### WP1 - common metamodel
-
-**Status:** ready
-
-**Prerequisite:** WP0 complete
 
 **Blueprint references:** Sections 2, 3, 4, 10.1, 10.3, 10.4, 16, and 17
 
@@ -186,7 +171,7 @@ validation, application, and persistence work.
 
 **Out of scope:**
 
-- JSON DTOs, canonical JSON, hashes, or built-in package resource files (WP2).
+- JSON DTOs, canonical JSON, hashes, or built-in package resources (WP2).
 - SQLite, migrations, repositories, or physical mapping (WP3).
 - Cross-object indexes, dependency extraction, impact traversal, profile
   validators, or diagnostic execution (WP4 and later).
@@ -203,88 +188,38 @@ validation, application, and persistence work.
    case-folded, or guessed.
 5. `dotnet test tests/ValidatedWorld.Core.Tests/ValidatedWorld.Core.Tests.csproj`
    passes.
-6. Full restore, build, and test commands from Section 1 pass with no warnings.
-7. This plan is updated with completion evidence and an equally explicit WP2
-   assignment.
+6. The full restore/build/test sequence in Section 1 passes without warnings.
+7. This plan records WP1 under Completed work and replaces Current task with a
+   fully specified WP2 task.
+8. The agent reports the result to the human and stops without starting WP2.
 
-## 6. Completion and blocker log
+## 7. Remaining roadmap order
 
-Keep this log append-only. Correct factual mistakes with a later entry rather
-than erasing implementation history.
+After each successful task, move it to Completed work and fully specify only the
+next task under Current task.
 
-### 2026-08-11 - WP0 complete
+1. WP2 - logical JSON and built-in packages.
+2. WP3 - SQLite schema and mapping.
+3. WP4 - indexes and semantic validation.
+4. WP5 - durable drafts and projection.
+5. WP6 - impact and mandatory review.
+6. WP7 - atomic accepted commit and replay.
+7. WP8 - queries and CLI.
+8. WP9 - Gate A evaluation and final roadmap report.
 
-- Result: architecture scaffold completed.
-- Evidence: all six production projects and five matching test projects are in
-  `ValidatedWorld.slnx`; project references match the blueprint; SQLite uses
-  pinned `Microsoft.Data.Sqlite.Core` and `SQLitePCLRaw.bundle_e_sqlite3`.
-- Verification: full restore, build, and five scaffold tests passed with zero
-  build warnings.
-- Remaining behavior: production projects are placeholders; behavioral
-  implementation begins at WP1.
-- Next: WP1 as specified above.
+LinearNarrative, InteractiveState, and optional integration/hosting work are
+ideas beyond this roadmap, not authorized implementation tasks. Reaching them
+requires a new human-requested planning task.
 
-### 2026-08-12 - autonomous execution protocol established
+## 8. Human report format
 
-- Result: repository-owned progress, self-verification, failure-loop, and
-  next-agent handoff rules established without changing blueprint work-package
-  completion state.
-- Scope delivered: this living plan plus synchronized instructions in
-  `AGENTS.md`, `CLAUDE.md`, `README.md`, and the controlling documentation.
-- Tests added/updated: none; this was documentation-only and no artificial tests
-  were added.
-- Verification: local Markdown links resolved and code fences were balanced;
-  `dotnet restore ValidatedWorld.slnx` -> exit 0;
-  `dotnet build ValidatedWorld.slnx --no-restore` -> exit 0, 0 warnings and 0
-  errors; `dotnet test ValidatedWorld.slnx --no-build --no-restore` -> exit 0,
-  5 passed, 0 failed, 0 skipped.
-- Deviations/inconclusive behavior: the five existing tests prove only the WP0
-  scaffold; production behavior and meaningful behavioral tests remain WP1 and
-  later work.
-- Plan decision: WP0 remains complete and no later package was pulled forward.
-- Next: WP1 as specified in Section 5.
+End every run with a concise report:
 
-## 7. Next-assignment and handoff templates
-
-Replace Section 5 with this shape when advancing the plan. Copying only a
-work-package title is not an actionable handoff.
-
-```markdown
-### WPn[.slice] - <name>
-
-**Status:** ready
-
-**Prerequisite:** <completed evidence>
-
-**Blueprint references:** <exact sections>
-
-**Required outcome:** <one observable result>
-
-**In scope:**
-
-- <bounded deliverable>
-
-**Out of scope:**
-
-- <later or forbidden behavior>
-
-**Executable acceptance:**
-
-1. <specific automated assertion/command>
-2. Full restore/build/test passes.
-3. This plan advances with evidence and the next explicit assignment.
-```
-
-Append one entry when completing or blocking an assignment:
-
-```markdown
-### YYYY-MM-DD - WPn [complete|blocked]
-
-- Result: <observable outcome>
-- Scope delivered: <bounded list>
-- Tests added/updated: <projects, fixtures, and important cases>
-- Verification: `<exact command>` -> <exit code and concise result>
-- Deviations/inconclusive behavior: <none or exact details>
-- Plan decision: <why the next package is authorized or why work stopped>
-- Next: <exact next assignment or focused human question>
+```text
+Task: <completed or failed>
+Delivered: <important observable results and files>
+Verification: <commands and pass/fail counts>
+Unverified/inconclusive: <none or exact limits>
+Plan: <next task, unchanged task after failure, or None>
+Human action: <invoke the next task when ready, or one focused question>
 ```

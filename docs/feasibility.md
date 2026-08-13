@@ -257,14 +257,20 @@ and full restore/build/test results are the evidence.
 
 The living
 [implementation execution plan](implementation_execution_plan.md) records the
-only current assignment, completed evidence, blockers, and the exact next task.
+completed evidence, one Current task, and the remaining roadmap order.
 Agents update it with the code. A work package whose tests pass but whose plan and
 handoff remain stale is not complete.
 
+Each agent run is started by a human and ends after one assignment with a report
+back to that human. It does not start the recorded next assignment or manage Git.
+After Gate A evaluation, Current task becomes `None`; the agent reports the
+evidence and asks whether to call the roadmap complete, request a separate later
+planning task, narrow, pivot, or stop.
+
 Routine implementation failures are repaired autonomously. Repeating the same
-blocker after three materially different attempts is not progress: the agent must
-record the attempts, mark the work blocked, stop, and request the smallest
-necessary human decision rather than loop or weaken an acceptance criterion.
+failure without new evidence is not progress: the agent leaves Current task
+unchanged, reports the attempts, and stops rather than looping or weakening an
+acceptance criterion.
 
 ## Staged proof plan
 
