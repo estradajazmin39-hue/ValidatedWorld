@@ -2,7 +2,7 @@
 
 **Status:** Architectural research record
 
-**Last reviewed:** 2026-08-11
+**Last reviewed:** 2026-08-12
 
 ## Purpose
 
@@ -154,3 +154,8 @@ Continue only if Gate A demonstrates all of the following:
 If it only becomes a database schema, use an existing database directly. If it
 only becomes a requirements-link tool, use or extend an existing requirements
 tool. If it only becomes context retrieval, use a RAG/knowledge-graph system.
+
+WP9 records the reproducible comparison evidence and resulting gate status in
+[implementation_execution_plan.md](implementation_execution_plan.md). Narrative,
+interactive-state, and integration work remains gated until that plan contains a
+conclusive authorization supported by the criteria above.

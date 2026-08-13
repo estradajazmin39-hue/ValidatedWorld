@@ -2,9 +2,9 @@
 
 **Status:** Coding-agent handoff
 
-**Blueprint version:** 4.0
+**Blueprint version:** 4.1
 
-**Last reviewed:** 2026-08-11
+**Last reviewed:** 2026-08-12
 
 **Target:** .NET 10 / C#
 
@@ -24,6 +24,13 @@ Read first:
 3. [prior_art_and_positioning.md](prior_art_and_positioning.md)
 4. This blueprint
 
+After reading this blueprint, read
+[implementation_execution_plan.md](implementation_execution_plan.md). The
+blueprint is the normative design and ordered backlog. The execution plan is the
+authoritative record of completed evidence and the only current assignment.
+Agents update it in the same change that completes or blocks implementation
+work; chat history is not project state.
+
 Pseudocode and SQL are normative about observable behavior. If implementation
 evidence invalidates a contract, update the controlling documents in the same
 change.
@@ -32,8 +39,8 @@ Every work package ends with:
 
 ```powershell
 dotnet restore ValidatedWorld.slnx
-dotnet build ValidatedWorld.slnx
-dotnet test ValidatedWorld.slnx
+dotnet build ValidatedWorld.slnx --no-restore
+dotnet test ValidatedWorld.slnx --no-build --no-restore
 ```
 
 ## 2. Non-negotiable invariants
@@ -1583,6 +1590,18 @@ requires a deliberately malformed or byte-specific SQLite artifact that cannot
 reasonably be produced at test time. Such a fixture must document its purpose,
 provenance, expected application/schema version, and regeneration procedure.
 
+Every WP0-WP8 acceptance criterion must be executable by an agent in a clean
+checkout without human inspection, secrets, interactive UI, or a mutable remote
+service. Tests control clocks, IDs, random seeds, scheduling/fault points, and
+environment-dependent limits. Scripted scenarios assert structured results and
+exit codes. Skipped, flaky, manually inspected, or tautological tests are not
+completion evidence.
+
+When a required behavior lacks an automated oracle, creating that oracle is part
+of the work package. If no reliable oracle can be built, the behavior remains
+inconclusive and the package cannot be marked complete merely because the code
+appears plausible.
+
 ### 16.2 Required properties
 
 - Database → logical snapshot → canonical JSON is deterministic.
@@ -1613,6 +1632,19 @@ transaction.
 ## 17. Ordered work packages
 
 Implement one package at a time. Do not add later-host dependencies early.
+[implementation_execution_plan.md](implementation_execution_plan.md) records the
+one current package/slice, its status, evidence, and exact next-agent assignment.
+
+An agent marks the current entry `in-progress` before coding and `complete` only
+after assignment-specific checks plus full restore/build/test pass. The same
+change must append evidence and define the next authorized assignment. If a work
+package is too large for one change, first record ordered slices with explicit
+boundaries and acceptance criteria; only the first slice becomes current.
+
+Do not skip ahead because a later task looks easier. If the same blocker survives
+three materially different repairs or repair attempts cycle to an earlier
+failure, follow the execution plan's failure-loop rule: record the evidence,
+mark the item blocked, stop, and ask one focused human question.
 
 ### WP0 — architecture scaffold
 
@@ -1699,11 +1731,16 @@ Implement one package at a time. Do not add later-host dependencies early.
 Every implementation change states:
 
 - work package/bounded slice;
+- execution-plan status transition and exact next assignment;
 - changed physical migration or logical JSON contract;
 - schema package/validator version changes;
 - tests and database/snapshot/golden changes;
 - guarantees and remaining inconclusive behavior;
-- restore/build/test results.
+- exact assignment-specific and full restore/build/test results;
+- any failure-loop attempts or blocker decision.
+
+The change is incomplete if production code and tests are updated but
+`implementation_execution_plan.md` still describes the old repository state.
 
 Never silently edit an applied migration. Add a new checked migration. During the
 POC, breaking logical changes are allowed but must use an explicit new package or

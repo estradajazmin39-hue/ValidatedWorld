@@ -4,7 +4,7 @@
 
 **Specification version:** 5.0
 
-**Last reviewed:** 2026-08-11
+**Last reviewed:** 2026-08-12
 
 **Primary implementation:** .NET 10 / C#
 
@@ -16,7 +16,9 @@ This specification defines the product and architectural boundary. The guarantee
 and falsification plan are in [feasibility.md](feasibility.md). Exact SQL,
 algorithms, tests, and work packages are in
 [implementation_blueprint.md](implementation_blueprint.md). Related systems are
-recorded in [prior_art_and_positioning.md](prior_art_and_positioning.md).
+recorded in [prior_art_and_positioning.md](prior_art_and_positioning.md). Proven
+implementation progress and the only current agent assignment are recorded in
+[implementation_execution_plan.md](implementation_execution_plan.md).
 
 Human direction overrides this document. Update the controlling documents
 together when a product decision changes.
@@ -584,6 +586,12 @@ Gate A must prove:
 
 No document import/rendering, arbitrary DDL, AI provider, web server, RDF store,
 graph database, narrative timeline, or game exploration is required.
+
+Gate A is implemented through the blueprint's ordered work packages. Each
+engineering package has deterministic automated acceptance and full-solution
+verification; passing behavior is established by repository evidence rather than
+manual human inspection. Completion evidence and the next authorized assignment
+must be recorded in the execution plan before another package begins.
 
 ## 13. Success and stop criteria
 

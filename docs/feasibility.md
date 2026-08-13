@@ -2,7 +2,7 @@
 
 **Status:** Accepted product boundary
 
-**Last reviewed:** 2026-08-11
+**Last reviewed:** 2026-08-12
 
 ## Verdict
 
@@ -246,6 +246,25 @@ not appear.
 The same scenario must demonstrate why raw foreign keys are insufficient: the
 engine follows declared semantic dependency rules, not every relational
 reference, and explains every selected path.
+
+## Implementation proof discipline
+
+Gate A is built in the ordered work packages in the implementation blueprint.
+WP0-WP8 are accepted only by deterministic repository checks that an agent can
+run without human inspection, external secrets, interactive UI, or subjective
+approval. Generated fixtures, fixed inputs, fault injection, structured goldens,
+and full restore/build/test results are the evidence.
+
+The living
+[implementation execution plan](implementation_execution_plan.md) records the
+only current assignment, completed evidence, blockers, and the exact next task.
+Agents update it with the code. A work package whose tests pass but whose plan and
+handoff remain stale is not complete.
+
+Routine implementation failures are repaired autonomously. Repeating the same
+blocker after three materially different attempts is not progress: the agent must
+record the attempts, mark the work blocked, stop, and request the smallest
+necessary human decision rather than loop or weaken an acceptance criterion.
 
 ## Staged proof plan
 

@@ -118,20 +118,50 @@ open project.vw.db and verify its logical head hash
   — authoritative metamodel, persistence, and profile design.
 - [Implementation blueprint](docs/implementation_blueprint.md) — exact storage
   schema, algorithms, tests, and work packages.
+- [Implementation execution plan](docs/implementation_execution_plan.md) —
+  proven progress, the one current assignment, automated acceptance criteria,
+  and the required next-agent handoff.
 - [Related systems and product position](docs/prior_art_and_positioning.md) —
   overlaps with requirements tools, graph validation, versioned databases, and
   RAG.
 
+## Self-directed implementation
+
+The blueprint is implemented sequentially from WP0 through Gate A. Agents do not
+choose a work package from the roadmap or infer the next task from chat history.
+They read the living execution plan, implement its single current assignment,
+and update that plan in the same change.
+
+Every completed assignment must leave behind:
+
+- production behavior for its bounded scope;
+- meaningful deterministic tests and generated fixtures/goldens;
+- passing assignment-specific checks plus the complete solution build and test
+  suite;
+- an execution-plan entry containing the exact verification evidence, known
+  inconclusive behavior, and an explicit next assignment;
+- no need for a human to manually click through, inspect output, supply secrets,
+  or decide routine implementation details.
+
+An agent marks an item complete only when repository evidence proves it. If the
+same blocker survives three materially different repair attempts or the fixes
+cycle back to an earlier failure, the agent records the attempts, marks the item
+blocked, stops, and asks one focused human question instead of retrying forever
+or skipping ahead.
+
 ## Current status
 
-The repository is a .NET 10 scaffold plus an implementation-ready design. Gate A
-is a small technical-project graph backed by SQLite. It must prove useful and
+The repository is a .NET 10 scaffold plus an implementation-ready design. WP0 is
+complete and WP1 (the common metamodel) is the current assignment. The execution
+plan, rather than this summary, is authoritative if progress changes. Gate A is
+a small technical-project graph backed by SQLite. It must prove useful and
 accurate impact at acceptable modeling cost before narrative or game profiles
 are implemented.
 
 Build and test with:
 
 ```powershell
-dotnet build ValidatedWorld.slnx
-dotnet test ValidatedWorld.slnx
+dotnet restore ValidatedWorld.slnx
+dotnet build ValidatedWorld.slnx --no-restore
+dotnet test ValidatedWorld.slnx --no-build --no-restore
 ```
