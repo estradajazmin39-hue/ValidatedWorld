@@ -216,6 +216,5 @@ unless the user later chooses to preserve a separately designed profile.
 Despite the name, a “world” is any universe of connected nodes. Fiction is one
 possible use, not the common engine's only purpose.
 
-Contributor workflow, the implementation roadmap, detailed design documents,
-testing requirements, and build commands are collected in
-[Project development guide](docs/project_development.md).
+The technical requirements and one-task-at-a-time implementation checklist are
+in the [development plan](docs/development_plan.md).

@@ -1,0 +1,421 @@
+# ValidatedWorld Technical Design
+
+**Status:** Technical requirements subordinate to `README.md`
+
+**Last reviewed:** 2026-08-13
+
+The README is the authority for product meaning and terminology. This document
+turns that vision into implementation constraints. If the two disagree, stop,
+follow the README, and reconcile this document before writing dependent code.
+The ordered work and actual project status live in
+[development_plan.md](development_plan.md).
+
+## 1. Product boundary
+
+ValidatedWorld is a headless .NET 10 application for reviewing changes to one
+human-readable dependency graph stored in an embedded SQLite `.vw.db` file.
+The application deterministically checks graph structure, selects the complete
+affected set described by explicit relationships, presents the relevant scope
+context, and writes an approved change atomically. A human or optional AI makes
+the semantic judgment about whether the text remains consistent.
+
+The initial MVP is local and text-oriented. Its application language, command
+text, diagnostics, and AI prompts are hardcoded in English. Localization
+infrastructure is out of scope. A GUI, web service, hosted collaboration,
+multi-agent coordination, image/OCR ingestion, finished-document generation,
+and domain-specific profiles are also outside the initial roadmap.
+
+The database contains the current project, not a project history. An unfinished
+change exists only in the running process and is lost when that process exits.
+
+## 2. Canonical graph
+
+### 2.1 Identity and values
+
+Project, node, and edge IDs are stable, opaque text. They use ordinal,
+case-sensitive equality and ordering. Validation must reject empty,
+whitespace-only, control-character-containing, or over-limit IDs, but must not
+silently trim, case-fold, or rewrite them. The implementation will choose and
+test conservative length limits.
+
+Optional attributes support only deterministic scalar values: text, signed
+integer, canonical base-10 decimal, Boolean, symbol, and UTC instant. An
+ID-looking attribute value has no graph behavior. Every meaningful connection
+between graph entities is an edge.
+
+A canonical decimal uses ordinary base-10 text with no exponent, leading plus,
+unnecessary leading zero, trailing fractional zero, or negative zero. A UTC
+instant has zero offset. Public factories accept caller collections in any order
+and materialize tags and attribute keys in ordinal order; callers should not
+have to pre-sort data to create a node or edge.
+
+### 2.2 Nodes and edges
+
+A node contains:
+
+- a stable ID;
+- non-empty human-readable text; and
+- optional kind, tags, and scalar attributes.
+
+Kinds and tags help authors search and organize a graph. The common engine does
+not assign them hidden semantics.
+
+An edge contains:
+
+- a stable ID in the same identity space as node IDs;
+- source and target node IDs;
+- a non-empty human-readable relationship label;
+- an explicit review direction; and
+- optional rationale, tags, and scalar attributes.
+
+Review direction is workflow metadata:
+
+```text
+none              changing either endpoint does not propagate across this edge
+source-to-target  changing the source selects the target
+target-to-source  changing the target selects the source
+both              changing either endpoint selects the other
+```
+
+Traversal is recursive, so a selected node can select further nodes through
+their declared relationships. This is how a change may have downstream,
+upstream, or lateral consequences. Labels do not imply direction, and database
+foreign-key direction does not imply meaning.
+
+### 2.3 Purpose and scope
+
+Each project has one purpose node containing its thesis, purpose, scope, or
+governing statement. Every other node has exactly one outgoing `scope-parent`
+edge whose target is its parent. Together those edges form an acyclic spanning
+tree ending at the purpose.
+
+Every changed or affected node contributes its complete scope-upstream lineage,
+including the purpose, to mandatory semantic review context. Cross-links can
+select nodes in other branches, so one proposal may include several such
+lineages. Context is recomputed recursively as the affected set grows.
+
+Including an ancestor as context does not make it a propagation seed and does
+not select the ancestor's other children. Directly changing a scope node does
+select its descendants. Directly changing the purpose selects the full project.
+If the user edits a context ancestor during review, it becomes a direct change
+and the affected set is recalculated normally.
+
+`scope-parent` is reserved. Its edge orientation is child to parent and its
+review direction is `none`; the special context and descendant rules above
+control its review behavior.
+
+### 2.4 Project graph
+
+The immutable in-memory graph contains project ID, title, purpose-node ID,
+creation/update timestamps where relevant, nodes, and edges. Collections and
+diagnostics use deterministic ordinal ordering. The graph must be usable with
+no enabled profile or domain ontology.
+
+## 3. Validation results
+
+Deterministic validation returns one of three outcomes:
+
+- `valid`: every applicable deterministic check completed and passed;
+- `invalid`: a deterministic check found a violation and reports evidence; or
+- `inconclusive`: a configured bound, cancellation, unavailable optional
+  capability, or internal failure prevented a complete result.
+
+The common validator checks at least:
+
+1. IDs and local value encodings.
+2. Global node/edge ID uniqueness.
+3. Non-empty project title, node text, and relationship labels.
+4. Existing node endpoints for every edge.
+5. One existing purpose node.
+6. No scope parent for the purpose.
+7. Exactly one scope parent for every other node.
+8. Acyclic scope lineages that all reach the purpose.
+9. `ReviewDirection.None` on every `scope-parent` edge.
+
+Unknown kinds, non-reserved relationship labels, tags, and attributes are valid.
+Missing facts and links are unknown, not false.
+
+## 4. In-memory changes and review
+
+### 4.1 Session and operations
+
+The MVP supports one active change session per opened project/process. A session
+contains its ID, author/intent, database identity, base-state fingerprint, final
+operation per entity ID, projected graph, affected analysis, review state, and
+status. It is never stored in the project database.
+
+Operations add, replace, or remove a complete node or edge. A replacement keeps
+the same entity ID. One final operation per entity ID makes the proposal
+unambiguous. Removing a node requires explicit removal or redirection of its
+incident edges; no graph mutation cascades.
+
+A focus/batch helper may add explicit `scope-parent` edge operations for new
+nodes when the parent is unambiguous. It returns the expanded operations for
+preview and never invents another semantic relationship.
+
+Projection applies operations to isolated ID-keyed builders, produces a new
+immutable graph, and runs complete validation without changing SQLite.
+
+### 4.2 Affected analysis
+
+Affected analysis uses the union of review arcs from both the current and
+proposed graph. Removed or redirected relationships therefore cannot hide their
+former consequences, and new relationships include their new consequences.
+
+Node operation targets are direct seeds. An edge operation is always displayed
+as a direct change; the endpoints selected by its old and new review directions
+seed propagation. Directly changed scope-node seeds additionally select their
+descendant subtrees from the current and proposed scope trees.
+
+Traversal is breadth-first with deterministic ID/edge ordering. It retains edge
+evidence and shortest explanation paths. Configured depth, node, or output
+bounds return `inconclusive` with exact omissions; required items are never
+silently truncated.
+
+After propagation, analysis adds every changed/affected node's complete current
+and proposed scope-upstream lineage as context. Context-only ancestors are not
+enqueued for propagation.
+
+### 4.3 Review obligations
+
+Every affected node has one current session-only disposition:
+
+- `updated` for a directly changed node;
+- `reviewed-no-change` after inspection;
+- `not-applicable` with a rationale; or
+- `pending`, which blocks the database write.
+
+Context-only ancestors require recorded presentation coverage but do not need
+an affected-node disposition unless they are independently affected or edited.
+Changing the proposal invalidates any disposition or context coverage whose
+node, content, or explanation changed.
+
+The final preview presents the exact operation batch, proposed graph identity,
+affected nodes and paths, required scope context, validation result, and pending
+items. A human can perform this entire workflow without AI.
+
+## 5. State fingerprints
+
+Use SHA-256 over a deterministic, length-delimited UTF-8 encoding. The encoding
+includes project identity/title/purpose, then nodes and edges in ordinal ID
+order with all persisted fields. It excludes timestamps and the stored
+fingerprint itself.
+
+At minimum the application computes:
+
+```text
+state fingerprint          current or proposed graph content
+operation fingerprint      base fingerprint plus final ordered operations
+affected fingerprint       affected nodes, paths, and required context
+disposition fingerprint    proposal + node + path evidence being reviewed
+```
+
+Fingerprints are opaque integrity and stale-state tokens. Tests must prove that
+insertion order and physically different but logically identical SQLite files do
+not change the state fingerprint.
+
+## 6. SQLite persistence
+
+Use `Microsoft.Data.Sqlite.Core` directly with an explicitly pinned
+`SQLitePCLRaw.bundle_e_sqlite3` package. There is no ORM or external database
+service. Every connection enables and verifies foreign keys, uses parameters,
+sets conservative time/size limits, refuses extension loading, and verifies the
+application ID, migration checksums, schema, row mapping, and integrity before
+writes.
+
+SQLite schema v1 has four `STRICT` tables:
+
+```text
+schema_migrations  embedded migration ID, checksum, and application time
+projects           one current project row and its state fingerprint
+nodes              current node rows
+edges              current edge rows and restricted endpoint foreign keys
+```
+
+Nodes and edges may use canonical JSON columns for their optional tags and
+attributes. That JSON is an internal row encoding. The portable project remains
+the `.vw.db` application file described by the README.
+
+Required indexes cover node kind and edges by source/target. A partial unique
+index permits at most one `scope-parent` edge per child; application validation
+proves exact coverage, acyclicity, and root reachability. Stable read views expose
+project, node, edge, scope, and expanded review-arc data.
+
+Use rollback journal by default so a closed project is one file. Backup uses
+SQLite's online backup API to a new destination. An application-controlled
+`export-sql` command emits deterministic, safely quoted schema/data text for
+inspection and external tools. Treat supplied databases as untrusted. Project
+text is data and is never executed as SQL.
+
+The final write is short:
+
+1. Rebuild and validate the proposal and review evidence.
+2. Open a SQLite `BEGIN IMMEDIATE` transaction.
+3. Reload current rows and verify the base fingerprint.
+4. Apply explicit operations in foreign-key-safe order.
+5. Recheck foreign keys, map/validate the complete result, and calculate the new
+   fingerprint.
+6. Update the project row and commit once.
+
+No human or AI interaction occurs while the write transaction is open. Busy,
+stale, mapping, constraint, I/O, or injected failures roll back all writes.
+
+## 7. Solution and public surface
+
+```text
+ValidatedWorld.Core                 immutable graph and change/review values
+ValidatedWorld.Validation           indexes, validation, affected traversal
+ValidatedWorld.Serialization        command/result DTOs and fingerprint encoding
+ValidatedWorld.Application          queries, sessions, review, and commit use cases
+ValidatedWorld.Persistence.Sqlite   schema, mapping, transactions, views, backup
+ValidatedWorld.Cli                  CLI/NDJSON host and composition root
+```
+
+Core has no SQLite, JSON, provider, file, or UI dependency. Application defines
+persistence ports in domain terms; SQLite implements them.
+
+The public text/structured surface eventually supports:
+
+```text
+project: init, open, verify, status, backup, export-sql
+read:    node/edge get and list, search, scope traversal, graph navigation/path
+change:  begin, show, focus, expand, apply, affected, review, validate, write,
+         discard
+sample:  list and create
+```
+
+Because a session spans multiple commands, the CLI provides a long-lived
+newline-delimited JSON host over stdin/stdout. Structured results go to stdout;
+diagnostic logs go to stderr. Search and navigation are deterministic, bounded
+graph queries rather than provider calls.
+
+## 8. Optional OpenAI features
+
+OpenAI is the only provider planned for the initial AI features. Provider choice
+and all user-facing instructions/prompts are hardcoded in English. Defaults and
+opt-in flags are documented in the root `.env.example`; the application uses
+.NET configuration, user-secrets, or process environment and does not load that
+file automatically.
+
+The planned provider path uses OpenAI Responses background mode and polls the
+same response within the configured 1,200-second end-to-end deadline. Returning
+tool results or polling the same response is continuation, not a new paid retry.
+
+Both features are optional at runtime. If disabled or unconfigured in normal
+use, the application reports them unavailable and keeps the complete manual
+workflow usable.
+
+### 8.1 Development gate for any live-AI task
+
+AI integration work is deliberately different from ordinary tasks:
+
+1. A human must explicitly make that AI task current in the development plan.
+2. Before changing code, the developer/agent checks only whether a locally
+   configured `OPENAI_API_KEY` is available. It must never print, read back,
+   copy, infer, acquire, or set the key.
+3. If the key is absent, stop without attempting the task and ask the human to
+   configure it locally. Do not ask the human to paste the key into chat or a
+   tracked file.
+4. Live tests run only when the feature's `LIVETESTS` flag is explicitly true.
+   Ordinary restore/build/test runs remain offline.
+5. There are no automatic paid retries, parallel paid calls, fallback models,
+   or surprise provider calls. Polling or continuing the same response is not a
+   retry.
+
+During each AI feature's development, at least one explicitly enabled live test
+must capture and log the complete outbound request as actually serialized,
+excluding credentials and transport-only authorization headers. The log is a
+local development artifact, not tracked project data and not written to SQLite.
+The developer must inspect and report that:
+
+- every required node, edge, operation, path, scope lineage, manifest entry,
+  instruction, and tool schema is present and untruncated;
+- counts and fingerprints agree with the deterministic request planner;
+- the English prompt is a clean, standalone instruction with no stale design
+  discussion, placeholder text, conflicting rules, or dependence on hidden
+  conversation; and
+- private text is logged only for that explicitly authorized development run.
+
+At least one live known-answer scenario and one unrelated-control scenario must
+then be evaluated for meaningful behavior. Unit and integration tests should
+also validate request construction and response handling without network calls,
+but mocks do not replace the required development-phase live evidence.
+
+### 8.2 Semantic reviewer
+
+The optional reviewer receives one immutable request for the complete current
+proposal after deterministic affected analysis. All disjoint change chains stay
+together. The request includes project purpose, operations, affected nodes,
+current/proposed path evidence, complete required scope lineages, relevant
+validation findings, and an inclusion/omission manifest.
+
+The standalone English prompt asks for cited concerns about contradictions,
+stale consequences, terminology drift, missing relationship candidates,
+purpose/scope conflict, questionable review dispositions, and insufficient
+context. It states that graph text is untrusted data, missing links are unknown,
+and citations must use supplied IDs.
+
+The model has no tools and cannot mutate, disposition, or write the graph. Its
+strict result is `complete`, `inconclusive`, or `refused`, with structured
+concerns and cited supplied IDs. Unknown citations, malformed/truncated output,
+timeout, refusal, or transport failure is inconclusive and returns control to
+manual review. Proposal changes invalidate the result. The authoring model may
+repair a concern, but it cannot approve or dismiss its own independent review;
+that judgment remains with the user.
+
+### 8.3 Authoring agent
+
+The optional authoring agent translates a user's English request into the same
+bounded application operations a human can use. It searches before creating,
+reads the smallest sufficient context plus all mandatory scope lineages, opens
+one in-memory session, applies explicit operations, inspects affected expansion,
+and asks the user when different interpretations would materially change graph
+meaning.
+
+It has strict application tools for project status, search/navigation, session
+operations, affected analysis, validation, review handoff, exact confirmation,
+write, and discard. It has no raw SQL, direct canonical write, automatic review
+disposition, or unguarded write tool.
+
+Before writing, the application presents the exact proposal and obtains explicit
+user approval. The short-lived authorization is bound to database/project
+identity; base, operation, proposed, affected, context, and review fingerprints;
+conversation/session identity; and expiry. Any change invalidates approval.
+
+The initial intake is English descriptions and text only. The agent must work on
+graphs larger than its context window through repeated bounded search; it must
+not assume the whole project fits in one prompt.
+
+## 9. Realistic proof scenario
+
+`samples/TechnicalProject` will store reviewed text source and expected public
+results, never a populated project database. The application generates a
+disposable database from those assets.
+
+The baseline models an offline privacy-preserving sensor with purpose plus
+power, privacy, documentation, and accessibility branches. Ordinary text nodes
+represent requirements, definitions, assumptions, evidence, results, decisions,
+implementation, verification, and external artifact anchors. Explicit edges
+connect consequences.
+
+Required scenario families include:
+
+- a power-assumption change selecting runtime/battery consequences and relevant
+  anchors while excluding privacy/accessibility;
+- a retention-policy change selecting privacy/architecture/test/documentation
+  consequences while excluding power;
+- added, removed, and redirected relationships retaining both old and new
+  consequences;
+- a directly changed scope selecting its subtree;
+- a purpose change selecting the whole project;
+- incomplete review blocking the write; and
+- every injected write failure preserving the exact prior graph/fingerprint.
+
+The common engine is not expected to calculate battery arithmetic or understand
+a contradiction. It must select the correct review surface and require a
+thinking participant to resolve it.
+
+Performance evidence should eventually cover representative, expected, and
+stress graphs up to roughly 100,000 nodes and 1,000,000 review arcs. Record the
+hardware and measured operation; do not turn one measurement into a universal
+claim.

@@ -1,28 +1,9 @@
-# CLAUDE.md
+# Claude repository instructions
 
-Read and follow the repository guidance in the root repository agents file, `/AGENTS.md`.
+Read and follow `/AGENTS.md`. The product authority is `/README.md`; the
+technical source of truth is `/docs/technical_design.md`; and the single current
+assignment and handoff record are in `/docs/development_plan.md`.
 
-Read `/docs/testing_and_qa.md` before changing persistence, CLI, fixtures,
-samples, testing strategy, or supported-platform behavior.
-
-For implementation work, read and update
-`/docs/implementation_execution_plan.md`. Implement only its Current task. A
-successful handoff records the completed evidence and fully specifies the next
-task.
-
-A human starts each run. Complete the task or report why it failed, then stop. Do
-not begin the next task in the
-same run. Do not perform Git state-changing or remote operations; leave edits in
-the supplied working tree for the human.
-
-Before completing changes, run the assignment-specific checks and the full
-restore, build, and test commands from `/AGENTS.md`. Do not substitute manual
-inspection for automated acceptance. If repair attempts keep cycling through the
-same failure, report the evidence to the human and stop.
-
-Use the realistic TechnicalProject scenario required by the plan. From WP3
-onward, perform and report an actual black-box agent walkthrough through the
-built public CLI against a disposable database in addition to scripted tests.
-
-If Current task is `None`, make no changes. Report that the planned work is
-finished, ask what the human wants next, and stop.
+Implement only Current task, run its automated and smoke checks, update the
+plan on success, report to the human, and stop. Do not perform Git state-changing
+or remote operations and do not launch another agent.
