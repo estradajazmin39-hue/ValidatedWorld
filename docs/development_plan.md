@@ -1,8 +1,8 @@
 # ValidatedWorld Development Plan
 
-**Current task:** T1 — common graph domain
+**Current task:** T2 — graph index and structural validation
 
-**Last updated:** 2026-08-13
+**Last updated:** 2026-08-14
 
 This is the neutral implementation checklist and handoff record for humans and
 coding agents. It contains exactly one current task. The README defines the
@@ -107,7 +107,7 @@ It does not authorize a Git commit.
 | Task | Status | Purpose |
 |---|---|---|
 | T0 | complete | Repository scaffold and consolidated documentation |
-| T1 | current | Common immutable graph domain |
+| T1 | complete | Common immutable graph domain |
 | T2 | pending | Graph index and structural validation |
 | T3 | pending | Change operations and projection |
 | T4 | pending | Affected-set analysis and manual review |
@@ -144,6 +144,45 @@ Completed 2026-08-13.
   0 errors; all 5 existing scaffold tests passed.
 - No production feature is implemented. `Class1` files, `Hello, World!`, and
   placeholder tests are scaffold only.
+
+### T1 — common graph domain
+
+Completed 2026-08-14.
+
+- Replaced the Core placeholder with immutable public `ProjectId`, `EntityId`,
+  `GraphValue`, `GraphAttribute`, `GraphNode`, `GraphEdge`, and `ProjectGraph`
+  types plus the four-value `ReviewDirection` enum.
+- IDs use ordinal equality and ordering, reject empty/whitespace/control text,
+  and use a 256-character bound. Conservative model bounds are 16,384
+  characters for text, 1,024 for relationship labels, 256 for metadata names,
+  and 256 for canonical decimals.
+- Scalar values cover text, signed integer, canonical decimal, Boolean, symbol,
+  and zero-offset UTC instant. Decimal construction rejects exponent, plus sign,
+  unnecessary leading zero, trailing fractional zero, and negative zero forms.
+- Nodes and edges defensively copy and ordinal-sort tags and attributes, reject
+  duplicate metadata keys/tags, preserve unknown kinds/labels, and keep node
+  and edge IDs in the same `EntityId` identity space. Graph collections are
+  copied and deterministically sorted by ID.
+- Kept graph-wide identity, endpoint, purpose, and scope-tree checks for T2.
+  In particular, Core can construct a `scope-parent` edge with any explicit
+  review direction so the T2 validator can report malformed reserved edges.
+- Added a public-API-only `TechnicalProjectGraphBuilder` test fixture with a
+  purpose, sibling power/privacy scopes, ordinary concepts, scope edges,
+  directed semantic cross-links, and an external anchor.
+- Focused check passed with 5 tests using
+  `dotnet test tests/ValidatedWorld.Core.Tests/ValidatedWorld.Core.Tests.csproj
+  --no-restore`.
+- Public API smoke: the filtered `Technical_project_builder` test constructed
+  the baseline graph and observed its purpose, scope-parent, semantic direction,
+  and external-anchor data successfully.
+- Full checks on 2026-08-14: `dotnet restore ValidatedWorld.slnx`,
+  `dotnet build ValidatedWorld.slnx --no-restore` (0 warnings, 0 errors), and
+  `dotnet test ValidatedWorld.slnx --no-build --no-restore` (9 passed).
+- Modeling friction was low: explicit review direction is clear at edge
+  construction, while optional metadata is slightly verbose because duplicate
+  keys are rejected from caller sequences before ordinal canonicalization.
+  The chosen bounds are conservative implementation choices and should remain
+  visible when T2/T5 add diagnostics and protocol limits.
 
 ## 6. Current and remaining tasks
 
@@ -447,7 +486,9 @@ README's review/write guarantees.
 
 ## 7. Attempt evidence
 
-No failed current-task attempt is recorded.
+No unresolved failed current-task attempt is recorded. The first sandboxed
+restore could not read the user NuGet configuration; the required restore then
+completed successfully with approved outside-sandbox access.
 
 ## 8. Handoff report template
 
