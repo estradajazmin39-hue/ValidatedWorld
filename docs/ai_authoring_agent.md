@@ -36,6 +36,12 @@ validation and graph traversal operate over the authoritative graph outside the
 model. Semantic completeness remains limited to explicit nodes/edges and the
 human/AI's judgment.
 
+Every changed or affected node is an exception to purely minimal retrieval in
+one deliberate respect: its complete `scope-parent` path through the project
+thesis is always mandatory context. The agent must inspect the proposal against
+every containing scope and the root. Those ancestors do not become propagation
+seeds and do not pull sibling branches into the working set.
+
 If one proposal's affected set itself is too large for the configured author or
 review request, the app reports the bound and preserves canonical state. The
 user may narrow/redesign the proposal or handle it manually. Coordinating
@@ -125,15 +131,16 @@ filters and may broaden/narrow them deliberately.
    different graph meaning. Routine ID/format choices remain autonomous.
 6. Apply bounded explicit node/edge operation batches.
 7. Project and run structural validation after each coherent batch.
-8. Analyze the complete current-plus-proposed affected set.
+8. Analyze the complete current-plus-proposed affected set and retrieve every
+   changed/affected node's full upstream lineage through the purpose root.
 9. Inspect, repair, or ask about every non-trivial consequence. Routine
    `reviewed-no-change` may be proposed but cannot impersonate the user's
    opinion where a material semantic choice exists.
 10. If optional AI review is enabled/configured and the user separately
     authorizes it, invoke the independent Gate B request.
 11. Repair/discuss concerns; each proposal change invalidates prior review.
-12. Present exact operations, affected set/paths, review status, and
-    base/operation/proposed/affected fingerprints.
+12. Present exact operations, affected set/paths, mandatory upstream context,
+    review status, and base/operation/proposed/affected/context fingerprints.
 13. Ask for one explicit conversational confirmation.
 14. Call guarded `commit_change` and report success or structured rollback.
 
@@ -198,6 +205,7 @@ issues a short-lived opaque authorization bound to:
 - operation-set fingerprint;
 - proposed-state fingerprint;
 - affected-set fingerprint;
+- mandatory scope-context coverage fingerprint;
 - current disposition/validation/reviewer state; and
 - expiry and conversation/session identity.
 
@@ -272,7 +280,8 @@ Offline tests and one separately authorized live evaluation must prove/evaluate:
 - duplicate/unrelated operation avoidance;
 - one in-memory session with no persistence/recovery claim;
 - meaningful user questions and honest bounds/stops;
-- complete affected-set iteration and correct manual fallback;
+- complete affected-set iteration, mandatory thesis/upstream context coverage,
+  and correct manual fallback;
 - Gate B independence and review staleness;
 - exact conversational approval and guarded model-called commit;
 - no direct SQL/canonical write or automatic semantic disposition;

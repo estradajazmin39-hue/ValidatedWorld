@@ -34,6 +34,7 @@ open and verify the current SQLite graph
 → add, replace, or remove explicit nodes and edges
 → build the proposed graph without changing the database
 → calculate every affected node and explanation path
+→ include every changed/affected node's complete scope-upstream path to purpose
 → inspect, update, or disposition the complete affected set
 → run structural and any enabled optional-profile checks
 → obtain exact user approval when an AI is authoring
@@ -68,6 +69,8 @@ over one complete proposed transaction and its selected context.
 - Explicit relationship review directions.
 - In-memory operation batches and projected graphs.
 - Base-plus-projected affected-set analysis with explanation paths.
+- Mandatory scope-upstream context from every changed/affected node through the
+  purpose root, with explicit coverage.
 - Complete per-session review dispositions.
 - Structural validation and optional profile validation.
 - Exact conversational confirmation for AI-authored commits.
@@ -177,7 +180,11 @@ Initialization creates one substantive purpose node, conventionally
 another node. Repeated parent traversal is acyclic and terminates at the purpose.
 
 The scope tree organizes a potentially cross-linked graph and gives every node a
-singular contextual path to the project's thesis. It does not make every local
+singular scope-upstream path to the project's thesis. For every proposal, the
+application includes the complete path from every changed or affected node to the
+purpose root as mandatory semantic review context. The human review surface and
+any AI author/reviewer request must contain those nodes and parent edges, and
+coverage must report an omission as inconclusive. This does not make every local
 change global:
 
 - a changed leaf includes its ancestors as context but does not seed their other
@@ -187,9 +194,17 @@ change global:
 - semantic cross-links independently select nodes according to their declared
   directions.
 
-Ancestors shown as context become direct seeds only if the user or agent changes
-them. This preserves the previously established rule that upward scope traversal
+Context ancestors normally require inspection, not editing. They do not need an
+affected-node disposition solely because they are upstream; final review coverage
+must instead prove that they were included for semantic inspection. They become
+direct seeds only if the user or agent changes them. Upward traversal therefore
 never randomly fans back down.
+
+No context node is read-only. If inspection shows that an ancestor must change,
+the user or agent adds that edit to the same operation batch. The ancestor then
+becomes a direct seed, invalidates prior analysis/review evidence, and may select
+its descendant subtree and semantic dependents. Editing the root is the explicit
+project-wide case.
 
 ### 3.5 Open-world semantics
 
@@ -349,7 +364,7 @@ The result distinguishes:
 
 - direct changed entities;
 - affected nodes requiring disposition;
-- scope ancestors shown as context only;
+- mandatory scope-upstream ancestors and their coverage;
 - relationship paths and current/projected evidence; and
 - excluded/unrelated nodes in test evidence.
 
@@ -368,6 +383,12 @@ operation set, and selected path. An operation change invalidates stale
 dispositions. These records are commit prerequisites but are not persisted as
 history after the current graph is written.
 
+Every changed/affected node's complete upstream lineage has a separate context-
+coverage requirement. The final human approval acknowledges that this context was
+presented; an AI workflow must prove it supplied the same text and parent edges.
+An ancestor needs an affected-node disposition only when independently selected
+by propagation or directly changed.
+
 ## 8. Validation and commit
 
 Deterministic phases are:
@@ -378,7 +399,8 @@ Deterministic phases are:
 4. One purpose and singular acyclic root-reaching scope lineage.
 5. Optional profile validation and coverage.
 6. Complete affected-set traversal and current dispositions.
-7. Exact final user confirmation when the author is an AI.
+7. Complete mandatory scope-upstream context coverage through the purpose root.
+8. Exact final user confirmation when the author is an AI.
 
 Commit then:
 

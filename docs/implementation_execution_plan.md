@@ -47,6 +47,8 @@ The approved design now says:
 - Nodes require stable ID/text; kinds/tags/scalar attributes are optional.
 - Edges require stable ID/endpoints/relationship/review direction.
 - One purpose and one scope-parent spanning tree organize the graph.
+- Every changed/affected node's complete scope-upstream path through the purpose
+  root is mandatory semantic review context; it never seeds sibling traversal.
 - Domain profiles are optional validator/helper modules, not foundational schema.
 - The database contains current state only in four tables: migrations, project,
   nodes, edges.
@@ -103,6 +105,10 @@ Completed 2026-08-13:
   profile implementations from the current roadmap.
 - Moved contributor/development detail removed from the human README into
   `docs/project_development.md`.
+- Clarified that the purpose root is the project thesis and a transitive scope
+  dependency of every node: each changed/affected node's complete upward lineage
+  is mandatory semantic review context, while context ancestors never seed
+  sibling traversal.
 - Verification passed on 2026-08-13: every relative Markdown link target exists,
   every Markdown code fence is balanced, Markdown prose lines are within 120
   characters, `git diff --check` found no whitespace errors, restore succeeded,
@@ -188,7 +194,8 @@ profile behavior yet.
 2. WP3 — four-table SQLite, mapping, views, backup, samples, and first CLI/read QA.
 3. WP4 — graph indexes, structural validation, review arcs, and diagnostics.
 4. WP5 — process-local change sessions, projection, interactive JSON host.
-5. WP6 — affected-set traversal and complete manual review.
+5. WP6 — affected-set traversal, mandatory thesis/upstream context, and complete
+   manual review.
 6. WP7 — atomic current-state commit and rollback faults.
 7. WP8 — queries, interoperability, limits, help, and complete manual workflow.
 8. WP9 — Gate A correctness/usefulness/comparison/performance evaluation.

@@ -22,6 +22,35 @@ Whether the text still makes sense across the affected relationships must be
 judged semantically by a thinking participant—the user or an AI. The graph
 should remain simple in theory while potentially expansive in scope.
 
+## The project thesis is always upstream
+
+Every project begins with one root node: its overall thesis, purpose, scope, or
+governing statement. Every other node belongs to the scope tree through exactly
+one `scope-parent`. Following those parent edges from any node back to the root
+defines that node's unique **scope-upstream path**. In this precise sense, the
+root is a transitive scope dependency of every non-root node and therefore of
+every change made beneath it.
+
+For every proposed change, ValidatedWorld walks that path upward from every
+changed or affected node and includes every node on it—including the project
+root—as mandatory semantic review context. The change must remain consistent
+with its immediate scope, every containing scope, and ultimately the project's
+thesis. Those upstream nodes normally do not change; they are present so the
+human or AI can inspect the proposal against them.
+
+Upstream context is not read-only. If that inspection reveals that an ancestor
+also needs to change, the user or agent may edit it in the same change session.
+It then becomes a direct change seed and ValidatedWorld recalculates from it,
+which may expand the affected set substantially. Editing the project root is the
+intentional case that can make the transaction project-wide.
+
+Including an upstream node does not make it a propagation seed and does not cause
+the app to walk back down through its other children. A local change therefore
+does not pull in unrelated sibling branches merely because their paths share the
+root. Only directly changing a scope node selects its descendants. This gives
+every change its natural connection to the project thesis without turning every
+change into a whole-project review.
+
 All changes are authored as one in-memory change session: a batch that moves the
 project from one reviewed, structurally valid state to another. As the user or
 agent edits nodes and edges, ValidatedWorld recalculates and presents every

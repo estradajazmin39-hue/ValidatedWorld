@@ -36,7 +36,8 @@ For the exact current proposal, the application constructs one request containin
 - every current/proposed relationship edge and explanation path used to select
   them;
 - forward/backward context needed to understand those nodes under bounded policy;
-- singular upward `scope-parent` lineage for every included node;
+- complete mandatory upward `scope-parent` lineage through the purpose root for
+  every changed or affected node;
 - enabled optional-profile findings relevant to the proposal; and
 - a manifest of every required/included/omitted item and configured bound.
 
@@ -44,8 +45,10 @@ Every disjoint chain remains in this one request. Do not split, shard, summarize
 across multiple model calls, invoke parallel reviewers, or synthesize several
 answers. The expensive review is intentionally one holistic pass.
 
-Scope ancestors are explanatory context, not new propagation seeds. Including
-the purpose for a leaf does not load its other descendants. Only a direct purpose
+Every required lineage node and parent edge must be present so the reviewer can
+judge the proposal against its immediate scopes and project thesis. Scope
+ancestors are explanatory context, not new propagation seeds. Including the
+purpose for a leaf does not load its other descendants. Only a direct purpose
 change selects the whole graph; a direct intermediate scope change selects its
 descendant subtree.
 
@@ -126,7 +129,8 @@ do not imply a provider ecosystem.
 Review runs only when all are true:
 
 1. the feature is explicitly enabled;
-2. a proposal has a complete deterministic affected set;
+2. a proposal has a complete deterministic affected set and scope-upstream
+   context coverage;
 3. a key is available;
 4. the app shows request scope, privacy warning, model, and available cost/token
    estimate; and
@@ -188,7 +192,7 @@ Normal tests are offline and use a fake client plus scripted HTTP. They prove:
 
 - exact scope/coverage and deterministic request identity;
 - all disjoint chains remain together;
-- purpose lineages do not include unrelated siblings;
+- mandatory complete purpose lineages do not include unrelated siblings;
 - strict citations/response schema;
 - proposal changes stale the run/dispositions;
 - disabled/missing-key/provider-failure manual fallback;

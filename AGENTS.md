@@ -14,10 +14,12 @@ and atomically writes the new current graph or nothing. A human or optional AI
 judges whether natural-language content remains semantically consistent.
 “Validated” does not mean the C# engine proves prose true.
 
-Every project has one purpose root and every other node has one `scope-parent`,
-forming a spanning tree inside the semantic multigraph. Ancestors shown for a
-leaf are context and never fan into siblings. Directly changing a scope selects
-its descendants; directly changing the purpose selects the project.
+Every project has one purpose root—the project thesis—and every other node has
+one `scope-parent`, forming a spanning tree inside the semantic multigraph. Every
+changed or affected node's complete upward lineage through that tree, including
+the root, is mandatory semantic review context. Context ancestors never become
+propagation seeds or fan into siblings. Directly changing a scope selects its
+descendants; directly changing the purpose selects the project.
 
 The database stores current state only. It has no project revision history,
 persisted drafts, validation ledger, commits, replay, or JSON snapshot. An active
@@ -105,6 +107,12 @@ edits unstaged.
   and proposed arcs for affected analysis.
 - Preserve singular scope context without sibling fan-out. Only direct scope
   operations select descendant subtrees.
+- Include every changed/affected node's complete scope-upstream lineage through
+  the purpose root in the review surface. Missing context coverage is
+  inconclusive; context alone does not require editing or seed propagation.
+- Keep upstream context editable. Once edited, an ancestor becomes a direct seed
+  and may expand the affected set through its subtree, up to the full project for
+  a root edit.
 - Treat missing facts/links as unknown.
 - Hold unfinished operations/reviews only in application memory. Warn on exit
   where possible; do not promise recovery.

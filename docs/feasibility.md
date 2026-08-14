@@ -33,6 +33,8 @@ ValidatedWorld can guarantee that:
 - every edge endpoint exists;
 - exactly one purpose root exists;
 - every other node has one acyclic `scope-parent` path to that root;
+- every changed or affected node's complete scope-upstream path, including the
+  purpose root, is present as mandatory semantic review context;
 - a proposed operation batch produces a structurally valid projected graph;
 - the affected set is complete for every explicitly modeled review direction in
   both the current and projected graph;
@@ -87,11 +89,19 @@ both              changing either endpoint selects the other
 This declaration tells the application where review must travel. It does not
 tell the application what the relationship means in natural language.
 
-`scope-parent` is treated specially. A changed node's singular ancestor lineage
-is shown as context without turning those ancestors into new propagation seeds.
-Changing a scope node directly selects its descendant subtree; changing the
-purpose root directly therefore selects the whole project. This avoids a leaf
-change fanning through the root into unrelated sibling branches.
+`scope-parent` is treated specially. Following parents defines a node's unique
+scope-upstream path. Every changed or affected node contributes its entire path,
+including the purpose root, to mandatory semantic review context. Review cannot
+silently omit any node in that lineage. Context ancestors do not become new
+propagation seeds. Changing a scope node directly selects its descendant subtree;
+changing the purpose root directly therefore selects the whole project. This
+keeps the thesis in every review without letting a leaf change fan through the
+root into unrelated sibling branches.
+
+Context is not an immutability category. Any upstream ancestor may be edited in
+the same session; once edited it becomes a direct seed and normal semantic/scope
+propagation is recalculated from it. Editing a high-level scope can therefore
+expand review sharply, and editing the purpose root selects the project.
 
 ## Why not arbitrary tables or a graph database
 

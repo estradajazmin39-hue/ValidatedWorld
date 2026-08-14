@@ -36,7 +36,8 @@ open project.vw.db and verify its schema, integrity, scope, and state fingerprin
 → build the proposed graph without changing SQLite
 → derive review arcs from current and proposed edge directions
 → compute the complete affected set and explanation paths
-→ show singular purpose lineages as context without sibling fan-out
+→ require every changed/affected node's full upstream lineage through the thesis
+  as semantic context, without sibling fan-out
 → update affected nodes or mark them reviewed-no-change/not-applicable
 → run full structural and any enabled optional-profile validation
 → atomically apply the new current graph or roll back everything

@@ -128,8 +128,9 @@ changing canonical state. The QA agent authors a proposal without SQL.
 ### WP6 — Affected set and manual review
 
 Exercise current/proposed union, deleted/redirected edges, upward/lateral/both
-directions, scope ancestor context, direct subtree/root selection, dispositions,
-and staleness. The QA agent completes a realistic review and comments on burden.
+directions, mandatory complete scope-upstream context through the thesis root,
+direct subtree/root selection, dispositions, and staleness. The QA agent
+completes a realistic review and comments on burden.
 
 ### WP7 — Atomic current-state commit
 
@@ -160,6 +161,7 @@ Tests prove at least:
 - edge direction—not label or FK orientation—defines review arcs;
 - C# arcs equal documented SQLite view arcs;
 - current/proposed union preserves old and new consequences;
+- every changed/affected node's complete purpose lineage is included in review;
 - ancestor context never fans into sibling subtrees;
 - direct scope/root operations select descendants;
 - shortest paths and ordering are deterministic;
@@ -215,7 +217,7 @@ They cover:
 
 - exact complete request/coverage manifest;
 - all disjoint proposal chains in one request;
-- singular purpose lineage without sibling fan-out;
+- mandatory complete purpose lineages without sibling fan-out;
 - structured citations and rejection of unknown IDs;
 - concern disposition and staleness in the in-memory session;
 - disabled mode and missing-key manual fallback;

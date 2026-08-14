@@ -51,9 +51,10 @@ dotnet test ValidatedWorld.slnx --no-build --no-restore
    implies it.
 8. Every project has one purpose root and every other node has one acyclic
    `scope-parent` path to it.
-9. A changed leaf's ancestor lineage is context only. It never fans into sibling
-   branches. A directly changed scope selects its descendants; a directly
-   changed root selects the project.
+9. Every changed/affected node's complete `scope-parent` lineage through the
+   purpose root is mandatory semantic review context. Those ancestors are not
+   propagation seeds and never fan into sibling branches. A directly changed
+   scope selects its descendants; a directly changed root selects the project.
 10. Optional profiles add validators/helpers but a plain graph needs none.
 11. Every canonical mutation occurs through one in-memory application change
     session and one short SQLite transaction.
@@ -278,11 +279,18 @@ public sealed record ReviewDisposition(
     string Fingerprint,
     DateTimeOffset ReviewedAt);
 
+public sealed record ScopeContextCoverage(
+    ImmutableArray<EntityId> RequiredNodeIds,
+    ImmutableArray<EntityId> RequiredScopeEdgeIds,
+    string Fingerprint,
+    bool Complete);
+
 public sealed class ChangeSession
 {
     // Application-owned mutable coordinator around immutable snapshots.
     // Contains base graph/fingerprint, final operation-by-ID map, focus,
-    // projection, affected result, dispositions, and status. Never persisted.
+    // projection, affected result, mandatory upstream context coverage,
+    // dispositions, and status. Never persisted.
 }
 ```
 
@@ -556,9 +564,10 @@ ComputeAffected(operations, base, proposed, limits):
                 enqueue(selected, depth + 1)
         if count exceeds limit: return Inconclusive with evidence
 
-    contextAncestors = singular scope ancestors of every changed/affected node
-                       minus affected; never enqueue them
-    return Complete(changed, affected, paths, contextAncestors, statistics)
+    requiredContext = complete singular scope paths from every changed/affected
+                      node through purpose, including nodes and parent edges
+    require complete coverage; never enqueue context-only ancestors
+    return Complete(changed, affected, paths, requiredContext, statistics)
 ```
 
 Use current and proposed scope trees when an operation changes scope membership.
@@ -579,8 +588,17 @@ Direct changed nodes receive `updated`. Every other affected node starts
 `not-applicable` with identity/rationale. Recompute and discard stale
 dispositions after every operation change.
 
-Context-only ancestors are displayed but do not require a disposition unless
-the user changes them or an edge selects them as affected.
+Every required context node and `scope-parent` edge must be included in the
+review presentation. Context-only ancestors do not require an affected-node
+disposition unless the user changes them or another edge selects them as
+affected. Final human approval acknowledges the context coverage; an AI request
+must fingerprint its exact inclusion. Missing or bounded-out context makes the
+change inconclusive rather than silently dropping the project thesis.
+
+Context nodes remain ordinary editable nodes. Applying an operation to one turns
+it into a direct seed, invalidates the prior affected/context/disposition state,
+and reruns traversal. A high-level scope edit may therefore expand the affected
+set substantially; a root edit selects the complete project.
 
 ## 10. Commit orchestration
 
@@ -591,13 +609,15 @@ Commit(changeSession, optionalApprovalAuthorization):
     require current fingerprint equals session base fingerprint
     projection = Project(current, final operations)
     affected = ComputeAffected(current, projection)
-    report = ValidateAll(projection, affected, dispositions, enabled profiles)
+    contextCoverage = BuildRequiredScopeContext(current, projection, affected)
+    report = ValidateAll(projection, affected, contextCoverage,
+                         dispositions, enabled profiles)
     require report Valid and no pending/stale disposition
 
     if session was AI-authored:
         require opaque authorization matches database identity,
                 base fingerprint, operation fingerprint,
-                proposed fingerprint, affected-set fingerprint,
+                proposed fingerprint, affected-set/context fingerprint,
                 review state, and short expiry
 
     begin SQLite IMMEDIATE transaction
@@ -860,7 +880,9 @@ Required properties include:
 - every non-root scope path is singular, acyclic, and root-reaching;
 - C# and `vw_review_arcs` expansion agree;
 - current/proposed union preserves removed/new relationship consequences;
-- ancestor context never selects siblings;
+- every changed/affected node's mandatory lineage reaches the purpose and is
+  included in review coverage;
+- context ancestors never select siblings;
 - direct scope/root changes select descendants;
 - unrelated insertions do not change existing affected paths;
 - proposal changes invalidate stale dispositions and AI approval;
@@ -930,8 +952,9 @@ Complete. Existing projects compile. No product code is implemented.
 
 ### WP6 — affected set and manual review
 
-- Implement current/proposed union traversal, scope special rules, explanation
-  paths, bounds, obligations, and disposition fingerprints.
+- Implement current/proposed union traversal, mandatory scope-upstream context
+  coverage, scope special rules, explanation paths, bounds, obligations, and
+  disposition fingerprints.
 - Acceptance: TechnicalProject changes select exact required nodes and exclude
   distractors; old/new edge effects, scope context, root changes, and stale
   reviews are proven; manual workflow is usable.
