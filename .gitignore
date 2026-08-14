@@ -54,7 +54,7 @@ CodeCoverage/
 # ValidatedWorld workspaces and SQLite sidecars
 #
 # A .vw.db file is authoritative user/project state, not repository source.
-# Samples are rebuilt from reviewed snapshots and transaction scripts. Binary
+# Samples are rebuilt from reviewed source descriptions and change scripts. Binary
 # databases may be committed only as deliberate fixtures under tests/.
 *.vw.db
 *.vw.db-journal

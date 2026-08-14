@@ -1,304 +1,266 @@
-# ValidatedWorld Testing, Fixtures, and Agent QA
+# Testing, Fixtures, and Agent QA
 
-**Status:** Normative development policy
+**Status:** Normative testing strategy
 
 **Last reviewed:** 2026-08-13
 
-This document defines how ValidatedWorld proves correctness and usability. It is
-read with the [implementation blueprint](implementation_blueprint.md) and the
-[implementation plan](implementation_execution_plan.md).
+## 1. Principles
 
-## 1. No external database infrastructure
+ValidatedWorld is complete only when both correctness and practical usefulness
+are exercised.
 
-SQLite is an in-process, self-contained, serverless database engine; it is not a
-database server. ValidatedWorld uses `Microsoft.Data.Sqlite.Core` with a pinned
-`SQLitePCLRaw.bundle_e_sqlite3` NuGet dependency. The bundle supplies the native
-SQLite library for its supported runtime identifiers and is initialized by
-`Microsoft.Data.Sqlite`.
+- Automated tests prove repeatable structural, traversal, transaction, and
+  persistence behavior.
+- Realistic scripted scenarios prove public workflows and exact graph results.
+- A black-box AI agent acting as an ordinary user evaluates discoverability,
+  burden, diagnostics, and confidence.
+- Live provider evaluation is a separate optional experiment and never part of
+  the normal build/test completion path.
 
-References:
+Documentation-only changes require consistency/build verification but no
+artificial production tests.
 
-- [SQLite: self-contained, serverless, zero-configuration](https://sqlite.org/about.html)
-- [Microsoft.Data.Sqlite custom native bundles](https://learn.microsoft.com/dotnet/standard/data/sqlite/custom-versions)
+## 2. No external database dependency
 
-Users and QA agents must not need:
+SQLite is embedded in process through pinned NuGet packages. Tests and users do
+not need a SQLite server, standalone `sqlite3`, system-native installation, ORM,
+or Docker.
 
-- a SQLite server;
-- the standalone `sqlite3` executable;
-- a system-installed SQLite library;
-- Docker or another container runtime;
-- SQL knowledge for ordinary project creation, authoring, validation, review,
-  backup, or replay; or
-- any service beyond the installed/published ValidatedWorld application.
+The application creates every normal test/QA database through public
+Application/CLI paths. Tests do not populate canonical tables through ad hoc SQL.
+A binary `.vw.db` may be tracked only under `tests/` when a byte-specific
+corruption/application-header/migration case cannot reasonably be generated at
+runtime. Such a fixture documents purpose, provenance, expected schema version,
+and regeneration.
 
-Documented read-only SQLite views are an optional advanced inspection surface,
-not a prerequisite for completing normal workflows.
+All temporary databases live in per-test or per-walkthrough directories and are
+disposed afterward. No populated sample/user database belongs in the repository.
 
-Gate A must fail rather than silently add infrastructure if the NuGet-bundled
-provider cannot support an intended platform. Record the failing runtime and
-discuss alternatives with the human before adding Docker, a system dependency,
-or another database. Docker is not part of the current roadmap.
+## 3. Reusable scenario source
 
-## 2. Application-owned database lifecycle
-
-Every normal or test database is created, migrated, verified, backed up, and
-opened by ValidatedWorld itself. No fixture setup may issue DDL or canonical
-inserts through an external SQLite tool.
-
-Required public workflows include:
+`samples/TechnicalProject` grows into the primary soft-logic corpus. It retains:
 
 ```text
-vw init ... --purpose <text>        create a project with its purpose root
-vw snapshot init ...                create from supported logical JSON
-vw sample list                      list bundled reusable sample scenarios
-vw sample create ...                generate a sample database through the app
-vw verify ...                       verify the created/opened project
-vw backup ...                       create a safe SQLite backup
+README.md                     human scenario and modeling rationale
+source/project.yaml-or-json   reviewed source used by fixture builder
+changes/*.json                operation batches
+expected/*.json               structured public result goldens
+goals/*.md                    agent-facing goals without expected solution
 ```
 
-`vw sample create` is introduced with the WP3 walking skeleton. It takes a named
-built-in sample and variant, creates a new target that must not already exist,
-and uses the same Application/Persistence paths as normal initialization. It
-never copies a hand-edited opaque database.
+The source serialization is test/sample input, not a supported project
+interchange format. Fixture generation passes it through public graph/domain and
+Application creation paths to produce a disposable `.vw.db`.
 
-Example:
+The corpus contains plain text nodes (no domain profile required):
 
-```powershell
-dotnet run --project src/ValidatedWorld.Cli -- sample create `
-  --sample technical-project `
-  --variant baseline `
-  --db artifacts/qa/technical-project.vw.db
-```
+- one project purpose;
+- power, privacy, documentation, and accessibility scopes;
+- requirements, definitions, assumptions, observations, evidence, results,
+  decisions, conclusions, implementation, and verification as optional node
+  kinds;
+- document/artifact anchors;
+- labeled relationships with explicit review directions;
+- changed/removed/redirected relationships;
+- missing information and explicit conflicting text for a semantic reviewer;
+- unrelated distractors and cross-branch links; and
+- direct scope and purpose changes.
 
-The actual command syntax is locked by CLI contract tests when WP3 implements
-it. Generated files under `artifacts/` and ordinary `.vw.db` files are ignored.
+Each deterministic defect discovered later becomes a retained scenario variant
+or focused regression fixture. Do not reinvent a baseline database every agent
+turn.
 
-For real users, the SQLite project file and a backup produced by `vw backup` are
-the primary complete interchange artifacts because they retain current state,
-drafts, and commit/audit history. Logical JSON remains a supported transparent,
-deterministic interchange, audit, revision-zero initialization, and test-fixture
-format; it is not the only way to move a project.
+## 4. Test projects and helpers
 
-## 3. Durable scenario source, disposable databases
+Planned shared infrastructure:
 
-An AI authors each scenario or regression variant once. Its reviewed source and
-expected behavior are then retained so future work regenerates and reuses it
-without asking another model to invent equivalent data.
+- `tests/ValidatedWorld.TestKit` — fixed clocks/IDs, scenario builders, temporary
+  directories, app-generated database factories, process host, result parsing,
+  fault injection, and structured golden comparison.
+- `tests/ValidatedWorld.EndToEnd.Tests` — black-box CLI/long-lived-host scenarios.
 
-The target layout is:
+Production test layers mirror the architecture:
+
+1. Core unit/property tests.
+2. Serialization command/result and private fingerprint tests.
+3. Validation/index/affected-set tests.
+4. Application in-memory-session and orchestration tests.
+5. SQLite migration/mapping/integrity/fault/backup/view tests.
+6. CLI/host contract tests.
+7. Scenario and performance tests.
+
+Tests control clocks, IDs, scheduling, bounds, fault points, current directory,
+environment variables, and process lifetime. Empty, tautological, skipped,
+flaky, or manually inspected tests are not completion evidence.
+
+## 5. Work-package QA progression
+
+### WP1 — Core shape
+
+Construct the complete TechnicalProject graph through public Core APIs with no
+profile. Assert node/edge data, purpose/scope intent, directions, operations,
+and focus expansion. Record whether plain graph entry is understandable.
+
+### WP2 — Structured commands and fingerprints
+
+Round-trip strict command/result DTOs and prove deterministic private state and
+operation fingerprints. Explicitly prove there is no supported full-project JSON
+snapshot/import/export contract.
+
+### WP3 — First database and public read flow
+
+Create/open/verify/backup a real four-table `.vw.db`, generate the sample through
+the app, inspect documented views, and run the first black-box agent walkthrough.
+Publish/run from a clean temporary directory to prove bundled SQLite behavior.
+
+### WP4 — Validation and graph navigation
+
+Exercise missing endpoints, purpose/scope failures, malformed directions,
+fingerprint mismatch, optional-profile unavailability, dependencies, and paths.
+The QA agent diagnoses cases only from public output.
+
+### WP5 — In-memory authoring
+
+Exercise the long-lived command host: begin/apply/replace/discard/restart.
+Prove unresolved sessions never appear in SQLite and restart loses them without
+changing canonical state. The QA agent authors a proposal without SQL.
+
+### WP6 — Affected set and manual review
+
+Exercise current/proposed union, deleted/redirected edges, upward/lateral/both
+directions, scope ancestor context, direct subtree/root selection, dispositions,
+and staleness. The QA agent completes a realistic review and comments on burden.
+
+### WP7 — Atomic current-state commit
+
+Inject failures before/after every mutation boundary. Assert exact prior rows and
+fingerprint survive. Exercise stale base, busy writer, constraint/mapping error,
+successful commit, and understandable retry/review behavior. Assert no history,
+draft, operation, review, or commit rows exist.
+
+### WP8 — Complete manual product
+
+Run init → search → change → affected review → validate → commit → verify →
+backup from public help. Test large/bounded queries and, if retained, SQL
+export/import round trip. Evaluate manual usability with no AI/key/network/GUI.
+
+### WP9 — Gate A evidence
+
+Run fresh correctness, modeling-cost, affected precision/recall, Doorstop/plain
+SQLite comparison, lower-cost-agent workflow, and performance evaluations.
+Record continue/narrow/pivot/stop evidence.
+
+## 6. Required deterministic properties
+
+Tests prove at least:
+
+- global node/edge identity and endpoint existence;
+- one purpose and singular acyclic scope paths;
+- profile-free graphs accept unknown kinds and relationship labels;
+- edge direction—not label or FK orientation—defines review arcs;
+- C# arcs equal documented SQLite view arcs;
+- current/proposed union preserves old and new consequences;
+- ancestor context never fans into sibling subtrees;
+- direct scope/root operations select descendants;
+- shortest paths and ordering are deterministic;
+- bounds return inconclusive with explicit omissions;
+- proposal edits stale mismatched dispositions/AI approval;
+- closing/restarting discards in-memory proposals and leaves SQLite unchanged;
+- insertion order/SQLite byte differences do not change state fingerprint;
+- external/incomplete mutation causes fingerprint/integrity failure;
+- every injected commit failure preserves prior current rows;
+- successful commit stores only the expected current graph and new fingerprint;
+- backup opens to the identical graph/fingerprint;
+- standard JSON commands never become a complete project interchange format;
+- no normal workflow contacts a provider; and
+- absent AI configuration exposes manual fallback, not project invalidity.
+
+## 7. Black-box agent walkthrough
+
+From WP3 onward the same locally running coding agent performs a clearly
+separated QA-user pass after implementation tests. It receives:
+
+- built CLI/host and public help/development guide;
+- a fresh app-generated temporary database;
+- a realistic goal; and
+- no expected command sequence, private API, source-code hint, or permission for
+  canonical SQL writes.
+
+Record concisely at `docs/qa/wpN-agent-walkthrough.md`:
 
 ```text
-samples/TechnicalProject/
-  README.md
-  scenario.manifest.json
-  baseline.snapshot.json
-  variants/
-    missing-evidence.snapshot.json
-    explicit-contradiction.snapshot.json
-  transactions/
-    change-current.json
-    change-retention.json
-    permit-diagnostic-upload.json
-  goals/
-    inspect-project.md
-    diagnose-privacy-claim.md
-    revise-retention-policy.md
-  expected/
-    *.result.json
-    *.snapshot.json
-
-tests/ValidatedWorld.TestKit/
-  reusable process runner, temporary workspace, scenario, and assertion helpers
-
-tests/ValidatedWorld.EndToEnd.Tests/
-  black-box CLI scenario tests using the same sample catalog
-
-docs/qa/
-  wpN-agent-walkthrough.md
-
-artifacts/qa/
-  ignored databases and output from local exploratory walkthroughs
+work package/build
+goal and supplied artifacts
+public commands/views used
+completion or stopping point
+resulting graph/fingerprint/affected set where applicable
+unrelated-node exclusions
+confusing/misleading/missing behavior
+modeling and review burden
+confidence and recommendations
 ```
 
-The exact files grow with the work packages; do not create placeholders merely
-to satisfy the tree. `samples/TechnicalProject` is the single reviewed scenario
-source. The CLI embeds or publishes those same assets for `vw sample create`;
-tests must detect drift between source assets and the shipped sample catalog.
+Do not store hidden chain-of-thought or an unbounded transcript. Preserve
+commands/inputs/structured outputs in replayable tests.
 
-`baseline.snapshot.json` is a valid populated revision-zero logical snapshot.
-Initializing it creates a usable starting project without inventing fake commit
-history. After transaction/commit support exists, transaction recipes create
-later revisions through the public authoring pipeline.
+If the agent cannot complete a documented workflow, requires source knowledge,
+misreads success, misses required affected nodes, or changes unrelated data, the
+work package fails. Fix deterministic defects and add regression tests. Report a
+fundamental usefulness concern to the human before advancing.
 
-Add new immutable variants for new behavior and regressions. Do not repeatedly
-rewrite one baseline to cover unrelated cases, and do not regenerate expected
-results using the same code path without independent assertions.
+## 8. Optional AI-review tests
 
-## 4. The tests directory is a verification laboratory
+Normal Gate B tests use a fake client and scripted HTTP and remain offline.
+They cover:
 
-`tests/` is not limited to small unit tests. It contains:
+- exact complete request/coverage manifest;
+- all disjoint proposal chains in one request;
+- singular purpose lineage without sibling fan-out;
+- structured citations and rejection of unknown IDs;
+- concern disposition and staleness in the in-memory session;
+- disabled mode and missing-key manual fallback;
+- provider failure/refusal/timeout/malformed output as inconclusive fallback;
+- no model mutation/direct write;
+- credential/private-content redaction; and
+- one background response with zero automatic retries.
 
-- unit and property tests;
-- reusable TestKit code;
-- SQLite integration, migration, and fault tests;
-- black-box CLI process tests;
-- realistic scenario goals and expected structured outcomes;
-- security and corrupted-input fixtures where generation is impractical;
-- performance corpus generators and recorded budgets; and
-- application-owned fixture-generation tests.
+`VW_AIREVIEW__LIVETESTS=true` only makes the separately invoked live evaluation
+eligible. It does not authorize spend; the exact prompt attestations are still
+required. Live evidence measures useful concerns, false positives/negatives,
+scope coverage, cost, and latency.
 
-Tests create temporary databases through public Application/CLI operations. A
-test may retain its workspace path on failure for diagnosis when explicitly
-requested; normal runs clean up. A human or agent wanting to explore manually
-uses `vw sample create` to make a persistent ignored copy under `artifacts/qa`
-rather than taking ownership of a test runner's transient file.
+## 9. Optional AI-authoring tests
 
-A binary `.vw.db` is checked in only when its byte-level malformed state is the
-subject of a test and cannot reasonably be generated. It must live under
-`tests/`, document provenance and expected schema/application version, and have a
-regeneration procedure where possible.
+Normal Gate C tests use scripted tool-call responses. They cover:
 
-## 5. Four levels of evidence
+- a new plain graph from a description/text source;
+- a change in a project far larger than the scripted model working set;
+- deterministic search before create and duplicate avoidance;
+- one process-local proposal with no persistence/restart recovery claim;
+- questions for material ambiguity;
+- correct affected-set iteration and manual/optional-review handoff;
+- no SQL/direct write/automatic dispositions;
+- exact conversational approval and guarded model-called commit;
+- stale proposal/database invalidating approval;
+- disabled/missing-key manual fallback;
+- limits preserving canonical state and reporting remaining work; and
+- text-only scope—no image/OCR/MCP/plugin/multi-agent behavior.
 
-### 5.1 Unit and property evidence
+`VW_AIAUTHORING__LIVETESTS=true` only enables the separately invoked live
+evaluation. It still requires exact readiness/live-call attestations, background
+polling, a 1,200-second deadline, and no automatic paid retry.
 
-Proves local contracts, invalid inputs, canonical value behavior, ordering, and
-graph properties.
+Gate C fails if the agent does not materially reduce graph/review burden or
+creates plausible unrelated state. The manual Gate A product remains valid.
 
-### 5.2 Integration evidence
+## 10. Completion evidence
 
-Proves application/persistence boundaries, migrations, bundled native-provider
-startup, mapping, integrity, transactions, rollback, backup, and replay.
+Every coding assignment records:
 
-### 5.3 Scripted end-to-end evidence
-
-Runs the compiled CLI as a separate process against databases generated by the
-app. It asserts exit codes, stdout/stderr boundaries, logical data, diagnostics,
-impact paths, review obligations, rollback/commit state, hashes, and unrelated
-exclusions appropriate to the implemented work package.
-
-### 5.4 Agent QA evidence
-
-The implementing agent performs a separated QA-user walkthrough through public
-documentation and commands, records pass/fail and usability findings in
-`docs/qa/wpN-agent-walkthrough.md`, and reports them to the human. This is
-exploratory product evidence, not a replacement for automated assertions.
-
-QA goals include machine-checkable expected semantic facts plus an observer
-checklist. The agent explicitly marks the walkthrough pass or fail and explains
-the result. Subjective observations such as confusing terminology are valuable
-product evidence, but they are never the sole oracle for data integrity,
-transaction safety, or deterministic validation.
-
-Deterministic findings become regression variants and scripted tests. If the
-agent cannot complete the goal, requires source knowledge, misunderstands a
-success result, or makes a wrong semantic change, the current task fails. If the
-workflow technically works but feels confusing, burdensome, or unhelpful, report
-the exact concern and recommendation; stop for human direction when it calls the
-product direction into question.
-
-## 6. Packaging acceptance
-
-WP3 must prove the no-external-install promise with automated smoke tests:
-
-1. Restore/publish the CLI using only solution and NuGet dependencies.
-2. Run the published CLI from a clean temporary directory.
-3. Report the bundled SQLite library version.
-4. Create a database through `vw init` and another through `vw sample create`.
-5. Open, verify, query, back up, and reopen the backup without `sqlite3`, Docker,
-   a server, or a system SQLite dependency.
-6. Assert the expected native library is present in published output for each
-   declared supported runtime identifier.
-
-Actual execution is required on every platform the project claims to support.
-Cross-publish asset inspection alone is not a runtime claim. Until a platform is
-exercised, report it as unverified rather than implying portability.
-
-## 7. Planned Gate B AI-review evidence
-
-AI semantic review adds exploratory intelligence, not a deterministic oracle.
-Its normal test suite must still be self-contained:
-
-- use a deterministic fake client for concern and no-concern workflows;
-- use scripted HTTP handlers for OpenAI mapping, refusal, truncation, timeout,
-  cancellation, and malformed responses;
-- prove every failure results in exactly one attempted request and zero automatic
-  retries;
-- prove the request preview, cache, and freshness hashes cover every material
-  non-secret input;
-- prove one request includes the whole transaction, every disjoint selected
-  dependency/impact chain, and each selected node's singular upward lineage;
-- prove ancestor-as-context never pulls an unselected sibling into scope, while
-  directly changing the purpose root selects every descendant;
-- prove that malformed or stale results cannot satisfy policy or mutate canon;
-- scan structured output, logs, diagnostics, stored rows, and exception text for
-  secret leakage; and
-- require no API key or live network for restore, build, test, packaging, or
-  ordinary black-box QA.
-
-Unit, integration, and ordinary end-to-end tests ignore
-`VW_AIREVIEW__LIVETESTS` and always remain offline. A separately named Gate B
-live smoke/evaluation command checks that it is `true` before considering a
-network call; credentials and explicit human live-call authorization are still
-required. The Gate B suite separately proves project-policy behavior:
-`disabled`, audited transaction `optional` skip, and non-bypassable `required`.
-
-The tracked TechnicalProject corpus gains reviewed Gate B variants with known
-omitted links, stale values, terminology conflicts, missing qualifications,
-insufficient-context cases, and unrelated distractors. Expected issue IDs and
-evidence form the evaluation reference set; they are source assets, not
-prepopulated databases.
-
-A real-provider evaluation is a separately invoked, single-request experiment
-using only OpenAI `gpt-5.6-terra` with medium reasoning. An implementation agent
-must see the exact human secret-readiness attestation before coding that path; a
-live run additionally requires the exact per-run authorization. The app first
-writes the complete sanitized request preview for inspection. Record model,
-prompt/profile/schema versions, corpus revision, aggregate precision/recall,
-false-positive burden, cost, latency, and sanitized findings. Never record an API
-key or private chain-of-thought. Never retry a live failure automatically. A live
-result cannot replace the deterministic fake/scripted acceptance suite. The
-timeout setting is simple operational configuration and needs no artificial unit
-test.
-
-Gate A scenario QA also measures graph-entry burden. The TechnicalProject source
-uses focused batches and clusters; golden expansion tests prove inherited scope
-parents become explicit edges and that no semantic dependency edge is guessed.
-The black-box agent must be able to add several nodes under one focus without
-repeating identical parent data or directly editing SQLite.
-
-## 8. Planned Gate C AI-authoring evidence
-
-AI authoring is the intended primary user workflow, but its normal evidence must
-remain deterministic and offline. Fake/scripted model clients drive complete
-multi-turn sessions in which the agent:
-
-- creates a project proposal from a description and reviewed text/image menu
-  fixtures, reports uncertain/unreadable/unmodeled content, obtains purpose
-  confirmation, and builds the remaining graph through draft tools;
-- searches a project much larger than its supplied working context, follows
-  scope/dependency paths, and changes the correct existing nodes without
-  duplicates or unrelated edits;
-- adds a complete branch such as a pasta menu section using focused batches and
-  explicit semantic edges;
-- pauses for questions, resumes from durable state, handles stale heads and
-  bounds, and never holds a SQLite write transaction while waiting;
-- repairs deterministic validation/impact failures without weakening rules;
-- invokes the independent fake Gate B workflow when policy requires it and
-  stales old review evidence after repairs; and
-- presents the exact preview, receives scripted conversational user approval,
-  calls the guarded commit tool, and proves that missing/stale approval rejects.
-
-Contract tests prove the CLI, in-app function tools, and later MCP adapter invoke
-the same Application use cases and schemas. No adapter exposes raw SQL or
-unguarded canonical writes. Secret/private-source scans include tool calls,
-provider state, logs, persisted session metadata, diagnostics, and fixtures.
-
-`VW_AIAUTHORING__LIVETESTS` is ignored by unit, integration, and ordinary
-end-to-end tests. A separately invoked live evaluation still requires the exact
-secret/live-call attestations, uses background Responses with a 1,200-second
-deadline, and never retries a paid failure automatically. Measure graph accuracy,
-duplicate/unrelated change rate, question quality, validation repairs, task
-completion, tool calls, context bytes, tokens, time, cost, and user effort. The
-feature fails its gate if it cannot reliably make the AI—not the user—perform the
-graph work through conversation.
+- task-specific tests and exact results;
+- full restore/build/test results;
+- generated scenario/golden changes;
+- black-box QA outcome when applicable;
+- modeling/usability concerns;
+- unverified/inconclusive behavior; and
+- the next single task in the execution plan.
