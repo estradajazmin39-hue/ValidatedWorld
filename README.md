@@ -12,7 +12,8 @@ tests.
 ValidatedWorld stores that explicit dependency graph in an embedded SQLite
 project file. It validates proposed transactions, calculates their affected
 subgraph, requires every selected affected node to be reviewed, and commits the
-complete new state or nothing at all.
+complete new state in a transaction as an all-or-nothing change, which is
+considered to be a validated state.
 
 The graph is primarily made of human-readable text nodes and labeled
 relationships, not necessarily a complex type system. Optional profiles may add
@@ -29,7 +30,12 @@ governing statement. Every other node belongs to the scope tree through exactly
 one `scope-parent`. Following those parent edges from any node back to the root
 defines that node's unique **scope-upstream path**. In this precise sense, the
 root is a transitive scope dependency of every non-root node and therefore of
-every change made beneath it.
+every change made beneath it. However, as an addendum to that, nodes are allowed
+to declare other nodes as downstream from them, arbitrarily, so the unique
+upstream path of those other notes will also be part of the relevant dependency
+graphs for such changes, and that is an iterative process that could produce
+several apparent upstream paths for a single node change, alongside the expected
+downstream paths which will be pulled for the change as well.
 
 For every proposed change, ValidatedWorld walks that path upward from every
 changed or affected node and includes every node on it—including the project
@@ -73,7 +79,7 @@ its prompts and tool contract. The agent asks questions when meaning is genuinel
 ambiguous or when following the affected relationships exposes a non-trivial
 choice. Graph design and relationship direction keep the relevant working set as
 small as the modeled semantics allow, so neither the user nor the AI must absorb
-an entire large project for a local change.
+an entire large project for a local change - unless it is a change on the thesis.
 
 ## Storage and protocol
 
@@ -99,8 +105,7 @@ checks, and explicit valid/invalid/inconclusive outcomes.
 The SQLite database is the sole complete representation and interchange format
 for a project graph. Other tools may inspect the documented read-only schema and
 views in a `.vw.db` file, or consume an application-produced SQLite backup or SQL
-export. JSON may be used for individual command requests and results, but there
-is no second JSON project format or JSON snapshot source of truth.
+export.
 
 ## The simple mental model
 
@@ -118,34 +123,13 @@ Canonical project content is one graph:
 
 The application does not provide project-history versioning. It guarantees only
 the current SQLite state. Uncommitted changes live in the running application
-and are expected to be resolved or discarded before it closes. Before commit,
-the app uses an internal current-state fingerprint to detect an unexpected stale
-base; it does not retain that fingerprint as a historical revision chain.
-Normally a fully reviewed change set commits in one short SQLite transaction.
-Any stale-state, busy, I/O, constraint, or mapping failure rolls back the whole
-attempt and leaves the prior graph unchanged so the operation can be reviewed or
-retried.
+and are expected to be resolved or discarded before it closes. A fully reviewed
+change set commits in one short SQLite transaction. Any stale-state, busy, I/O,
+constraint, or mapping failure rolls back the whole attempt and leaves the prior
+graph unchanged so the operation can be reviewed or retried.
 
 Technical claims, fictional events, character knowledge, and game transitions
-are example optional profiles over the same node/edge model. Graph links never
-hide inside scalar properties. A higher-arity relationship can be represented
-as a node connected by ordinary edges.
-
-```mermaid
-graph BT
-  Power["Power scope"] -->|scope-parent| Purpose["Project purpose"]
-  Privacy["Privacy scope"] -->|scope-parent| Purpose
-  Runtime["Runtime result"] -->|scope-parent| Power
-  Current["Current assumption"] -->|scope-parent| Power
-  Claim["Privacy claim"] -->|scope-parent| Privacy
-  Runtime -. "derived-from" .-> Current
-  Claim -. "cross-branch relationship if explicitly needed" .-> Runtime
-```
-
-The solid edges form the mandatory tree. The dotted examples are ordinary
-semantic edges; they may cross tree branches and may be directed or
-bidirectional. The database is therefore one graph whose nodes are organized by
-one spanning tree—not merely a tree and not two independently authored graphs.
+are example optional profiles over the same node/edge model.
 
 ## Product boundary
 
@@ -194,10 +178,9 @@ user describes a new project or desired alteration
 → one atomic SQLite transaction succeeds or rolls back safely
 ```
 
-The authoring agent never receives raw SQL or unguarded canonical mutation. Its
-guarded commit tool succeeds only after the user has approved the exact current
-preview in ordinary conversation. A changed proposal or database invalidates
-that approval.
+The authoring agent's commit tool succeeds only after the user has approved the
+exact current preview in ordinary conversation. A changed proposal or database
+invalidates that approval.
 
 This is the central product promise: the AI can safely and meaningfully work on
 a project far larger than one context window. It should resemble asking the lore
@@ -233,6 +216,5 @@ unless the user later chooses to preserve a separately designed profile.
 Despite the name, a “world” is any universe of connected nodes. Fiction is one
 possible use, not the common engine's only purpose.
 
-Contributor workflow, the implementation roadmap, detailed design documents,
-testing requirements, and build commands are collected in
-[Project development guide](docs/project_development.md).
+The technical requirements and one-task-at-a-time implementation checklist are
+in the [development plan](docs/development_plan.md).

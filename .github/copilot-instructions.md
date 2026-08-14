@@ -1,5 +1,5 @@
-# Agent instructions
+# Repository instructions
 
-Read and follow the repository guidance in the root repository agents file, `/AGENTS.md`.
-
-Before completing changes, run `dotnet build` and `dotnet test`.
+Read and follow `/AGENTS.md`. Implement only the Current task in
+`/docs/development_plan.md`, then test, update the plan on success, report to the
+human, and stop.
