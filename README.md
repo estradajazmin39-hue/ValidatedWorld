@@ -3,21 +3,77 @@
 ValidatedWorld is an experimental **semantic change-control engine for complex
 project data**.
 
-A novel, technical design, patent outline, campaign, or game is presented in a
-sequence, but its important meaning forms a graph. Conclusions depend on
-assumptions and evidence; scenes depend on prior events and character knowledge;
-requirements depend on definitions and are realized by decisions and tests.
+The idea is that virtually anything—a novel, technical design, patent outline,
+game lore, or campaign—can be represented as a dependency graph. Conclusions
+depend on assumptions and evidence; scenes depend on prior events and character
+knowledge; requirements depend on definitions and are realized by decisions and
+tests.
 
-ValidatedWorld stores that explicit typed property graph in an embedded SQLite
-project file. It validates proposed transactions, calculates their downstream
-impact, requires selected affected nodes to be reviewed, and commits the complete
-new state or nothing at all.
+ValidatedWorld stores that explicit dependency graph in an embedded SQLite
+project file. It validates proposed transactions, calculates their affected
+subgraph, requires every selected affected node to be reviewed, and commits the
+complete new state or nothing at all.
 
-The mature product is intended to be **AI-first and headless**: a user describes
-what they want, optionally supplies text or images, and an authoring agent uses
-bounded search and transaction tools to build or change the graph. The agent asks
-questions when meaning is genuinely ambiguous, while ValidatedWorld—not model
-memory—enforces the final graph and commit rules.
+The graph is primarily made of human-readable text nodes and labeled
+relationships, not necessarily a complex type system. Optional profiles may add
+structured properties, vocabulary, and deterministic checks for particular
+uses, but they are aids rather than a prerequisite for an ordinary project.
+Whether the text still makes sense across the affected relationships must be
+judged semantically by a thinking participant—the user or an AI. The graph
+should remain simple in theory while potentially expansive in scope.
+
+## The project thesis is always upstream
+
+Every project begins with one root node: its overall thesis, purpose, scope, or
+governing statement. Every other node belongs to the scope tree through exactly
+one `scope-parent`. Following those parent edges from any node back to the root
+defines that node's unique **scope-upstream path**. In this precise sense, the
+root is a transitive scope dependency of every non-root node and therefore of
+every change made beneath it.
+
+For every proposed change, ValidatedWorld walks that path upward from every
+changed or affected node and includes every node on it—including the project
+root—as mandatory semantic review context. The change must remain consistent
+with its immediate scope, every containing scope, and ultimately the project's
+thesis. Those upstream nodes normally do not change; they are present so the
+human or AI can inspect the proposal against them.
+
+Upstream context is not read-only. If that inspection reveals that an ancestor
+also needs to change, the user or agent may edit it in the same change session.
+It then becomes a direct change seed and ValidatedWorld recalculates from it,
+which may expand the affected set substantially. Editing the project root is the
+intentional case that can make the transaction project-wide.
+
+Including an upstream node does not make it a propagation seed and does not cause
+the app to walk back down through its other children. A local change therefore
+does not pull in unrelated sibling branches merely because their paths share the
+root. Only directly changing a scope node selects its descendants. This gives
+every change its natural connection to the project thesis without turning every
+change into a whole-project review.
+
+All changes are authored as one in-memory change session: a batch that moves the
+project from one reviewed, structurally valid state to another. As the user or
+agent edits nodes and edges, ValidatedWorld recalculates and presents every
+explicitly affected dependency and dependent selected by those relationships.
+That set may extend downward, upward, laterally, or in both directions. Editing
+or deleting another affected node may expand the set again. Commit is enabled
+only after the complete current affected set has been examined and every
+structural check passes; SQLite then applies the batch atomically.
+
+ValidatedWorld is intended to offer an **AI-first, headless** experience, but AI
+is always optional rather than a requirement for using the application. The
+initial product is therefore designed around text-based commands and structured
+results, with no substantial graphical front end planned. A human can operate
+the same change-and-review workflow directly.
+
+When AI authoring is enabled, the user describes what they want and the built-in
+authoring agent uses bounded search and transaction tools to build or change the
+graph. Keeping that agent inside the application lets ValidatedWorld standardize
+its prompts and tool contract. The agent asks questions when meaning is genuinely
+ambiguous or when following the affected relationships exposes a non-trivial
+choice. Graph design and relationship direction keep the relevant working set as
+small as the modeled semantics allow, so neither the user nor the AI must absorb
+an entire large project for a local change.
 
 ## Storage and protocol
 
@@ -29,45 +85,51 @@ project.vw.db
 
 That file is a user's mutable project state, not a source-controlled project
 template. The repository ignores `.vw.db` files and their SQLite sidecars
-outside `tests/`. Samples contain reviewed logical snapshots, transaction scripts,
-and expected results, then the app generates disposable databases locally. A binary
+outside `tests/`. Samples contain reviewed source descriptions, change scripts,
+and expected results; the app generates disposable databases locally. A binary
 database belongs in `tests/` only when a deliberately constructed persistence or
 corruption fixture cannot reasonably be generated during the test.
 
-SQLite supplies durable transactions, foreign keys, indexes, and efficient
-queries. ValidatedWorld supplies the semantic behavior a database schema cannot:
-typed dependency direction, base-plus-projected impact, explainable review
-obligations, domain constraints, and proven/disproven/inconclusive outcomes.
+SQLite supplies atomic transactions, foreign keys, indexes, and efficient
+queries. ValidatedWorld supplies the behavior a database schema cannot:
+relationship-specific review direction, affected-subgraph expansion over the
+current and proposed graph, explainable review obligations, optional profile
+checks, and explicit valid/invalid/inconclusive outcomes.
 
-JSON remains the public agent and integration protocol. Commands, transaction
-operations, diagnostics, impact results, and deterministic logical snapshots are
-versioned JSON. The project hash is computed from the logical canonical snapshot,
-not from SQLite's physical file bytes.
+The SQLite database is the sole complete representation and interchange format
+for a project graph. Other tools may inspect the documented read-only schema and
+views in a `.vw.db` file, or consume an application-produced SQLite backup or SQL
+export. JSON may be used for individual command requests and results, but there
+is no second JSON project format or JSON snapshot source of truth.
 
 ## The simple mental model
 
 Canonical project content is one graph:
 
 - every authored fact, claim, requirement, character, event, constraint, scope,
-  artifact anchor, or other concept is a stable-ID typed **node**;
-- every graph-relevant connection is a stable-ID typed **edge** with a source,
-  target, optional properties, and declared impact direction;
+  artifact anchor, or other concept is a stable-ID **node** whose primary content
+  is human-readable text;
+- every graph-relevant connection is a stable-ID **edge** with a source, target,
+  human-readable relationship label, and declared review direction;
 - exactly one node is the project-purpose root;
 - every other node has exactly one `scope-parent` edge, forming a spanning tree;
-- all remaining edges form a directed semantic multigraph. An edge may propagate
-  impact source-to-target, target-to-source, both ways, or not at all.
+- all remaining edges form a directed semantic multigraph. An edge may select
+  review source-to-target, target-to-source, both ways, or not at all.
 
-That is the public mental model. Schema packages, drafts, validation reports,
-reviews, and commits are metadata and ledger records around the graph, not fake
-content nodes. SQLite v1 uses nine tables—including migration history—to enforce
-stable entity/type identity, edge endpoint foreign keys, and the surrounding
-ledger. C# validates node/edge
-types, properties, the scope tree, constraints, and transaction policy.
+The application does not provide project-history versioning. It guarantees only
+the current SQLite state. Uncommitted changes live in the running application
+and are expected to be resolved or discarded before it closes. Before commit,
+the app uses an internal current-state fingerprint to detect an unexpected stale
+base; it does not retain that fingerprint as a historical revision chain.
+Normally a fully reviewed change set commits in one short SQLite transaction.
+Any stale-state, busy, I/O, constraint, or mapping failure rolls back the whole
+attempt and leaves the prior graph unchanged so the operation can be reviewed or
+retried.
 
 Technical claims, fictional events, character knowledge, and game transitions
-are profiles over the same node/edge model. Graph links never hide inside scalar
-properties. A higher-arity relationship is represented when needed as a node
-connected by ordinary typed edges.
+are example optional profiles over the same node/edge model. Graph links never
+hide inside scalar properties. A higher-arity relationship can be represented
+as a node connected by ordinary edges.
 
 ```mermaid
 graph BT
@@ -77,76 +139,84 @@ graph BT
   Current["Current assumption"] -->|scope-parent| Power
   Claim["Privacy claim"] -->|scope-parent| Privacy
   Runtime -. "derived-from" .-> Current
-  Claim -. "cross-branch semantic edge if explicitly needed" .-> Runtime
+  Claim -. "cross-branch relationship if explicitly needed" .-> Runtime
 ```
 
-The solid edges form the mandatory tree. The dotted examples are ordinary typed
+The solid edges form the mandatory tree. The dotted examples are ordinary
 semantic edges; they may cross tree branches and may be directed or
-bidirectional. Thus the database is a graph whose nodes are all organized by one
-spanning tree—not merely a tree and not two independently authored graphs.
+bidirectional. The database is therefore one graph whose nodes are organized by
+one spanning tree—not merely a tree and not two independently authored graphs.
 
 ## Product boundary
 
 ValidatedWorld owns:
 
-- the authoritative `project.vw.db` state;
-- a deterministic backend-neutral JSON snapshot representation;
-- stable node/edge IDs, logical types, properties, and endpoints;
-- structural and semantic validation;
-- explained graph impact and mandatory review policy;
-- atomic optimistic transactions and replayable commit evidence;
-- bounded JSON queries for humans, AIs, and integrations.
+- the authoritative current `project.vw.db` state;
+- stable node/edge IDs, text, labels, endpoints, and review direction;
+- structural validation and optional profile validation;
+- explained affected-subgraph expansion and complete review obligations;
+- atomic in-memory-to-SQLite change transactions;
+- bounded text-oriented queries and structured command results for humans, AIs,
+  and integrations.
 
 ValidatedWorld does **not** own the finished novel, paper, patent application,
 manual, source tree, game project, or media. External artifact/anchor nodes may
-point to those products, but the engine does not import, rewrite, render, publish,
-or certify them.
+point to those products, but the engine does not rewrite, render, publish, or
+certify them.
 
-There is no special diff format. Accepted transaction operations are the direct
-change record; impact analysis supplies the transitive consequences.
+The operation batch is the direct description of a pending change. There is no
+separate semantic-diff format and no retained commit-history subsystem.
 
-After Gate A, the roadmap has two deliberately separate AI roles. Gate B is an
-optional semantic reviewer of one complete projected transaction. Gate C is a
-conversational authoring/intake agent that can search the project and call
-validated draft tools. The reviewer never edits canon; the author never approves
-its own work; and neither turns model judgment into deterministic proof.
+The planned AI support has two separate roles. The optional authoring agent
+searches the project and operates the same change tools available to a human.
+The optional semantic reviewer independently examines one complete proposed
+transaction and its affected context. The reviewer never edits the graph; the
+author never approves its own review; and neither turns model judgment into
+deterministic proof. Each role can be disabled. If no API key is configured,
+both are skipped automatically and the complete manual workflow remains
+available. In that mode, the human authors the change and personally reviews the
+affected subgraph before commit.
 
 ## AI-first authoring direction
 
-The intended everyday flow is:
+The intended AI-assisted flow is:
 
 ```text
 user describes a new project or desired alteration
-→ authoring agent searches/reads the existing graph or interprets supplied text/image
-→ agent asks focused questions and creates explicit draft node/edge operations
-→ deterministic projection, validation, impact, and review obligations run
-→ independent Gate B review runs when enabled or required
-→ agent repairs the draft or discusses concerns with the user
-→ app shows the exact final operation/impact/hash preview
-→ user approves that exact draft in the conversation
+→ authoring agent searches/reads the graph or interprets supplied text
+→ agent asks focused questions and creates explicit in-memory node/edge changes
+→ structural checks and affected-subgraph expansion run
+→ independent semantic AI review runs when enabled and available
+→ agent repairs the proposal or discusses concerns with the user
+→ app shows the exact final operation/affected-set/state-fingerprint preview
+→ user approves that exact proposal in the conversation
 → authoring agent calls the guarded commit tool
-→ normal atomic ValidatedWorld commit succeeds or rejects safely
+→ one atomic SQLite transaction succeeds or rolls back safely
 ```
 
-The authoring agent never receives raw SQL or unguarded canonical mutation. It
-does receive a guarded commit tool, which succeeds only after the user has
-approved the exact current preview in ordinary conversation. It works through
-the same versioned Application/JSON contracts as the CLI. A
-later headless MCP server can expose those contracts to ChatGPT, Codex, or other
-compatible agents; an OpenAI plugin can package that MCP server plus workflow
-skills. A custom visual interface is optional, not the primary authoring model.
+The authoring agent never receives raw SQL or unguarded canonical mutation. Its
+guarded commit tool succeeds only after the user has approved the exact current
+preview in ordinary conversation. A changed proposal or database invalidates
+that approval.
 
-This is the central product promise: the AI can safely and meaningfully work on a
-project far larger than one context window. The full state persists in SQLite;
-the AI repeatedly searches and retrieves the relevant working set, while
-transactions, dependency traversal, impact, and deterministic validation operate
-over the authoritative graph. No step requires loading a WoW-sized world into
-one prompt.
+This is the central product promise: the AI can safely and meaningfully work on
+a project far larger than one context window. It should resemble asking the lore
+master for a very large game whether a proposed addition can become canon, while
+providing the same consistency-management value for non-game projects. The full
+state persists in SQLite; the AI repeatedly searches and retrieves the relevant
+working set while graph traversal and structural checks operate over the
+authoritative graph. No step requires loading a WoW-sized world into one prompt.
 
-The first authoring proof will use the built-in technical profile and a small
-reviewed catalog/menu profile. The AI may select installed profiles but will not
-silently invent schema semantics; unsupported vocabulary becomes a question to
-the user and, eventually, a separate reviewed profile-authoring workflow.
+If one affected set becomes unmanageably large, that may indicate an overly
+connected graph or a genuinely project-wide change. Coordinating multiple agents
+over partitioned review sets may be investigated later, but it is outside the
+initial application scope.
+
+Optional profiles may eventually make recurring domains easier to author and
+check. The initial implementation must first prove that the plain text-node and
+relationship model is useful without requiring a profile. An AI may use an
+installed profile when one fits; unsupported structure remains plain graph data
+unless the user later chooses to preserve a separately designed profile.
 
 ## Intended uses
 
@@ -156,228 +226,13 @@ the user and, eventually, a separate reviewed profile-authoring workflow.
   without claims of legal or scientific correctness.
 - Novels and mysteries: canon facts, chronology, character knowledge, clues, and
   disclosure while manuscript text remains external.
-- Games and campaigns: a static transition specification whose runtime states
-  are derived by a later bounded-analysis profile.
+- Games and campaigns: lore, design constraints, and—only through a future
+  bounded profile—static transition specifications from which runtime states may
+  be analyzed.
 
-Despite the name, a “world” is any versioned universe of connected nodes.
-Fiction is one profile, not the common engine's foundation.
+Despite the name, a “world” is any universe of connected nodes. Fiction is one
+possible use, not the common engine's only purpose.
 
-## Planned AI semantic review
-
-The original design's intelligent-review step is still part of the product
-direction. It was intentionally moved out of the Gate A implementation so the
-database, graph, transaction, and impact guarantees can be proven without a
-network, API key, or particular model provider.
-
-If Gate A succeeds, Gate B adds an expensive "lore-team" review. The app first
-computes deterministic impact, then makes one request containing the entire
-transaction, all selected dependency and impact closures, applicable
-constraints, explanation paths, an explicit coverage/omission manifest, and the
-singular upward scope lineage for every included node. Disjoint chains remain
-together so the reviewer can detect cross-change conflicts. The model can flag
-likely missing connections, stale implications, contradictions, terminology
-drift, missing qualifications, or insufficient context. Results are structured
-`Concern` records with cited entity IDs.
-
-Scope ascent is contextual, not a new impact seed. A leaf change includes its
-ancestors but not their other children. Directly changing an intermediate scope
-node can affect its descendant subtree. Only directly changing the purpose root
-deliberately triggers project-wide review.
-
-A policy may require that review to run and require each concern to be repaired,
-rejected with rationale, or acknowledged. The guarantee is that the exact review
-workflow occurred and was dispositioned—not that the AI was right. Provider
-failure is inconclusive, a paid request is never retried automatically, and
-suggestions become canon only through an explicit ValidatedWorld transaction.
-
-Gate B deliberately supports one production path: OpenAI using
-`gpt-5.6-terra` with medium reasoning. Tests use a fake client and scripted HTTP,
-not alternative providers. Local source development uses .NET Secret Manager;
-published processes use `OPENAI_API_KEY`. Before an agent may begin that feature,
-the human must personally install the key and explicitly attest readiness as
-specified in [Planned AI semantic review](docs/ai_semantic_review.md). The
-tracked [`.env.example`](.env.example) lists configuration names, while real
-`.env` files remain ignored and are not loaded implicitly. The normal build and
-test suite never needs a secret or live API call.
-
-`VW_AIREVIEW__LIVETESTS=true` enables only the separately invoked Gate B live
-smoke/evaluation harness; unit and ordinary end-to-end tests always remain
-offline. It does not decide whether a user's transaction may skip review.
-Gate B project policy declares AI review `disabled`, `optional`, or `required`.
-An optional transaction can record an explicit skip with actor and reason; a
-required review cannot be bypassed by an environment variable.
-
-Long-running provider responses use Responses background mode and a 1,200-second
-end-to-end deadline. Polling one response is not a retry. Gate B still makes one
-model request with zero automatic paid retries.
-
-## Core workflow
-
-```text
-open project.vw.db and verify its logical head hash
-→ begin a draft transaction against the exact head revision/hash
-→ add, replace, or remove typed nodes and edges
-→ construct the projected logical state
-→ expand dependency arcs from base and projected typed edges
-→ compute explained transitive impact
-→ repair graph data and disposition policy-selected affected nodes
-→ run complete deterministic validation
-→ optionally run required AI semantic review and disposition its concerns [Gate B]
-→ commit all relational changes atomically or roll back everything
-→ return versioned JSON results
-```
-
-## Authoring without edge-entry drudgery
-
-The stored graph stays fully explicit, but input need not be repetitive. Planned
-transaction authoring supports a focus node and batches:
-
-- new nodes in a batch may inherit the chosen focus as their `scope-parent`;
-- a cluster is simply a normal scope node created with its children in one batch;
-- explicitly selected profile helpers may expand common patterns into nodes and
-  semantic edges;
-- the app returns the fully expanded operation list before validation or commit.
-
-Only the scope-parent convenience is automatic. Semantic dependency edges are
-never guessed silently. This keeps the canonical graph inspectable while letting
-an agent work within one local branch of the project at a time.
-
-Gate A also provides deterministic node search and tree/graph navigation before
-the in-app authoring agent is added: filters by ID/type/tag/searchable property
-and scope, scope children/ancestors/subtrees, semantic neighbors, dependencies,
-dependents, and bounded context. This is a tool surface, not natural-language SQL
-or an embedding/RAG dependency.
-
-## Start here
-
-- [Feasibility and limits](docs/feasibility.md) — guarantee boundary and proof
-  gates.
-- [Product and architecture specification](docs/validated_world_authoring_spec.md)
-  — authoritative graph model, persistence, and profile design.
-- [Implementation blueprint](docs/implementation_blueprint.md) — exact storage
-  schema, algorithms, tests, and work packages.
-- [Planned AI semantic review](docs/ai_semantic_review.md) — post-Gate-A review
-  whole-transaction request, scope, concerns, secrets, and evaluation.
-- [Planned AI-first authoring](docs/ai_authoring_agent.md) — conversational
-  text/image intake, safe tool loop, confirmation boundary, and MCP/plugin path.
-- [Testing, fixtures, and agent QA](docs/testing_and_qa.md) — embedded SQLite
-  packaging, reusable application-generated scenarios, end-to-end tests, and
-  usability walkthroughs.
-- [Implementation execution plan](docs/implementation_execution_plan.md) —
-  completed work, the one current task, automated acceptance criteria, and the
-  remaining roadmap order.
-- [Related systems and product position](docs/prior_art_and_positioning.md) —
-  overlaps with requirements tools, graph validation, versioned databases, and
-  RAG.
-
-## Human-invoked, agent-executed implementation
-
-The blueprint is implemented sequentially from WP0 through Gate A. Agents do not
-choose a work package from the roadmap or infer the next task from chat history.
-They read the living execution plan, implement its single Current task,
-and update that plan in the same local task.
-
-A human prompt starts each agent run. The agent completes that one task or
-reports why it failed, tells the human the result, and stops. It
-does not automatically begin the next task or launch another agent.
-
-Every completed assignment must leave behind:
-
-- production behavior for its bounded scope;
-- meaningful unit, integration, and scripted end-to-end tests using realistic
-  connected project data and generated fixtures/goldens;
-- passing assignment-specific checks plus the complete solution build and test
-  suite;
-- an execution-plan entry containing the exact verification evidence, known
-  inconclusive behavior, and an explicit next assignment;
-- no need for a human to manually click through, inspect output, supply secrets,
-  or decide routine implementation details;
-- a final report to the human followed by a stop, leaving the next invocation
-  under human control.
-
-An agent records a task as completed only when repository evidence proves it. If
-repair attempts keep cycling through the same failure, it leaves Current task
-unchanged, reports the evidence, and stops instead of retrying forever or
-skipping ahead.
-
-Agents do not manage Git. They may inspect status or diffs, but they do not
-create branches, stage, commit, merge, rebase, reset, stash, pull, push, or open
-pull requests. All local edits are left for the human to review and manage.
-
-## Testing actual usefulness
-
-Passing unit tests does not establish that ValidatedWorld is usable. The
-TechnicalProject fixture grows into realistic soft-logic data: requirements,
-definitions, assumptions, evidence, decisions, implementations, verification,
-document anchors, contradictions, missing information, and unrelated material.
-
-Each work package exercises as much of that scenario as its layer supports. WP3
-delivers the first real database/CLI walking skeleton. From WP3 onward, every
-work package requires both:
-
-- a replayable scripted end-to-end test that asserts resulting data,
-  diagnostics, impact/review evidence, rollback/commit behavior, and unrelated
-  exclusions available at that stage; and
-- an actual AI-agent black-box walkthrough against a newly generated temporary
-  database, beginning from public documentation and supported commands as a QA
-  user would.
-
-The agent reports whether it could accomplish the realistic goal, what was
-confusing or misleading, and whether the product seems useful—not merely whether
-commands exited successfully. Deterministic defects become regression tests. A
-serious usability or product-direction concern is reported immediately to the
-human and prevents silently advancing the roadmap.
-
-SQLite requires no server. ValidatedWorld ships the native SQLite runtime through
-its pinned NuGet bundle and creates databases through its own CLI. Users and QA
-agents are not expected to install `sqlite3`, understand DDL, run Docker, or
-construct a database manually. The Gate A CLI is planned to supply `init`, sample
-creation, verification, and backup workflows; these are not implemented in the
-current WP0 scaffold.
-
-Realistic scenario data is authored once and retained as reviewed source assets.
-The app regenerates disposable databases from those assets for automated tests
-and local QA. Each new regression or workflow becomes another reusable scenario
-variant and expected result rather than throwaway data invented on every run.
-
-For users, the `.vw.db` file—or a backup produced by the app—is the primary
-complete portable project artifact. Deterministic logical JSON remains available
-for transparent interchange, audit, revision-zero initialization, and fixtures.
-
-## Completion and later phases
-
-An assignment is done when its automated acceptance and full repository checks
-pass, the execution plan records exact evidence and the next task, and the
-agent reports back to the human.
-
-Phase 1 ends with WP9's Gate A evaluation. At that point there is deliberately no
-automatic next coding task: Current task becomes `None`, and the agent reports
-whether evidence supports continuing, narrowing, pivoting, or stopping. It asks
-the human whether to declare the current scope complete or request a separate
-Gate B AI semantic-review planning task. Planning that phase does not itself
-authorize implementation. AI-first authoring/intake, MCP/plugin packaging,
-linear narrative, and interactive state follow only through later evidence gates.
-
-If Current task is `None`, an invoked agent makes no changes. It reports that the
-planned work is finished, summarizes the final verification and optional future
-ideas, and asks what the human wants next.
-
-## Current status
-
-The repository is a .NET 10 scaffold plus an implementation-ready design. WP0 is
-complete and WP1 (the common graph domain) is the Current task. The execution
-plan, rather than this summary, is authoritative if progress changes. Gate A is
-a small technical-project graph backed by SQLite. It must prove useful and
-accurate impact at acceptable modeling cost before provider-backed authoring or
-domain profiles are implemented. Gate B is the smaller recommended post-Gate-A
-review experiment; after an explicit decision to retain or omit it, Gate C
-implements the primary AI authoring/intake experience. Neither is implemented in
-WP1.
-
-Build and test with:
-
-```powershell
-dotnet restore ValidatedWorld.slnx
-dotnet build ValidatedWorld.slnx --no-restore
-dotnet test ValidatedWorld.slnx --no-build --no-restore
-```
+Contributor workflow, the implementation roadmap, detailed design documents,
+testing requirements, and build commands are collected in
+[Project development guide](docs/project_development.md).
