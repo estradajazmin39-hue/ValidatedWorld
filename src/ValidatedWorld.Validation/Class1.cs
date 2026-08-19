@@ -1,6 +1,3 @@
 ﻿namespace ValidatedWorld.Validation;
 
-public class Class1
-{
-
-}
+// The validation surface is implemented in GraphIndex and GraphValidation.

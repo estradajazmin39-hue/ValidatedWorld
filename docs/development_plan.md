@@ -1,8 +1,8 @@
 # ValidatedWorld Development Plan
 
-**Current task:** T2 — graph index and structural validation
+**Current task:** T3 — change operations and projection
 
-**Last updated:** 2026-08-14
+**Last updated:** 2026-08-18
 
 This is the neutral implementation checklist and handoff record for humans and
 coding agents. It contains exactly one current task. The README defines the
@@ -108,7 +108,7 @@ It does not authorize a Git commit.
 |---|---|---|
 | T0 | complete | Repository scaffold and consolidated documentation |
 | T1 | complete | Common immutable graph domain |
-| T2 | pending | Graph index and structural validation |
+| T2 | complete | Graph index and structural validation |
 | T3 | pending | Change operations and projection |
 | T4 | pending | Affected-set analysis and manual review |
 | T5 | pending | Structured protocol and deterministic fingerprints |
@@ -183,6 +183,34 @@ Completed 2026-08-14.
   keys are rejected from caller sequences before ordinal canonicalization.
   The chosen bounds are conservative implementation choices and should remain
   visible when T2/T5 add diagnostics and protocol limits.
+
+### T2 — graph index and structural validation
+
+Completed 2026-08-18.
+
+- Added the public `GraphIndex` with duplicate-preserving node/edge groups,
+  unique ID maps, source/target edge indexes, scope-parent and scope-child
+  indexes, breadth-first scope descendants, scope-upstream paths, and expanded
+  non-scope review arcs for all four review directions.
+- Added `GraphValidator`, `GraphValidationResult`, deterministic diagnostic
+  records, and valid/invalid/inconclusive outcomes. Validation covers global
+  node/edge identity collisions, endpoints, purpose, exact scope-parent
+  coverage, reserved edge direction, cycles, and purpose reachability.
+- Added configurable traversal-depth/node/diagnostic bounds and cancellation;
+  bounded or cancelled validation returns inconclusive with omission evidence.
+- Added four focused tests covering the TechnicalProject graph, index
+  navigation without sibling fan-out, review direction expansion, structural
+  violations, deterministic diagnostics, cancellation, and bounds.
+- Public API smoke: validating the TechnicalProject graph returned `Valid`,
+  exposed two purpose-level sibling scopes, returned the expected six
+  descendants and retention-to-purpose path, and expanded only the two
+  non-scope review arcs.
+- Full checks on 2026-08-18: `dotnet restore ValidatedWorld.slnx`,
+  `dotnet build ValidatedWorld.slnx --no-restore` (0 warnings, 0 errors), and
+  `dotnet test ValidatedWorld.slnx --no-build --no-restore` (13 passed).
+- Modeling friction: malformed graphs remain indexable so diagnostics can be
+  reported; scope-parent navigation stops deterministically at ambiguity,
+  missing nodes, or cycles. No product or persistence dependencies were added.
 
 ## 6. Current and remaining tasks
 
