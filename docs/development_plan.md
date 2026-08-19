@@ -1,6 +1,6 @@
 # ValidatedWorld Development Plan
 
-**Current task:** T3 — change operations and projection
+**Current task:** T4 — affected-set analysis and manual review
 
 **Last updated:** 2026-08-18
 
@@ -109,7 +109,7 @@ It does not authorize a Git commit.
 | T0 | complete | Repository scaffold and consolidated documentation |
 | T1 | complete | Common immutable graph domain |
 | T2 | complete | Graph index and structural validation |
-| T3 | pending | Change operations and projection |
+| T3 | complete | Change operations and projection |
 | T4 | pending | Affected-set analysis and manual review |
 | T5 | pending | Structured protocol and deterministic fingerprints |
 | T6 | pending | SQLite current-state persistence and first public read slice |
@@ -211,6 +211,35 @@ Completed 2026-08-18.
 - Modeling friction: malformed graphs remain indexable so diagnostics can be
   reported; scope-parent navigation stops deterministically at ambiguity,
   missing nodes, or cycles. No product or persistence dependencies were added.
+
+### T3 — change operations and projection
+
+Completed 2026-08-18.
+
+- Added immutable `GraphOperation`, `GraphOperationBatch`, and operation/entity
+  kind values for add, replace, and remove node/edge changes. Batches reject
+  duplicate entity IDs and sort final operations deterministically.
+- Added `GraphProjector` and structured operation exceptions for wrong entity
+  kinds and add/replace/remove preconditions. Projection uses isolated maps,
+  preserves stable replacement IDs, does not cascade node removal, and returns
+  complete structural validation for the proposed graph.
+- Added `GraphOperationFocus` with explicit `ScopeParentSelection` expansion
+  for newly added nodes only. It rejects ambiguous parents and never invents
+  semantic cross-links or edge IDs.
+- Added six focused tests covering all operation kinds, deterministic batches,
+  wrong kinds, preconditions, incident-edge handling, invalid proposals, valid
+  one-batch repairs, focus ambiguity, supplied scope parents, and base-graph
+  immutability. Focused Validation tests passed: 10.
+- Public API smoke: a TechnicalProject proposal replaced the battery
+  assumption, added a scoped requirement, redirected a dependency, removed a
+  relationship, projected as valid, and left the base graph unchanged.
+- Full checks on 2026-08-18: `dotnet restore ValidatedWorld.slnx`,
+  `dotnet build ValidatedWorld.slnx --no-restore` (0 warnings, 0 errors), and
+  `dotnet test ValidatedWorld.slnx --no-build --no-restore` (18 passed).
+- Modeling friction: explicit operation payloads make stable replacement and
+  no-cascade removal clear; new nodes still need an explicit scope-parent
+  operation, with the focus helper providing a bounded convenience for an
+  unambiguous parent.
 
 ## 6. Current and remaining tasks
 
